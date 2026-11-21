@@ -200,3 +200,25 @@ The bracketed values indicate the public project configuration inputs, not secre
 
 - سجّل التغيير إلى redirect URL في Supabase واستخدام مسار Pages في كود التسجيل: `app.js` يحسب `authRedirectUrl` من `import.meta.env.BASE_URL` ويستخدمه في التسجيل وإعادة إرسال تأكيد البريد.
 - Recorded the Supabase redirect URL change and Pages-path code update: `app.js` derives `authRedirectUrl` from `import.meta.env.BASE_URL` and uses it for signup and resend-confirmation.
+
+## استعادة GitHub Pages / GitHub Pages recovery
+
+**21 Nov 2026, 13:00–13:05 Cairo / 21 نوفمبر 2026، 13:00–13:05 القاهرة**
+
+- بعد دمج `f9a714b0cc5a6d3b856fce163147381bb1c008c7`، نجح مسار Actions `Deploy website to GitHub Pages` رقم `44896976467` في بناء Vite ورفع ملفات الموقع. بالتزامن، انتهى تشغيل GitHub Pages الداخلي `pages-build-deployment` رقم `44896976186` المبني من Jekyll/مصدر الفرع بعده، فأصبح الموقع يعرض `index.html` القديم الذي يشير إلى `style.css` و`app.js` بدل ملفات Vite؛ كانت ملفات Vite ذات الأسماء المجزأة ترجع 404. هذا تعارض/سباق نشر، وليس خطأ في Supabase أو migration.
+- After merge `f9a714b0cc5a6d3b856fce163147381bb1c008c7`, Actions workflow `Deploy website to GitHub Pages` run `44896976467` successfully built Vite and uploaded the site. At the same time, GitHub's internal Jekyll/branch-source `pages-build-deployment` run `44896976186` finished afterward and left the site serving the old `index.html` referencing `style.css` and `app.js`; the hashed Vite files returned 404. This was a deployment race, not a Supabase or migration error.
+- أظهر إعداد Pages الحي `build_type: workflow`. شُغّل مسار Actions يدويًا بعد انتهاء عمليتي النشر المتعارضتين، بالأمر `gh workflow run deploy-pages.yml --repo khayal-1/elkhayal-motors --ref main`. اكتمل التشغيل `44897317416` بنجاح. فحصت الرابط العام: صفحة الموقع أعادت HTTP 200، وHTML يشير إلى `/elkhayal-motors/assets/index-DZGts3vm.js` و`/elkhayal-motors/assets/index-BkDdn2fx.css`؛ كلا الملفين أعاد HTTP 200. تضمّن ملف JavaScript المنشور علامات واجهة الموظفين و`manage-staff`.
+- Live Pages settings reported `build_type: workflow`. After the conflicting deployments finished, the Actions workflow was manually run with `gh workflow run deploy-pages.yml --repo khayal-1/elkhayal-motors --ref main`. Run `44897317416` completed successfully. Public smoke check: the site returned HTTP 200 and its HTML referenced `/elkhayal-motors/assets/index-DZGts3vm.js` and `/elkhayal-motors/assets/index-BkDdn2fx.css`; both assets returned HTTP 200. The published JavaScript contains the employee UI and `manage-staff` markers.
+- تحققت من الأثر عبر `gh api repos/khayal-1/elkhayal-motors/pages`, و`gh run list`، و`gh run view` للتشغيلين، و`gh api repos/khayal-1/elkhayal-motors/deployments/7962401638/statuses`، وتنزيل artifact للتشغيل `44896976467` بواسطة `gh run download`. فُحصت استجابات الرابط والملفات عبر `curl` مع استعلامات منع التخزين المؤقت.
+- Evidence checks used `gh api repos/khayal-1/elkhayal-motors/pages`, `gh run list`, `gh run view` for both runs, `gh api repos/khayal-1/elkhayal-motors/deployments/7962401638/statuses`, and `gh run download` for run `44896976467`. Public HTML and assets were checked with cache-busted `curl` requests.
+- حالة الدالة `manage-staff` في Supabase: منشورة كما سبق تسجيله. لم تُنشأ أي حسابات موظفين، ولم يُرسل طلب إنشاء مستخدم، ولم تُنفّذ SQL أو migrations جديدة. تحقق الموقع المنشور وملفات الواجهة، لكن لم يُنفّذ اختبار دخول إداري/إنشاء حساب فعلي.
+- `manage-staff` remains deployed in Supabase as recorded earlier. No employee accounts were created, no user-creation request was sent, and no SQL or migrations were run. The published site and frontend assets were smoke-tested, but no manager sign-in or real employee-account creation was tested.
+
+### أوامر الاستعادة / Recovery commands
+
+```sh
+gh workflow run deploy-pages.yml --repo khayal-1/elkhayal-motors --ref main
+gh run watch 44897317416 --repo khayal-1/elkhayal-motors --exit-status
+gh run download 44896976467 --repo khayal-1/elkhayal-motors --name github-pages --dir /tmp/motors-pages-artifact
+curl -fsSL 'https://khayal-1.github.io/elkhayal-motors/?smoke=<cache-buster>'
+```
