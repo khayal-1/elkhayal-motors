@@ -1490,6 +1490,38 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+  if (form.id === 'expenseForm') {
+    if (!(hasRole('admin') || hasPermission('expenses_manage')) || !supabase) { toast('ليس لديك صلاحية تسجيل المصروفات','error'); return; }
+    const fd = new FormData(form), amount = Number(fd.get('amount') || 0), paid = Number(fd.get('paid_amount') || 0);
+    if (paid > amount || paid < 0) { toast('المبلغ المدفوع يجب ألا يتجاوز قيمة المصروف','error'); return; }
+    if (paid > 0 && !fd.get('cash_account_id')) { toast('اختر الخزينة أو البنك للمبلغ المدفوع','error'); return; }
+    const btn=form.querySelector('[type=submit]'); if(btn)btn.disabled=true;
+    const {data,error}=await supabase.rpc('create_expense',{
+      p_expense_date:fd.get('expense_date'), p_description:safeName(fd.get('description')),
+      p_expense_account_id:fd.get('expense_account_id'), p_amount:amount, p_paid_amount:paid,
+      p_cash_account_id:fd.get('cash_account_id')||null, p_payment_method:fd.get('payment_method')||'cash',
+      p_vendor_name:safeName(fd.get('vendor_name'))||null, p_reference_number:safeName(fd.get('reference_number'))||null,
+      p_due_date:fd.get('due_date')||null, p_notes:safeName(fd.get('notes'))||null
+    });
+    if(btn)btn.disabled=false;
+    if(error){toast(error.message||'تعذر تسجيل المصروف','error');return;}
+    await loadFinanceData(); render();
+    toast('تم حفظ المصروف وترحيل القيد المحاسبي بنجاح','success'); return;
+  }
+
+  if (form.id === 'expensePaymentForm') {
+    if (!(hasRole('admin') || hasPermission('expenses_manage')) || !supabase) { toast('ليس لديك صلاحية سداد المصروفات','error'); return; }
+    const fd=new FormData(form), amount=Number(fd.get('amount')||0);
+    const btn=form.querySelector('[type=submit]'); if(btn)btn.disabled=true;
+    const {data,error}=await supabase.rpc('record_expense_payment',{
+      p_expense_id:form.dataset.expenseId, p_cash_account_id:fd.get('cash_account_id'), p_amount:amount,
+      p_payment_method:fd.get('payment_method')||'cash', p_reference_number:safeName(fd.get('reference_number'))||null
+    });
+    if(btn)btn.disabled=false;
+    if(error){toast(error.message||'تعذر تسجيل السداد','error');return;}
+    closeModal(); await loadFinanceData(); render();
+    toast('تم تسجيل السداد، والمتبقي '+money(data?.balance_due||0),'success'); return;
+  }
 
   if (form.id === 'saleReturnForm') {
     if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
