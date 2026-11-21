@@ -684,7 +684,7 @@ function pageSuppliers() {
     </div>
     <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-scale-balanced"></i> أرصدة الموردين</div>
-      ${state.suppliers.length ? `<div class="table-wrap"><table><thead><tr><th>المورد</th><th>إجمالي الفواتير</th><th>المدفوع</th><th>المتبقي بعد المرتجعات</th></tr></thead><tbody>${state.suppliers.map(s=>{const bills=state.supplierBills.filter(b=>b.supplier_id===s.id);const total=bills.reduce((n,b)=>n+Number(b.total_amount),0);const paid=bills.reduce((n,b)=>n+b.amountPaid,0);const credits=bills.reduce((n,b)=>n+b.creditAmount,0);return '<tr><td><b>'+esc(s.name)+'</b></td><td>'+money(total)+'</td><td>'+money(paid)+'</td><td><b>'+money(total-paid)+'</b></td></tr>';}).join('')}</tbody></table></div>` : '<div class="empty">لا يوجد موردون.</div>'}
+      ${state.suppliers.length ? `<div class="table-wrap"><table><thead><tr><th>المورد</th><th>إجمالي الفواتير</th><th>المدفوع</th><th>المتبقي بعد المرتجعات</th></tr></thead><tbody>${state.suppliers.map(s=>{const bills=state.supplierBills.filter(b=>b.supplier_id===s.id);const total=bills.reduce((n,b)=>n+Number(b.total_amount),0);const paid=bills.reduce((n,b)=>n+b.amountPaid,0);const credits=bills.reduce((n,b)=>n+b.creditAmount,0);return '<tr><td><b>'+esc(s.name)+'</b></td><td>'+money(total)+'</td><td>'+money(paid)+'</td><td><b>'+money(Math.max(0,total-paid-credits))+'</b></td></tr>';}).join('')}</tbody></table></div>` : '<div class="empty">لا يوجد موردون.</div>'}
     </div>
     <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-receipt"></i> فواتير ومدفوعات الموردين (${state.supplierBills.length})</div>
