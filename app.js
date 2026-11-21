@@ -49,6 +49,8 @@ const state = {
   supplierReturnItems: [],
   financeAccounts: [],
   cashAccounts: [],
+  cashBalances: [],
+  trialBalance: [],
   expenses: [],
   contactMessages: [],
   requestReplies: [],
@@ -665,9 +667,11 @@ function pagePOS() {
 
 function pageExpenses() {
   const u = currentUser();
-  if (!u || !(u.role === 'admin' || hasPermission('expenses_manage') || hasPermission('accounting_view'))) return pageNoPermission();
-  const canManage = u.role === 'admin' || hasPermission('expenses_manage');
+  const managerAccess = hasRole('admin','manager','owner');
+  if (!u || !(managerAccess || hasPermission('expenses_manage') || hasPermission('accounting_view'))) return pageNoPermission();
+  const canManage = managerAccess || hasPermission('expenses_manage');
   const accounts = state.financeAccounts || [], cash = state.cashAccounts || [], expenses = state.expenses || [];
+  const trial = state.trialBalance || [], balances = state.cashBalances || [];
   const total = expenses.reduce((sum,row)=>sum+Number(row.amount||0),0);
   const paid = expenses.reduce((sum,row)=>sum+Number(row.paid_amount||0),0);
   const accountOptions = accounts.filter(a=>a.code!=='6000'&&a.code!=='5000').map(a=>'<option value="'+esc(a.id)+'">'+esc(a.code)+' — '+esc(a.name)+'</option>').join('');
@@ -677,8 +681,12 @@ function pageExpenses() {
     const account=Array.isArray(row.accounting_accounts)?row.accounting_accounts[0]:row.accounting_accounts;
     return '<tr><td>#'+(row.expense_number||'—')+'<br><small>'+esc(row.expense_date||'')+'</small></td><td><b>'+esc(row.description)+'</b><br><small>'+esc(row.vendor_name||'')+'</small></td><td>'+esc(account?.name||'—')+'</td><td>'+money(row.amount)+'</td><td>'+money(row.paid_amount)+'</td><td>'+money(due)+'</td><td><span class="status-pill '+(due>0?'pending':'completed')+'">'+(due>0?'مستحق':'مدفوع')+'</span>'+(canManage&&due>0?'<br><button class="btn btn-outline btn-sm mt-1" data-pay-expense="'+esc(row.id)+'" data-due="'+due+'">تسجيل سداد</button>':'')+'</td></tr>';
   }).join('');
+  const trialRows = trial.map(row=>'<tr><td>'+esc(row.account_code)+'</td><td>'+esc(row.account_name)+'</td><td>'+esc(({asset:'أصول',liability:'التزامات',equity:'حقوق ملكية',revenue:'إيرادات',expense:'مصروفات'})[row.account_type]||row.account_type)+'</td><td>'+money(row.debit_balance)+'</td><td>'+money(row.credit_balance)+'</td></tr>').join('');
+  const cashRows = balances.map(row=>'<tr><td>'+esc(row.cash_account_name)+'</td><td>'+(row.account_kind==='bank'?'بنك':'نقدية')+'</td><td>'+money(row.balance)+'</td></tr>').join('');
+  const trialDebit=trial.reduce((n,row)=>n+Number(row.debit_balance||0),0);
+  const trialCredit=trial.reduce((n,row)=>n+Number(row.credit_balance||0),0);
   return '<h2 class="page-title"><i class="fa-solid fa-money-bill-transfer"></i> المصروفات والحسابات</h2>' +
-    '<p class="page-sub">سجل المصروفات مع قيود محاسبية مزدوجة، ومدفوع ومستحق، وربط بالخزينة أو البنك.</p>' +
+    '<p class="page-sub">سجل المصروفات، أرصدة الخزائن والبنوك، وميزان المراجعة من القيود المرحلة.</p>' +
     '<div class="stats-grid"><div class="stat-card"><div class="stat-label">إجمالي المصروفات المعروضة</div><div class="stat-value">'+money(total)+'</div></div><div class="stat-card"><div class="stat-label">المدفوع</div><div class="stat-value">'+money(paid)+'</div></div><div class="stat-card"><div class="stat-label">المتبقي</div><div class="stat-value">'+money(total-paid)+'</div></div></div>' +
     (canManage ? '<div class="panel"><div class="panel-title"><i class="fa-solid fa-file-circle-plus"></i> تسجيل مصروف جديد</div><form id="expenseForm" class="form-grid">' +
       '<div class="form-row"><div class="field"><label>تاريخ المصروف</label><input name="expense_date" type="date" value="'+new Date().toISOString().slice(0,10)+'" required></div><div class="field"><label>بند المصروف</label><select name="expense_account_id" required><option value="">اختر البند</option>'+accountOptions+'</select></div></div>' +
@@ -688,9 +696,15 @@ function pageExpenses() {
       '<div class="form-row"><div class="field"><label>اسم الجهة / المستفيد</label><input name="vendor_name" maxlength="160"></div><div class="field"><label>رقم الفاتورة / المرجع</label><input name="reference_number" maxlength="100"></div></div>' +
       '<div class="form-row"><div class="field"><label>تاريخ الاستحقاق</label><input name="due_date" type="date"></div><div class="field"><label>ملاحظات</label><input name="notes" maxlength="1000"></div></div>' +
       '<button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ المصروف وترحيله محاسبيًا</button></form></div>' : '') +
+    '<div class="panel"><div class="panel-title"><i class="fa-solid fa-scale-balanced"></i> ميزان المراجعة</div>' +
+    (trial.length ? '<div class="table-wrap"><table><thead><tr><th>كود الحساب</th><th>الحساب</th><th>النوع</th><th>رصيد مدين</th><th>رصيد دائن</th></tr></thead><tbody>'+trialRows+'</tbody><tfoot><tr><th colspan="3">الإجمالي</th><th>'+money(trialDebit)+'</th><th>'+money(trialCredit)+'</th></tr></tfoot></table></div>' : '<div class="empty"><p>لا توجد أرصدة محاسبية بعد.</p></div>')+
+    '<p class="hint">يعرض الميزان القيود المرحلة فقط. لم تُسجل أرصدة افتتاحية بعد.</p></div>' +
+    '<div class="panel"><div class="panel-title"><i class="fa-solid fa-vault"></i> أرصدة الخزائن والبنوك</div>' +
+    (balances.length ? '<div class="table-wrap"><table><thead><tr><th>الحساب</th><th>النوع</th><th>الرصيد</th></tr></thead><tbody>'+cashRows+'</tbody></table></div>' : '<div class="empty"><p>لا توجد خزائن أو حسابات بنكية مضافة.</p></div>')+
+    '<p class="hint">الأرصدة محسوبة من القيود المرحلة، ولا تشمل أي مبالغ لم تُسجل في النظام.</p></div>' +
     '<div class="panel"><div class="panel-title"><i class="fa-solid fa-list"></i> سجل المصروفات ('+expenses.length+')</div>' +
     (expenses.length ? '<div class="table-wrap"><table><thead><tr><th>رقم / تاريخ</th><th>البيان</th><th>البند</th><th>القيمة</th><th>المدفوع</th><th>المتبقي</th><th>الحالة / إجراء</th></tr></thead><tbody>'+rows+'</tbody></table></div>' : '<div class="empty"><i class="fa-solid fa-receipt"></i><p>لا توجد مصروفات مسجلة حتى الآن</p></div>')+'</div>' +
-    '<div class="panel"><b>ملاحظة محاسبية:</b> كل مصروف ينشئ قيدًا متوازنًا: مدين المصروف ودائن الخزينة/المستحقات، والدفعات اللاحقة تُسجل بقيود مستقلة. لا توجد أرصدة افتتاحية أو بيانات افتراضية.</div>';
+    '<div class="panel"><b>ملاحظة محاسبية:</b> لا توجد أرصدة افتتاحية، ولم يتم بعد ربط قيود المبيعات والمشتريات آليًا بهذا الدفتر؛ لذلك لا تعتبر هذه التقارير قوائم مالية مكتملة قبل استكمال الربط.</div>';
 }
 function pageSuppliers() {
   if (!currentUser() || currentUser().role !== 'admin') return pageNoPermission();
@@ -1073,7 +1087,7 @@ function navigate(route) {
   if (route === 'pos') loadSalesData().then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
-  if (route === 'expenses' && state.user && (state.user.role === 'admin' || hasPermission('expenses_manage') || hasPermission('accounting_view'))) loadFinanceData().then(render);
+  if (route === 'expenses' && state.user && (hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view'))) loadFinanceData().then(render);
 }
 
 /* ---------- Buy Flow ---------- */
@@ -1491,7 +1505,7 @@ document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
   if (form.id === 'expenseForm') {
-    if (!(hasRole('admin') || hasPermission('expenses_manage')) || !supabase) { toast('ليس لديك صلاحية تسجيل المصروفات','error'); return; }
+    if (!(hasRole('admin','manager','owner') || hasPermission('expenses_manage')) || !supabase) { toast('ليس لديك صلاحية تسجيل المصروفات','error'); return; }
     const fd = new FormData(form), amount = Number(fd.get('amount') || 0), paid = Number(fd.get('paid_amount') || 0);
     if (paid > amount || paid < 0) { toast('المبلغ المدفوع يجب ألا يتجاوز قيمة المصروف','error'); return; }
     if (paid > 0 && !fd.get('cash_account_id')) { toast('اختر الخزينة أو البنك للمبلغ المدفوع','error'); return; }
@@ -1510,7 +1524,7 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'expensePaymentForm') {
-    if (!(hasRole('admin') || hasPermission('expenses_manage')) || !supabase) { toast('ليس لديك صلاحية سداد المصروفات','error'); return; }
+    if (!(hasRole('admin','manager','owner') || hasPermission('expenses_manage')) || !supabase) { toast('ليس لديك صلاحية سداد المصروفات','error'); return; }
     const fd=new FormData(form), amount=Number(fd.get('amount')||0);
     const btn=form.querySelector('[type=submit]'); if(btn)btn.disabled=true;
     const {data,error}=await supabase.rpc('record_expense_payment',{
@@ -2041,19 +2055,23 @@ async function loadCustomerData() {
 
 async function loadFinanceData() {
   const u = currentUser();
-  if (!u || !supabase || !(u.role === 'admin' || hasPermission('expenses_manage') || hasPermission('accounting_view'))) return;
-  const [accountsResult, cashResult, expensesResult] = await Promise.all([
+  if (!u || !supabase || !(hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view'))) return;
+  const [accountsResult, cashResult, expensesResult, trialResult, balancesResult] = await Promise.all([
     supabase.from('accounting_accounts').select('id,code,name,account_type').eq('is_active', true).eq('account_type', 'expense').order('code'),
     supabase.from('cash_accounts').select('id,name,account_kind,currency').eq('is_active', true).order('name'),
-    supabase.from('expenses').select('id,expense_number,expense_date,description,vendor_name,reference_number,amount,paid_amount,due_date,notes,accounting_accounts(name,code)').order('expense_date', {ascending:false}).limit(250)
+    supabase.from('expenses').select('id,expense_number,expense_date,description,vendor_name,reference_number,amount,paid_amount,due_date,notes,accounting_accounts(name,code)').order('expense_date', {ascending:false}).limit(250),
+    supabase.from('accounting_trial_balance').select('account_id,account_code,account_name,account_type,total_debit,total_credit,debit_balance,credit_balance').order('account_code'),
+    supabase.from('accounting_cash_balances').select('cash_account_id,cash_account_name,account_kind,currency,balance').order('cash_account_name')
   ]);
-  if (accountsResult.error || cashResult.error || expensesResult.error) {
-    console.error('Finance data load failed', accountsResult.error || cashResult.error || expensesResult.error);
+  if (accountsResult.error || cashResult.error || expensesResult.error || trialResult.error || balancesResult.error) {
+    console.error('Finance data load failed', accountsResult.error || cashResult.error || expensesResult.error || trialResult.error || balancesResult.error);
     toast('تعذر تحميل بيانات المصروفات والحسابات', 'error'); return;
   }
   state.financeAccounts = accountsResult.data || [];
   state.cashAccounts = cashResult.data || [];
   state.expenses = expensesResult.data || [];
+  state.trialBalance = trialResult.data || [];
+  state.cashBalances = balancesResult.data || [];
 }
 async function loadBusinessData() {
   if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
