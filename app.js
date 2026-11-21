@@ -406,8 +406,13 @@ function pageContact() {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
       <div class="panel">
         <div class="panel-title"><i class="fa-solid fa-comments"></i> قنوات التواصل</div>
-        <p>يمكنك ترك رقم هاتفك أو بريدك الإلكتروني، واختيار الاتصال أو واتساب أو SMS أو البريد الإلكتروني.</p>
-        <p class="hint">لا نعرض أرقامًا أو عناوين بريد غير مؤكدة. استخدم نموذج الرسالة وسيتواصل معك فريق المعرض.</p>
+        <p>تواصل مباشرة مع معرض الخيال موتورز أو زرنا في موقعنا.</p>
+        <div class="contact-details">
+          <p><i class="fa-solid fa-phone"></i> <strong>الهاتف والواتساب:</strong> <a href="tel:01006315559" dir="ltr">01006315559</a></p>
+          <p><i class="fa-brands fa-whatsapp"></i> <a class="btn btn-outline btn-sm" href="https://wa.me/201006315559" target="_blank" rel="noopener">راسلنا على واتساب</a></p>
+          <p><i class="fa-solid fa-location-dot"></i> <strong>العنوان:</strong> الطريق الجديد – مدخل حلوان 3 الأوتوستراد</p>
+          <p><a class="btn btn-outline btn-sm" href="https://www.google.com/maps/search/?api=1&query=%D8%A7%D9%84%D8%B7%D8%B1%D9%8A%D9%82%20%D8%A7%D9%84%D8%AC%D8%AF%D9%8A%D8%AF%20%E2%80%93%20%D9%85%D8%AF%D8%AE%D9%84%20%D8%AD%D9%84%D9%88%D8%A7%D9%86%203%20%D8%A7%D9%84%D8%A3%D9%88%D8%AA%D9%88%D8%B3%D8%AA%D8%B1%D8%A7%D8%AF" target="_blank" rel="noopener"><i class="fa-solid fa-map-location-dot"></i> افتح الموقع على الخريطة</a></p>
+        </div>
         <button class="btn btn-outline" data-nav="request"><i class="fa-solid fa-motorcycle"></i> إرسال طلب شراء</button>
       </div>
       <div class="panel">
