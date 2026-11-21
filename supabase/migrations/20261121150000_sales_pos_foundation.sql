@@ -6,7 +6,7 @@ begin;
 alter table public.clients alter column user_id drop not null;
 
 -- Extend the existing employee permission allow-list for the POS role.
-do $
+do $permission$
 declare
   permission_check record;
 begin
@@ -26,7 +26,7 @@ begin
       'requests_manage', 'customer_data_view', 'sales_manage'
     ));
 end
-$;
+$permission$;
 
 create sequence if not exists public.sale_invoice_number_seq;
 
