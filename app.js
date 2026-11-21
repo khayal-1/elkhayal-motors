@@ -38,6 +38,8 @@ const state = {
   sidebarOpen: false,
   bikes: [],
   sales: [],
+  suppliers: [],
+  purchaseOrders: [],
   contactMessages: [],
   requestReplies: [],
   contactReplies: [],
@@ -209,6 +211,7 @@ function sidebarItems() {
     { route: 'dashboard', label: 'لوحة الإحصائيات', icon: 'fa-chart-line' },
     { section: 'البيع' },
     { route: 'pos', label: 'نقطة البيع POS', icon: 'fa-cash-register' },
+    { route: 'suppliers', label: 'الموردون والتوريد', icon: 'fa-truck-ramp-box' },
     { route: 'inventory', label: 'المخزن والأسعار', icon: 'fa-boxes-stacked' },
     { section: 'الإدارة' },
     { route: 'manage-bikes', label: 'إدارة الدراجات', icon: 'fa-motorcycle' },
@@ -613,6 +616,56 @@ function pagePOS() {
    SECTION 5 — ADMIN & STAFF MONITORING
    ========================================================= */
 
+function pageSuppliers() {
+  if (!currentUser() || currentUser().role !== 'admin') return pageNoPermission();
+  const bikes = state.bikes.filter(b=>b.status!=='archived');
+  const activeSuppliers = state.suppliers.filter(s=>s.is_active);
+  const statusLabel = {ordered:'قيد التوريد',partially_received:'استلام جزئي',received:'مستلم بالكامل',cancelled:'ملغى'};
+  return `
+    <h2 class="page-title"><i class="fa-solid fa-truck-ramp-box"></i> الموردون والتوريد</h2>
+    <p class="page-sub">تسجيل الموردين وأوامر التوريد واستلام الكميات مع تحديث المخزون وسجل الحركة داخل معاملة واحدة.</p>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-user-plus"></i> إضافة مورد</div>
+      <form id="supplierForm" class="form-grid">
+        <div class="form-row">
+          <div class="field"><label>اسم المورد</label><input name="name" maxlength="160" required></div>
+          <div class="field"><label>الهاتف</label><input name="phone" maxlength="32" type="tel"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>البريد الإلكتروني</label><input name="email" maxlength="254" type="email"></div>
+          <div class="field"><label>العنوان</label><input name="address" maxlength="500"></div>
+        </div>
+        <div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
+        <button class="btn btn-primary" type="submit">حفظ المورد</button>
+      </form>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-file-circle-plus"></i> إنشاء أمر توريد</div>
+      ${activeSuppliers.length && bikes.length ? `
+      <form id="purchaseOrderForm" class="form-grid">
+        <div class="field"><label>المورد</label><select name="supplier_id" required><option value="">اختر المورد</option>${activeSuppliers.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></div>
+        <div class="form-row">
+          <div class="field"><label>الدراجة / الصنف</label><select name="motorcycle_id" required><option value="">اختر الصنف</option>${bikes.map(b=>`<option value="${esc(b.id)}">${esc(b.name)} — ${esc(b.model)}</option>`).join('')}</select></div>
+          <div class="field"><label>الكمية المطلوبة</label><input name="quantity" type="number" min="1" max="10000" value="1" required></div>
+        </div>
+        <div class="field"><label>تكلفة الوحدة لدى المورد (ج.م)</label><input name="unit_cost" type="number" min="0" step="0.01" required></div>
+        <div class="field"><label>ملاحظات أمر التوريد</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
+        <small class="hint">هذا الإصدار ينشئ بندًا واحدًا لكل أمر توريد. لا يزيد المخزون عند إنشاء الأمر؛ الزيادة تحدث فقط عند تسجيل الاستلام.</small>
+        <button class="btn btn-primary" type="submit">إنشاء أمر التوريد</button>
+      </form>` : '<div class="empty">أضف موردًا وصنفًا في الكتالوج أولًا لإنشاء أمر توريد.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-truck"></i> الموردون المسجلون (${state.suppliers.length})</div>
+      ${state.suppliers.length ? `<div class="table-wrap"><table><thead><tr><th>المورد</th><th>الهاتف</th><th>البريد</th><th>العنوان</th><th>الحالة</th></tr></thead><tbody>${state.suppliers.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.phone||'—')}</td><td>${esc(s.email||'—')}</td><td>${esc(s.address||'—')}</td><td>${s.is_active?'نشط':'موقوف'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">لا يوجد موردون مسجلون.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-clipboard-list"></i> أوامر التوريد (${state.purchaseOrders.length})</div>
+      ${state.purchaseOrders.length ? `<div class="table-wrap"><table><thead><tr><th>رقم الأمر</th><th>المورد</th><th>الصنف</th><th>مطلوب</th><th>مستلم</th><th>الحالة</th><th>الاستلام</th></tr></thead><tbody>
+      ${state.purchaseOrders.map(o=>{const it=o.items[0]||{};const remaining=Number(it.quantity_ordered||0)-Number(it.quantity_received||0);return `<tr><td><b>${esc(o.order_number)}</b></td><td>${esc(o.supplierName)}</td><td>${esc(it.motorcycle_name||'—')}</td><td>${it.quantity_ordered||0}</td><td>${it.quantity_received||0}</td><td><span class="status-pill">${esc(statusLabel[o.status]||o.status)}</span></td><td>${remaining>0&&o.status!=='cancelled'?`<button class="btn btn-outline btn-sm" data-receive-order="${esc(o.id)}">تسجيل استلام</button>`:'—'}</td></tr>`}).join('')}
+      </tbody></table></div>` : '<div class="empty">لا توجد أوامر توريد حتى الآن.</div>'}
+    </div>`;
+}
+
 function pageTarget() {
   const u = currentUser();
   if (!u) return pageLogin();
@@ -868,6 +921,7 @@ const ROUTES = {
   favorites: pageFavorites,
   orders: pageOrders,
   pos: pagePOS,
+  suppliers: pageSuppliers,
   target: pageTarget,
   inventory: pageInventory,
   dashboard: pageDashboard,
@@ -903,6 +957,7 @@ function navigate(route) {
   closeSidebar();
   render();
   if (route === 'pos') loadSalesData().then(render);
+  if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
 }
 
@@ -984,6 +1039,22 @@ document.addEventListener('click', async (e) => {
     const rows = $('#posCartRows');
     if (rows?.querySelectorAll('.pos-cart-row').length > 1) removePosRow.closest('.pos-cart-row').remove();
     else toast('يجب أن تحتوي الفاتورة على سطر واحد على الأقل', 'info');
+    return;
+  }
+
+  const receiveOrderButton = e.target.closest('[data-receive-order]');
+  if (receiveOrderButton) {
+    const order = state.purchaseOrders.find(o=>o.id===receiveOrderButton.dataset.receiveOrder);
+    const item = order?.items?.[0];
+    const remaining = item ? Number(item.quantity_ordered)-Number(item.quantity_received) : 0;
+    if (!order || !item || remaining<=0) { toast('لا توجد كمية متبقية للاستلام', 'error'); return; }
+    openModal(`<div class="modal-header"><h3>استلام أمر ${esc(order.order_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
+      <p>${esc(item.motorcycle_name)} — المتبقي: <b>${remaining}</b></p>
+      <form id="receivePurchaseForm" class="form-grid" data-order-id="${esc(order.id)}" data-item-id="${esc(item.id)}">
+        <div class="field"><label>الكمية المستلمة الآن</label><input name="quantity" type="number" min="1" max="${remaining}" value="${remaining}" required></div>
+        <div class="field"><label>ملاحظات الاستلام</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
+        <button class="btn btn-primary" type="submit">تأكيد الاستلام وتحديث المخزون</button>
+      </form>`);
     return;
   }
 
@@ -1125,6 +1196,35 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+
+  if (form.id === 'supplierForm') {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية إدارة الموردين', 'error'); return; }
+    const fd=new FormData(form);
+    const payload={name:safeName(fd.get('name')),phone:safeName(fd.get('phone'))||null,email:safeName(fd.get('email')).toLowerCase()||null,address:safeName(fd.get('address'))||null,notes:safeName(fd.get('notes'))||null,created_by:state.user.id};
+    const {error}=await supabase.from('suppliers').insert(payload);
+    if(error){toast(error.message||'تعذر حفظ المورد','error');return;}
+    await loadPurchasingData();render();toast('تم حفظ المورد','success');return;
+  }
+  if (form.id === 'purchaseOrderForm') {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية إنشاء أوامر التوريد', 'error'); return; }
+    const fd=new FormData(form),qty=Number(fd.get('quantity')),cost=Number(fd.get('unit_cost'));
+    if(!Number.isInteger(qty)||qty<1||qty>10000||!Number.isFinite(cost)||cost<0){toast('تحقق من الكمية وتكلفة الوحدة','error');return;}
+    const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
+    const {data,error}=await supabase.rpc('create_supplier_purchase_order',{p_supplier_id:String(fd.get('supplier_id')),p_items:[{motorcycle_id:String(fd.get('motorcycle_id')),quantity:qty,unit_cost:cost}],p_notes:safeName(fd.get('notes'))||null});
+    if(submit)submit.disabled=false;
+    if(error){toast(error.message||'تعذر إنشاء أمر التوريد','error');return;}
+    await loadPurchasingData();render();toast(`تم إنشاء أمر التوريد ${data.order_number}؛ لم يتغير المخزون بعد`,'success');return;
+  }
+  if (form.id === 'receivePurchaseForm') {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية استلام التوريد', 'error'); return; }
+    const fd=new FormData(form),qty=Number(fd.get('quantity'));
+    if(!Number.isInteger(qty)||qty<1){toast('أدخل كمية استلام صحيحة','error');return;}
+    const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
+    const {data,error}=await supabase.rpc('receive_supplier_purchase_order',{p_order_id:form.dataset.orderId,p_items:[{purchase_order_item_id:form.dataset.itemId,quantity:qty}],p_notes:safeName(fd.get('notes'))||null});
+    if(submit)submit.disabled=false;
+    if(error){toast(error.message||'تعذر تسجيل الاستلام','error');return;}
+    closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast(`تم تسجيل الاستلام ${data.receipt_number} وزيادة المخزون بمقدار ${data.quantity_received}`,'success');return;
+  }
 
   if (form.id === 'customerReplyForm') {
     if (!hasPermission('requests_manage') || !supabase) { toast('ليس لديك صلاحية تسجيل الردود', 'error'); return; }
@@ -1520,6 +1620,32 @@ async function loadBusinessData() {
   state.contactReplies = contactReplies.data || [];
 }
 
+async function loadPurchasingData() {
+  if (!state.user || state.user.role !== 'admin' || !supabase) {
+    state.suppliers = []; state.purchaseOrders = []; return;
+  }
+  const [supplierResult, orderResult] = await Promise.all([
+    supabase.from('suppliers').select('id,name,phone,email,address,is_active').order('name'),
+    supabase.from('purchase_orders').select('id,order_number,supplier_id,status,notes,created_at').order('created_at',{ascending:false}).limit(100)
+  ]);
+  if (supplierResult.error) { toast('تعذر تحميل الموردين', 'error'); console.error(supplierResult.error); return; }
+  if (orderResult.error) { toast('تعذر تحميل أوامر التوريد', 'error'); console.error(orderResult.error); return; }
+  state.suppliers = supplierResult.data || [];
+  const orderIds = (orderResult.data || []).map(o=>o.id);
+  const [itemsResult, receiptResult] = await Promise.all([
+    orderIds.length ? supabase.from('purchase_order_items').select('id,purchase_order_id,motorcycle_id,motorcycle_name,model_year,quantity_ordered,quantity_received,unit_cost').in('purchase_order_id',orderIds) : Promise.resolve({data:[],error:null}),
+    orderIds.length ? supabase.from('purchase_receipts').select('id,receipt_number,purchase_order_id,received_at').in('purchase_order_id',orderIds) : Promise.resolve({data:[],error:null})
+  ]);
+  if (itemsResult.error) console.error('Purchase order items load failed',itemsResult.error);
+  if (receiptResult.error) console.error('Purchase receipts load failed',receiptResult.error);
+  state.purchaseOrders = (orderResult.data || []).map(o=>({
+    ...o,
+    supplierName:state.suppliers.find(s=>s.id===o.supplier_id)?.name || '—',
+    items:(itemsResult.data || []).filter(i=>i.purchase_order_id===o.id),
+    receipts:(receiptResult.data || []).filter(r=>r.purchase_order_id===o.id)
+  }));
+}
+
 async function loadStaffDirectory() {
   if (!state.user || state.user.role !== 'admin' || !supabase) return;
   const { data, error } = await supabase.functions.invoke('manage-staff', { body: { action: 'list' } });
@@ -1552,7 +1678,7 @@ async function init() {
       if (!session) { state.user = null; set(DB.ORDERS, []); set(DB.CUSTOM_REQS, []); set(DB.FAVS, {}); state.contactMessages = []; state.requestReplies = []; state.contactReplies = []; state.sales = []; render(); }
     });
     await loadMotorcycles();
-    if (state.user?.role === 'admin') await loadSalesData();
+    if (state.user?.role === 'admin') { await loadSalesData(); await loadPurchasingData(); }
   }
   render();
 }
