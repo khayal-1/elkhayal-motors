@@ -151,9 +151,9 @@ begin
   if (select auth.uid()) is null or not public.can_manage_sales() then
     raise exception using errcode = '42501', message = 'ليس لديك صلاحية تسجيل المبيعات';
   end if;
-  if jsonb_typeof(p_items) <> 'array'
-     or jsonb_array_length(p_items) < 1
-     or jsonb_array_length(p_items) > 20 then
+  if jsonb_typeof(p_items) is distinct from 'array'
+     or coalesce(jsonb_array_length(p_items), 0) < 1
+     or coalesce(jsonb_array_length(p_items), 0) > 20 then
     raise exception using errcode = '22023', message = 'يجب اختيار دراجة واحدة على الأقل وبحد أقصى 20 صنفًا';
   end if;
   if (select count(*) from jsonb_array_elements(p_items)) <>
