@@ -40,6 +40,8 @@ const state = {
   sales: [],
   suppliers: [],
   purchaseOrders: [],
+  supplierBills: [],
+  supplierPayments: [],
   contactMessages: [],
   requestReplies: [],
   contactReplies: [],
@@ -659,6 +661,34 @@ function pageSuppliers() {
       </form>` : '<div class="empty">أضف موردًا وصنفًا في الكتالوج أولًا لإنشاء أمر توريد.</div>'}
     </div>
     <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-file-invoice-dollar"></i> تسجيل فاتورة مورد</div>
+      ${activeSuppliers.length ? `<form id="supplierBillForm" class="form-grid">
+        <div class="form-row">
+          <div class="field"><label>المورد</label><select name="supplier_id" required><option value="">اختر المورد</option>${activeSuppliers.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join('')}</select></div>
+          <div class="field"><label>رقم فاتورة المورد</label><input name="bill_number" maxlength="100" required></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>تاريخ الفاتورة</label><input name="bill_date" type="date" value="${new Date().toISOString().slice(0,10)}" required></div>
+          <div class="field"><label>تاريخ الاستحقاق (اختياري)</label><input name="due_date" type="date"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>القيمة الإجمالية (ج.م)</label><input name="total_amount" type="number" min="0.01" step="0.01" required></div>
+          <div class="field"><label>ربط بأمر توريد (اختياري)</label><select name="purchase_order_id"><option value="">بدون ربط</option>${state.purchaseOrders.filter(o=>o.status!=='cancelled').map(o=>'<option value="'+esc(o.id)+'">'+esc(o.order_number)+' — '+esc(o.supplierName)+'</option>').join('')}</select></div>
+        </div>
+        <div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
+        <small class="hint">تسجيل الفاتورة لا يغيّر المخزون. تُحسب المديونية من قيمة الفاتورة والمدفوعات الفعلية فقط.</small>
+        <button class="btn btn-primary" type="submit">حفظ فاتورة المورد</button>
+      </form>` : '<div class="empty">أضف موردًا أولًا.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-scale-balanced"></i> أرصدة الموردين</div>
+      ${state.suppliers.length ? `<div class="table-wrap"><table><thead><tr><th>المورد</th><th>إجمالي الفواتير</th><th>المدفوع</th><th>المتبقي</th></tr></thead><tbody>${state.suppliers.map(s=>{const bills=state.supplierBills.filter(b=>b.supplier_id===s.id);const total=bills.reduce((n,b)=>n+Number(b.total_amount),0);const paid=bills.reduce((n,b)=>n+b.amountPaid,0);return '<tr><td><b>'+esc(s.name)+'</b></td><td>'+money(total)+'</td><td>'+money(paid)+'</td><td><b>'+money(total-paid)+'</b></td></tr>';}).join('')}</tbody></table></div>` : '<div class="empty">لا يوجد موردون.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-receipt"></i> فواتير ومدفوعات الموردين (${state.supplierBills.length})</div>
+      ${state.supplierBills.length ? `<div class="table-wrap"><table><thead><tr><th>رقم الفاتورة</th><th>المورد</th><th>التاريخ</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>إجراء</th></tr></thead><tbody>${state.supplierBills.map(b=>'<tr><td><b>'+esc(b.bill_number)+'</b></td><td>'+esc(b.supplierName)+'</td><td>'+esc(b.bill_date)+'</td><td>'+money(b.total_amount)+'</td><td>'+money(b.amountPaid)+'</td><td><b>'+money(b.balanceDue)+'</b></td><td>'+(b.balanceDue>0?'<button class="btn btn-outline btn-sm" data-pay-supplier-bill="'+esc(b.id)+'">تسجيل دفعة</button>':'<span class="status-pill">مسددة</span>')+'</td></tr>').join('')}</tbody></table></div>` : '<div class="empty">لا توجد فواتير موردين مسجلة بعد.</div>'}
+    </div>
+    <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-truck"></i> الموردون المسجلون (${state.suppliers.length})</div>
       ${state.suppliers.length ? `<div class="table-wrap"><table><thead><tr><th>المورد</th><th>الهاتف</th><th>البريد</th><th>العنوان</th><th>الحالة</th></tr></thead><tbody>${state.suppliers.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.phone||'—')}</td><td>${esc(s.email||'—')}</td><td>${esc(s.address||'—')}</td><td>${s.is_active?'نشط':'موقوف'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">لا يوجد موردون مسجلون.</div>'}
     </div>
@@ -1067,6 +1097,22 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const paySupplierBill = e.target.closest('[data-pay-supplier-bill]');
+  if(paySupplierBill){
+    const bill=state.supplierBills.find(b=>b.id===paySupplierBill.dataset.paySupplierBill);
+    if(!bill||bill.balanceDue<=0)return;
+    openModal(`<div class="modal-header"><h3>دفعة للمورد — فاتورة ${esc(bill.bill_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
+      <p>المورد: <b>${esc(bill.supplierName)}</b></p><p class="mb-2">الرصيد المستحق: <b>${money(bill.balanceDue)}</b></p>
+      <form id="supplierPaymentForm" class="form-grid" data-bill-id="${esc(bill.id)}">
+        <div class="field"><label>قيمة الدفعة (ج.م)</label><input name="amount" type="number" min="0.01" max="${bill.balanceDue}" step="0.01" required></div>
+        <div class="field"><label>طريقة الدفع</label><select name="method" required><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="instapay">إنستاباي</option><option value="cheque">شيك</option><option value="other">أخرى</option></select></div>
+        <div class="field"><label>رقم مرجعي (اختياري)</label><input name="reference" maxlength="120"></div>
+        <div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
+        <button class="btn btn-primary" type="submit">تأكيد تسجيل الدفعة</button>
+      </form>`);
+    return;
+  }
+
   const receiveOrderButton = e.target.closest('[data-receive-order]');
   if (receiveOrderButton) {
     const order = state.purchaseOrders.find(o=>o.id===receiveOrderButton.dataset.receiveOrder);
@@ -1222,6 +1268,27 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+
+  if(form.id==='supplierBillForm'){
+    if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية إدارة فواتير الموردين','error');return;}
+    const fd=new FormData(form),amount=Number(fd.get('total_amount'));
+    if(!Number.isFinite(amount)||amount<=0){toast('أدخل قيمة فاتورة صحيحة','error');return;}
+    const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
+    const {error}=await supabase.rpc('create_supplier_bill',{p_supplier_id:String(fd.get('supplier_id')),p_bill_number:safeName(fd.get('bill_number')),p_total_amount:amount,p_bill_date:String(fd.get('bill_date')),p_due_date:fd.get('due_date')||null,p_purchase_order_id:fd.get('purchase_order_id')||null,p_notes:safeName(fd.get('notes'))||null});
+    if(submit)submit.disabled=false;
+    if(error){toast(error.message||'تعذر حفظ فاتورة المورد','error');return;}
+    await loadPurchasingData();render();toast('تم حفظ فاتورة المورد وتحديث رصيده','success');return;
+  }
+  if(form.id==='supplierPaymentForm'){
+    if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية تسجيل مدفوعات الموردين','error');return;}
+    const fd=new FormData(form),amount=Number(fd.get('amount'));
+    if(!Number.isFinite(amount)||amount<=0){toast('أدخل قيمة دفعة صحيحة','error');return;}
+    const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
+    const {data,error}=await supabase.rpc('record_supplier_payment',{p_supplier_bill_id:form.dataset.billId,p_amount:amount,p_method:String(fd.get('method')),p_reference:safeName(fd.get('reference'))||null,p_notes:safeName(fd.get('notes'))||null});
+    if(submit)submit.disabled=false;
+    if(error){toast(error.message||'تعذر تسجيل دفعة المورد','error');return;}
+    closeModal();await loadPurchasingData();render();toast('تم تسجيل دفعة المورد رقم '+data.payment_number+' والمتبقي '+money(data.balance_due),'success');return;
+  }
 
   if (form.id === 'supplierForm') {
     if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية إدارة الموردين', 'error'); return; }
@@ -1660,28 +1727,28 @@ async function loadBusinessData() {
 
 async function loadPurchasingData() {
   if (!state.user || state.user.role !== 'admin' || !supabase) {
-    state.suppliers = []; state.purchaseOrders = []; return;
+    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierPayments=[]; return;
   }
-  const [supplierResult, orderResult] = await Promise.all([
+  const [supplierResult,orderResult,billResult,paymentResult]=await Promise.all([
     supabase.from('suppliers').select('id,name,phone,email,address,is_active').order('name'),
-    supabase.from('purchase_orders').select('id,order_number,supplier_id,status,notes,created_at').order('created_at',{ascending:false}).limit(100)
+    supabase.from('purchase_orders').select('id,order_number,supplier_id,status,notes,created_at').order('created_at',{ascending:false}).limit(100),
+    supabase.from('supplier_bills').select('id,bill_number,supplier_id,purchase_order_id,bill_date,due_date,total_amount,notes,created_at').order('bill_date',{ascending:false}).limit(200),
+    supabase.from('supplier_payments').select('id,payment_number,supplier_bill_id,supplier_id,amount,method,reference,notes,paid_at').order('paid_at',{ascending:false}).limit(500)
   ]);
-  if (supplierResult.error) { toast('تعذر تحميل الموردين', 'error'); console.error(supplierResult.error); return; }
-  if (orderResult.error) { toast('تعذر تحميل أوامر التوريد', 'error'); console.error(orderResult.error); return; }
-  state.suppliers = supplierResult.data || [];
-  const orderIds = (orderResult.data || []).map(o=>o.id);
-  const [itemsResult, receiptResult] = await Promise.all([
-    orderIds.length ? supabase.from('purchase_order_items').select('id,purchase_order_id,motorcycle_id,motorcycle_name,model_year,quantity_ordered,quantity_received,unit_cost').in('purchase_order_id',orderIds) : Promise.resolve({data:[],error:null}),
-    orderIds.length ? supabase.from('purchase_receipts').select('id,receipt_number,purchase_order_id,received_at').in('purchase_order_id',orderIds) : Promise.resolve({data:[],error:null})
+  if(supplierResult.error){toast('تعذر تحميل الموردين','error');console.error(supplierResult.error);return;}
+  if(orderResult.error){toast('تعذر تحميل أوامر التوريد','error');console.error(orderResult.error);return;}
+  if(billResult.error){toast('تعذر تحميل فواتير الموردين','error');console.error(billResult.error);return;}
+  if(paymentResult.error){toast('تعذر تحميل مدفوعات الموردين','error');console.error(paymentResult.error);return;}
+  state.suppliers=supplierResult.data||[]; state.supplierPayments=paymentResult.data||[];
+  state.supplierBills=(billResult.data||[]).map(b=>{const payments=state.supplierPayments.filter(p=>p.supplier_bill_id===b.id);const paid=payments.reduce((n,p)=>n+Number(p.amount||0),0);return {...b,supplierName:state.suppliers.find(s=>s.id===b.supplier_id)?.name||'—',payments,amountPaid:paid,balanceDue:Math.max(0,Number(b.total_amount)-paid)};});
+  const orderIds=(orderResult.data||[]).map(o=>o.id);
+  const [itemsResult,receiptResult]=await Promise.all([
+    orderIds.length?supabase.from('purchase_order_items').select('id,purchase_order_id,motorcycle_id,motorcycle_name,model_year,quantity_ordered,quantity_received,unit_cost').in('purchase_order_id',orderIds):Promise.resolve({data:[],error:null}),
+    orderIds.length?supabase.from('purchase_receipts').select('id,receipt_number,purchase_order_id,received_at').in('purchase_order_id',orderIds):Promise.resolve({data:[],error:null})
   ]);
-  if (itemsResult.error) console.error('Purchase order items load failed',itemsResult.error);
-  if (receiptResult.error) console.error('Purchase receipts load failed',receiptResult.error);
-  state.purchaseOrders = (orderResult.data || []).map(o=>({
-    ...o,
-    supplierName:state.suppliers.find(s=>s.id===o.supplier_id)?.name || '—',
-    items:(itemsResult.data || []).filter(i=>i.purchase_order_id===o.id),
-    receipts:(receiptResult.data || []).filter(r=>r.purchase_order_id===o.id)
-  }));
+  if(itemsResult.error)console.error('Purchase order items load failed',itemsResult.error);
+  if(receiptResult.error)console.error('Purchase receipts load failed',receiptResult.error);
+  state.purchaseOrders=(orderResult.data||[]).map(o=>({...o,supplierName:state.suppliers.find(s=>s.id===o.supplier_id)?.name||'—',items:(itemsResult.data||[]).filter(i=>i.purchase_order_id===o.id),receipts:(receiptResult.data||[]).filter(r=>r.purchase_order_id===o.id)}));
 }
 
 async function loadStaffDirectory() {
