@@ -1,3 +1,5 @@
+import { supabase, supabaseConfigured, getCurrentProfile } from './src/supabase.js';
+
 /* =========================================================
    El Khayal Motors — app.js (Full SPA)
    Sections:
@@ -31,7 +33,9 @@ const state = {
   search: '',
   filterCat: 'all',
   filterPrice: 'all',
-  sidebarOpen: false
+  sidebarOpen: false,
+  bikes: [],
+  language: localStorage.getItem('ekm_language') === 'en' ? 'en' : 'ar'
 };
 
 /* ---------- Helpers ---------- */
@@ -45,20 +49,12 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[c]));
 
-function get(key, fallback = []) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    const v = JSON.parse(raw);
-    return v === null || v === undefined ? fallback : v;
-  } catch {
-    return fallback;
-  }
-}
-function set(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); }
-  catch (err) { console.error('localStorage write failed:', err); }
-}
+const transientStore = new Map([
+  [DB.USERS, []], [DB.BIKES, []], [DB.ORDERS, []], [DB.INVOICES, []],
+  [DB.FAVS, {}], [DB.CUSTOM_REQS, []], [DB.MESSAGES, []]
+]);
+function get(key, fallback = []) { return transientStore.has(key) ? transientStore.get(key) : fallback; }
+function set(key, val) { transientStore.set(key, val); }
 
 /* ---------- Toast ---------- */
 function toast(msg, type = 'info') {
@@ -227,29 +223,19 @@ function seedData() {
    SECTION 2 — AUTH & RBAC
    ========================================================= */
 
-function currentUser() {
-  if (state.user) return state.user;
-  const s = get(DB.SESSION, null);
-  if (s && s.id) { state.user = s; return s; }
-  return null;
+function currentUser() { return state.user; }
+
+async function login(email, password) {
+  if (!supabaseConfigured) throw new Error('Supabase configuration is missing.');
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  const profile = await getCurrentProfile(data.user.id);
+  state.user = { ...profile, id: data.user.id, email: data.user.email };
+  return state.user;
 }
 
-function login(email, password) {
-  const users = get(DB.USERS);
-  const u = users.find(
-    (x) =>
-      String(x.email || '').toLowerCase() === String(email || '').toLowerCase() &&
-      x.password === password
-  );
-  if (!u) return null;
-  const { password: _, ...safe } = u;
-  set(DB.SESSION, safe);
-  state.user = safe;
-  return safe;
-}
-
-function logout() {
-  localStorage.removeItem(DB.SESSION);
+async function logout() {
+  if (supabase) await supabase.auth.signOut();
   state.user = null;
   state.route = 'home';
   closeSidebar();
@@ -257,27 +243,19 @@ function logout() {
   toast('تم تسجيل الخروج', 'info');
 }
 
-function signup({ name, email, phone, password }) {
-  const users = get(DB.USERS);
-  if (users.some((u) => String(u.email).toLowerCase() === String(email).toLowerCase())) {
-    return { ok: false, msg: 'البريد مستخدم بالفعل' };
-  }
-  const user = {
-    id: uid(),
-    name: safeName(name),
+async function signup({ name, email, phone, password }) {
+  if (!supabaseConfigured) throw new Error('Supabase configuration is missing.');
+  const { data, error } = await supabase.auth.signUp({
     email: String(email || '').trim(),
-    phone: safeName(phone),
     password: String(password || ''),
-    role: 'customer',
-    target: 0,
-    createdAt: nowISO()
-  };
-  users.push(user);
-  set(DB.USERS, users);
-  const { password: _, ...safe } = user;
-  set(DB.SESSION, safe);
-  state.user = safe;
-  return { ok: true, user: safe };
+    options: { data: { full_name: safeName(name), phone: safeName(phone) } }
+  });
+  if (error) throw error;
+  if (data.session && data.user) {
+    const profile = await getCurrentProfile(data.user.id);
+    state.user = { ...profile, id: data.user.id, email: data.user.email };
+  }
+  return { ok: true, requiresEmailConfirmation: !data.session, user: state.user };
 }
 
 function hasRole(...roles) {
@@ -402,7 +380,7 @@ function renderAccountArea() {
    ========================================================= */
 
 function filteredBikes() {
-  let bikes = get(DB.BIKES);
+  let bikes = state.bikes;
   const q = state.search.trim().toLowerCase();
   if (q) {
     bikes = bikes.filter((b) =>
@@ -425,7 +403,7 @@ function productCard(b) {
   const favMap = get(DB.FAVS, {});
   const favs = u ? (favMap[u.id] || []) : [];
   const isFav = favs.includes(b.id);
-  const imgs = (b.images && b.images.length) ? b.images : ['https://via.placeholder.com/900x600?text=No+Image'];
+  const imgs = (b.images && b.images.length) ? b.images : [];
   const first = imgs[0];
   const dots = imgs.map((_, i) => `<span class="${i === 0 ? 'active' : ''}"></span>`).join('');
 
@@ -435,7 +413,7 @@ function productCard(b) {
   return `
     <article class="product-card" data-bike-id="${esc(b.id)}">
       <div class="slider-wrap" data-slider data-idx="0">
-        <img src="${esc(first)}" alt="${esc(b.name)}" data-slide-img loading="lazy">
+        ${first ? `<img src="${esc(first)}" alt="${esc(b.name)}" data-slide-img loading="lazy">` : `<div class="bike-image-placeholder" aria-hidden="true"><i class="fa-solid fa-motorcycle"></i></div>`}
         <span class="stock-tag ${stockClass}"><i class="fa-solid fa-circle"></i> ${stockText}</span>
         <button class="fav-btn ${isFav ? 'active' : ''}" data-fav="${esc(b.id)}" aria-label="إضافة للمفضلة">
           <i class="fa-${isFav ? 'solid' : 'regular'} fa-heart"></i>
@@ -463,7 +441,7 @@ function productCard(b) {
 
 function pageHome() {
   const bikes = filteredBikes();
-  const cats = Array.from(new Set(get(DB.BIKES).map((b) => b.category)));
+  const cats = Array.from(new Set(state.bikes.map((b) => b.category).filter(Boolean)));
   return `
     <section class="hero">
       <h1>اقــود <span>أسطورتك</span> على عجلتين</h1>
@@ -502,6 +480,7 @@ function pageHome() {
 
 function pageRequest() {
   const u = currentUser();
+  if (!u) return `<section class="panel"><h2>سجّل الدخول لإرسال طلبك</h2><p>يرتبط الطلب بحسابك لحماية بياناتك ومتابعته.</p><button class="btn btn-primary" data-nav="login">تسجيل الدخول</button></section>`;
   return `
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> اطلب موتسيكلك الخاص</h2>
     <p class="page-sub">لم تجد الدراجة التي تريدها؟ اطلبها وسنتواصل معك</p>
@@ -569,10 +548,7 @@ function pageLogin() {
         </button>
       </form>
       <div class="auth-switch">ليس لديك حساب؟ <a data-nav="signup">أنشئ حساباً جديداً</a></div>
-      <div class="auth-switch" style="margin-top:10px;font-size:11px;color:var(--gray-400)">
-        تجريبي — مدير: admin@elkhayal.com / admin123<br>
-        موظف: staff@elkhayal.com / staff123
-      </div>
+
     </div>`;
 }
 
@@ -1140,6 +1116,7 @@ function render() {
 
   const fn = ROUTES[state.route] || pageHome;
   main.innerHTML = fn();
+  applyLanguage(document);
 
   if (state.route === 'pos') renderMyInvoicesMini();
 
@@ -1186,32 +1163,28 @@ function handleBuy(bikeId) {
   `);
 }
 
-function confirmBuy(bikeId) {
+async function confirmBuy(bikeId) {
   const u = currentUser();
   if (!u) return navigate('login');
-  const bike = get(DB.BIKES).find((b) => b.id === bikeId);
+  const bike = state.bikes.find((b) => b.id === bikeId);
   if (!bike) return toast('الدراجة غير موجودة', 'error');
   if (bike.stock <= 0) return toast('الدراجة غير متوفرة', 'error');
-
-  const orders = get(DB.ORDERS);
-  orders.push({
-    id: uid(),
-    customer: u.name,
-    customerEmail: u.email,
-    bikeId: bike.id,
-    bikeName: bike.name,
-    price: bike.price,
-    status: 'pending',
-    createdAt: nowISO()
+  const { error } = await supabase.from('customer_requests').insert({
+    client_user_id: u.id,
+    motorcycle_id: bike.id,
+    requested_name: bike.name,
+    requested_model_year: Number(bike.model) || null,
+    budget: bike.price,
+    notes: 'طلب شراء من صفحة الدراجة'
   });
-  set(DB.ORDERS, orders);
+  if (error) return toast(error.message, 'error');
   closeModal();
   toast('تم إرسال طلبك بنجاح', 'success');
   navigate('orders');
 }
 
 /* ---------- Event: Click Delegation ---------- */
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
   /* Navigation */
   const nav = e.target.closest('[data-nav]');
   if (nav) {
@@ -1261,14 +1234,14 @@ document.addEventListener('click', (e) => {
     const u = currentUser();
     if (!u) { toast('سجل الدخول أولاً', 'error'); navigate('login'); return; }
     const bikeId = favBtn.dataset.fav;
-    const favMap = get(DB.FAVS, {});
-    const list = favMap[u.id] || [];
-    const i = list.indexOf(bikeId);
-    if (i > -1) list.splice(i, 1);
-    else list.push(bikeId);
-    favMap[u.id] = list;
-    set(DB.FAVS, favMap);
-    toast(i > -1 ? 'أزيلت من المفضلة' : 'أضيفت للمفضلة', 'success');
+    const { data: existing, error: readError } = await supabase.from('favorites')
+      .select('motorcycle_id').eq('user_id', u.id).eq('motorcycle_id', bikeId).maybeSingle();
+    if (readError) { toast(readError.message, 'error'); return; }
+    const result = existing
+      ? await supabase.from('favorites').delete().eq('user_id', u.id).eq('motorcycle_id', bikeId)
+      : await supabase.from('favorites').insert({ user_id: u.id, motorcycle_id: bikeId });
+    if (result.error) { toast(result.error.message, 'error'); return; }
+    toast(existing ? 'أزيلت من المفضلة' : 'أضيفت للمفضلة', 'success');
     render();
     return;
   }
@@ -1406,72 +1379,68 @@ document.addEventListener('click', (e) => {
 });
 
 /* ---------- Event: Submit Delegation ---------- */
-document.addEventListener('submit', (e) => {
+document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
 
   /* Login */
   if (form.id === 'loginForm') {
     const fd = new FormData(form);
-    const u = login(fd.get('email'), fd.get('password'));
-    if (!u) { toast('بيانات غير صحيحة', 'error'); return; }
-    toast(`أهلاً ${u.name}`, 'success');
-    const route = u.role === 'admin' ? 'dashboard' : u.role === 'staff' ? 'pos' : 'home';
-    navigate(route);
+    try {
+      const u = await login(fd.get('email'), fd.get('password'));
+      toast(`أهلاً ${u.name}`, 'success');
+      const route = u.role === 'admin' ? 'dashboard' : u.role === 'staff' ? 'pos' : 'home';
+      navigate(route);
+    } catch (error) { toast(error.message || 'تعذر تسجيل الدخول', 'error'); }
     return;
   }
 
   /* Signup */
   if (form.id === 'signupForm') {
     const fd = new FormData(form);
-    const res = signup({
-      name: fd.get('name'),
-      email: fd.get('email'),
-      phone: fd.get('phone'),
-      password: fd.get('password')
-    });
-    if (!res.ok) { toast(res.msg, 'error'); return; }
-    toast('تم إنشاء الحساب بنجاح', 'success');
-    navigate('home');
+    try {
+      const res = await signup({ name: fd.get('name'), email: fd.get('email'), phone: fd.get('phone'), password: fd.get('password') });
+      if (res.requiresEmailConfirmation) {
+        toast('افتح رسالة التأكيد في بريدك لإكمال إنشاء الحساب', 'info');
+        navigate('login');
+      } else {
+        toast('تم إنشاء الحساب بنجاح', 'success');
+        navigate('home');
+      }
+    } catch (error) { toast(error.message || 'تعذر إنشاء الحساب', 'error'); }
     return;
   }
 
-  /* Custom request */
+  /* Customer request: durable data is written only to Supabase under RLS. */
   if (form.id === 'requestForm') {
     const fd = new FormData(form);
     const u = currentUser();
-    const reqs = get(DB.CUSTOM_REQS);
-    reqs.push({
-      id: uid(),
-      name: safeName(fd.get('name')),
-      phone: safeName(fd.get('phone')),
-      bikeName: safeName(fd.get('bikeName')),
-      model: safeName(fd.get('model')),
-      budget: Number(fd.get('budget')) || 0,
-      notes: safeName(fd.get('notes')),
-      customerEmail: u ? u.email : '',
-      status: 'pending',
-      createdAt: nowISO()
+    if (!u || !supabase) { toast('سجّل الدخول أولاً', 'error'); navigate('login'); return; }
+    const { error } = await supabase.from('customer_requests').insert({
+      client_user_id: u.id,
+      requested_name: safeName(fd.get('bikeName')),
+      requested_model_year: Number(fd.get('model')) || null,
+      budget: Number(fd.get('budget')) || null,
+      notes: safeName(fd.get('notes')) || null
     });
-    set(DB.CUSTOM_REQS, reqs);
+    if (error) { toast(error.message, 'error'); return; }
     toast('تم إرسال طلبك، سنتواصل معك قريباً', 'success');
     form.reset();
     renderSidebar();
     return;
   }
 
-  /* Contact */
+  /* Contact messages are sent to the protected Supabase table. */
   if (form.id === 'contactForm') {
     const fd = new FormData(form);
-    const msgs = get(DB.MESSAGES);
-    msgs.push({
-      id: uid(),
+    if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
+    const { error } = await supabase.from('contact_messages').insert({
+      sender_user_id: currentUser()?.id || null,
       name: safeName(fd.get('name')),
       email: safeName(fd.get('email')),
-      message: safeName(fd.get('message')),
-      createdAt: nowISO()
+      message: safeName(fd.get('message'))
     });
-    set(DB.MESSAGES, msgs);
+    if (error) { toast(error.message, 'error'); return; }
     toast('تم إرسال رسالتك', 'success');
     form.reset();
     return;
@@ -1585,10 +1554,91 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ---------- Init ---------- */
-function init() {
-  seedData();
-  currentUser();
+async function init() {
+  // Remove only this app's obsolete demo credentials/session written by the earlier static demo.
+  ['ekm_users','ekm_session','ekm_bikes','ekm_orders','ekm_invoices','ekm_favs','ekm_custom_requests','ekm_messages','ekm_seeded_v1'].forEach((key) => localStorage.removeItem(key));
+  if (!supabaseConfigured) toast('إعداد Supabase غير مكتمل', 'error');
+  else {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      try {
+        const profile = await getCurrentProfile(session.user.id);
+        state.user = { ...profile, id: session.user.id, email: session.user.email };
+        const [{ data: requests }, { data: favorites }] = await Promise.all([
+          supabase.from('customer_requests').select('id,requested_name,requested_model_year,budget,status,created_at').eq('client_user_id', session.user.id).order('created_at', { ascending: false }),
+          supabase.from('favorites').select('motorcycle_id').eq('user_id', session.user.id)
+        ]);
+        set(DB.CUSTOM_REQS, (requests || []).map((r) => ({ id:r.id, bikeName:r.requested_name, model:r.requested_model_year, budget:r.budget, status:r.status, createdAt:r.created_at, customerEmail:session.user.email })));
+        set(DB.ORDERS, (requests || []).map((r) => ({ id:r.id, bikeName:r.requested_name, price:r.budget, status:r.status, createdAt:r.created_at, customerEmail:session.user.email })));
+        set(DB.FAVS, { [session.user.id]: (favorites || []).map((f) => f.motorcycle_id) });
+      } catch (error) { console.error('Profile load failed', error); }
+    }
+    supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) { state.user = null; render(); }
+    });
+    const { data, error } = await supabase.from('motorcycles')
+      .select('id,name,model_year,category,price,stock,image_urls,status')
+      .eq('status', 'available').order('created_at', { ascending: false });
+    if (!error) {
+      state.bikes = (data || []).map((row) => ({
+        id: row.id, name: row.name, model: String(row.model_year || ''), category: row.category,
+        price: Number(row.price), stock: row.stock, images: row.image_urls || []
+      }));
+      set(DB.BIKES, state.bikes);
+    } else console.error('Catalogue load failed', error);
+  }
   render();
 }
+
+const EN = {
+  'الرئيسية':'Home','اطلب موتسيكلك':'Request a motorcycle','تواصل معنا':'Contact us','تسجيل الدخول':'Sign in','حساب جديد':'Create account',
+  'التسوق':'SHOP','الحساب':'ACCOUNT','حسابي':'My account','معرض الدراجات':'Motorcycle catalog',
+  'تصفح مجموعتنا المختارة من أفضل الدراجات النارية':'Browse our selected motorcycles',
+  'اقــود':'Ride','أسطورتك':'your legend','على عجلتين':'on two wheels',
+  'أفضل الدراجات النارية الرياضية بأعلى جودة وأفضل الأسعار. اختر دراجتك الآن من El Khayal Motors.':'Sport motorcycles, quality and great value. Find your ride at El Khayal Motors.',
+  'اطلب موتسيكلك الخاص':'Request a motorcycle','تصفح مجموعتنا المختارة من أفضل الدراجات النارية':'Browse our selected motorcycles',
+  'ابحث بالاسم أو الموديل...':'Search by name or model...','كل الفئات':'All categories','كل الأسعار':'All prices',
+  'أقل من 500 ألف':'Under 500,000','500 ألف - مليون':'500,000–1,000,000','أكثر من مليون':'Over 1,000,000',
+  'لا توجد دراجات مطابقة للبحث':'No motorcycles match your search','اطلب موتسيكلك الخاص':'Request a motorcycle',
+  'لم تجد الدراجة التي تريدها؟ اطلبها وسنتواصل معك':'Can’t find the motorcycle you want? Send a request and we’ll contact you.',
+  'الاسم':'Name','رقم الهاتف':'Phone number','اسم الدراجة المطلوبة':'Motorcycle requested','الموديل / السنة':'Model year',
+  'الميزانية التقريبية (ج.م)':'Approximate budget (EGP)','ملاحظات إضافية':'Additional notes','إرسال الطلب':'Send request',
+  'تواصل معنا':'Contact us','نحن هنا لخدمتك':'We’re here to help','بيانات المعرض':'Showroom details','أرسل رسالة':'Send a message',
+  'البريد الإلكتروني':'Email','الرسالة':'Message','إرسال':'Send','أدخل بياناتك للوصول إلى حسابك':'Sign in to access your account',
+  'كلمة المرور':'Password','دخول':'Sign in','ليس لديك حساب؟':'Don’t have an account?','أنشئ حساباً جديداً':'Create an account',
+  'حساب جديد':'Create account','سجل الآن لتتمكن من الشراء والمفضلة':'Create an account to make requests and save favorites',
+  'الاسم الكامل':'Full name','إنشاء الحساب':'Create account','لديك حساب بالفعل؟':'Already have an account?',
+  'تم تسجيل الخروج':'Signed out','سجّل الدخول لإرسال طلبك':'Sign in to send a request',
+  'يرتبط الطلب بحسابك لحماية بياناتك ومتابعته.':'Requests are linked to your account so you can track them securely.',
+  'تفاصيل':'Details','شراء':'Request purchase','متوفر':'Available','غير متوفر':'Unavailable','المفضلة':'Favorites','طلباتي':'My requests',
+  'سجل الدخول أولاً':'Please sign in first','عميل':'Customer','موظف':'Employee','مدير':'Manager'
+};
+function applyLanguage(root) {
+  const en = state.language === 'en';
+  document.documentElement.lang = en ? 'en' : 'ar';
+  document.documentElement.dir = en ? 'ltr' : 'rtl';
+  const button = $('#languageToggle');
+  if (button) button.textContent = en ? 'العربية' : 'English';
+  if (!en) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const raw = node.nodeValue || '';
+    const trimmed = raw.trim();
+    if (EN[trimmed]) node.nodeValue = raw.replace(trimmed, EN[trimmed]);
+  }
+  root.querySelectorAll('[placeholder],[aria-label],[title]').forEach((el) => {
+    for (const attr of ['placeholder','aria-label','title']) {
+      const value = el.getAttribute(attr);
+      if (value && EN[value]) el.setAttribute(attr, EN[value]);
+    }
+  });
+}
+$('#languageToggle')?.addEventListener('click', () => {
+  state.language = state.language === 'ar' ? 'en' : 'ar';
+  localStorage.setItem('ekm_language', state.language);
+  render();
+});
 
 init();
