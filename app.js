@@ -663,6 +663,35 @@ function pagePOS() {
     </div>`;
 }
 
+function pageExpenses() {
+  const u = currentUser();
+  if (!u || !(u.role === 'admin' || hasPermission('expenses_manage') || hasPermission('accounting_view'))) return pageNoPermission();
+  const canManage = u.role === 'admin' || hasPermission('expenses_manage');
+  const accounts = state.financeAccounts || [], cash = state.cashAccounts || [], expenses = state.expenses || [];
+  const total = expenses.reduce((sum,row)=>sum+Number(row.amount||0),0);
+  const paid = expenses.reduce((sum,row)=>sum+Number(row.paid_amount||0),0);
+  const accountOptions = accounts.filter(a=>a.code!=='6000'&&a.code!=='5000').map(a=>'<option value="'+esc(a.id)+'">'+esc(a.code)+' — '+esc(a.name)+'</option>').join('');
+  const cashOptions = cash.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' — '+(a.account_kind==='bank'?'بنك':'نقدية')+'</option>').join('');
+  const rows = expenses.map(row=>{
+    const due=Math.max(0,Number(row.amount||0)-Number(row.paid_amount||0));
+    const account=Array.isArray(row.accounting_accounts)?row.accounting_accounts[0]:row.accounting_accounts;
+    return '<tr><td>#'+(row.expense_number||'—')+'<br><small>'+esc(row.expense_date||'')+'</small></td><td><b>'+esc(row.description)+'</b><br><small>'+esc(row.vendor_name||'')+'</small></td><td>'+esc(account?.name||'—')+'</td><td>'+money(row.amount)+'</td><td>'+money(row.paid_amount)+'</td><td>'+money(due)+'</td><td><span class="status-pill '+(due>0?'pending':'completed')+'">'+(due>0?'مستحق':'مدفوع')+'</span>'+(canManage&&due>0?'<br><button class="btn btn-outline btn-sm mt-1" data-pay-expense="'+esc(row.id)+'" data-due="'+due+'">تسجيل سداد</button>':'')+'</td></tr>';
+  }).join('');
+  return '<h2 class="page-title"><i class="fa-solid fa-money-bill-transfer"></i> المصروفات والحسابات</h2>' +
+    '<p class="page-sub">سجل المصروفات مع قيود محاسبية مزدوجة، ومدفوع ومستحق، وربط بالخزينة أو البنك.</p>' +
+    '<div class="stats-grid"><div class="stat-card"><div class="stat-label">إجمالي المصروفات المعروضة</div><div class="stat-value">'+money(total)+'</div></div><div class="stat-card"><div class="stat-label">المدفوع</div><div class="stat-value">'+money(paid)+'</div></div><div class="stat-card"><div class="stat-label">المتبقي</div><div class="stat-value">'+money(total-paid)+'</div></div></div>' +
+    (canManage ? '<div class="panel"><div class="panel-title"><i class="fa-solid fa-file-circle-plus"></i> تسجيل مصروف جديد</div><form id="expenseForm" class="form-grid">' +
+      '<div class="form-row"><div class="field"><label>تاريخ المصروف</label><input name="expense_date" type="date" value="'+new Date().toISOString().slice(0,10)+'" required></div><div class="field"><label>بند المصروف</label><select name="expense_account_id" required><option value="">اختر البند</option>'+accountOptions+'</select></div></div>' +
+      '<div class="field"><label>وصف المصروف</label><input name="description" maxlength="240" required placeholder="مثال: إيجار المعرض لشهر نوفمبر"></div>' +
+      '<div class="form-row"><div class="field"><label>القيمة الإجمالية (ج.م)</label><input name="amount" type="number" min="0.01" step="0.01" required></div><div class="field"><label>المدفوع الآن (ج.م)</label><input name="paid_amount" type="number" min="0" step="0.01" value="0" required></div></div>' +
+      '<div class="form-row"><div class="field"><label>الخزينة / البنك عند الدفع</label><select name="cash_account_id"><option value="">غير مدفوع الآن</option>'+cashOptions+'</select></div><div class="field"><label>طريقة الدفع</label><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="instapay">إنستاباي</option><option value="card">بطاقة</option><option value="cheque">شيك</option><option value="other">أخرى</option></select></div></div>' +
+      '<div class="form-row"><div class="field"><label>اسم الجهة / المستفيد</label><input name="vendor_name" maxlength="160"></div><div class="field"><label>رقم الفاتورة / المرجع</label><input name="reference_number" maxlength="100"></div></div>' +
+      '<div class="form-row"><div class="field"><label>تاريخ الاستحقاق</label><input name="due_date" type="date"></div><div class="field"><label>ملاحظات</label><input name="notes" maxlength="1000"></div></div>' +
+      '<button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ المصروف وترحيله محاسبيًا</button></form></div>' : '') +
+    '<div class="panel"><div class="panel-title"><i class="fa-solid fa-list"></i> سجل المصروفات ('+expenses.length+')</div>' +
+    (expenses.length ? '<div class="table-wrap"><table><thead><tr><th>رقم / تاريخ</th><th>البيان</th><th>البند</th><th>القيمة</th><th>المدفوع</th><th>المتبقي</th><th>الحالة / إجراء</th></tr></thead><tbody>'+rows+'</tbody></table></div>' : '<div class="empty"><i class="fa-solid fa-receipt"></i><p>لا توجد مصروفات مسجلة حتى الآن</p></div>')+'</div>' +
+    '<div class="panel"><b>ملاحظة محاسبية:</b> كل مصروف ينشئ قيدًا متوازنًا: مدين المصروف ودائن الخزينة/المستحقات، والدفعات اللاحقة تُسجل بقيود مستقلة. لا توجد أرصدة افتتاحية أو بيانات افتراضية.</div>';
+}
 function pageSuppliers() {
   if (!currentUser() || currentUser().role !== 'admin') return pageNoPermission();
   const bikes = state.bikes.filter(b=>b.status!=='archived');
