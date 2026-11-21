@@ -27,6 +27,8 @@ const DB = {
   SEEDED: 'ekm_seeded_v1'
 };
 
+const authRedirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin).href;
+
 const state = {
   user: null,
   route: 'home',
@@ -122,7 +124,7 @@ async function signup({ name, email, phone, password }) {
   const { data, error } = await supabase.auth.signUp({
     email: String(email || '').trim(),
     password: String(password || ''),
-    options: { data: { full_name: safeName(name), phone: safeName(phone) } }
+    options: { data: { full_name: safeName(name), phone: safeName(phone) }, emailRedirectTo: authRedirectUrl }
   });
   if (error) throw error;
   if (data.session && data.user) {
@@ -852,7 +854,7 @@ document.addEventListener('click', async (e) => {
     if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
     const email = safeName($('#loginForm input[name="email"]')?.value).toLowerCase();
     if (!email) { toast('اكتب البريد الإلكتروني أولاً', 'error'); return; }
-    const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: window.location.origin } });
+    const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: authRedirectUrl } });
     if (error) toast(error.message || 'تعذر طلب رسالة التأكيد', 'error');
     else toast('إذا كان الحساب بانتظار التأكيد، ستصل رسالة إلى البريد', 'info');
     return;

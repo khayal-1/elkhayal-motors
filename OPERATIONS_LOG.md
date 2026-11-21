@@ -126,8 +126,8 @@ Status: executed for read-only inspection; clone succeeded, the working tree was
 
 **21 Nov 2026, 12:20–12:30 Cairo / 21 نوفمبر 2026، 12:20–12:30 القاهرة**
 
-- تمت مصادقة GitHub عبر تسجيل الدخول الاجتماعي إلى Supabase؛ ظهر تحدي تحقق الجهاز، واستُخدم رمز GitHub المرسل للبريد من خلال مرجع التحقق الآمن. بعد العودة إلى Supabase، ظهرت صفحة الوظائف للمشروع الصحيح؛ القراءة الحية أكدت أن القائمة لا تزال تعرض `telegram-photo-upload` فقط.
-- GitHub authentication completed through Supabase's GitHub sign-in; the device-verification challenge was completed using the secure email-code reference. Back in Supabase, the correct project functions page was visible; its live list still contained only `telegram-photo-upload`.
+- تمت مصادقة GitHub عبر تسجيل الدخول الاجتماعي إلى Supabase؛ ظهر تحدي تحقق الجهاز، واستُخدم رمز GitHub المرسل للبريد من خلال مرجع التحقق الآمن. بعد العودة إلى Supabase، ظهرت صفحة الوظائف للمشروع الصحيح؛ كانت القائمة تعرض `telegram-photo-upload` فقط في تلك اللحظة.
+- GitHub authentication completed through Supabase's GitHub sign-in; the device-verification challenge was completed using the secure email-code reference. Back in Supabase, the correct project functions page was visible; at that time its live list contained only `telegram-photo-upload`.
 - فتحت إرشادات Supabase CLI؛ تعرض أمر النشر، وتذكر الحاجة إلى access token. لم يُنشأ رمز جديد ولم يُمرر أي رمز إلى CLI، ولم تُرسل محاولة نشر للدالة.
 - Supabase CLI guidance was inspected; it shows the deploy command and notes that an access token may be needed. No new access token was created or passed to the CLI, and no function deployment was submitted.
 - `vite.config.js` عُدّل في فرع الميزة لتحديد `base: '/elkhayal-motors/'` حتى تشير ملفات Vite إلى المسار الصحيح لموقع GitHub Pages ذي المسار الفرعي. هذا التعديل لم يُنشر إلى `main`.
@@ -175,6 +175,8 @@ Status: executed for read-only inspection; clone succeeded, the working tree was
 - Merged the latest `origin/main` into the feature branch without conflicts; its only change was a text edit in `app.js`. Rebuilt locally with the public `NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=... corepack pnpm run build`; Vite passed and `dist/index.html` contained `/elkhayal-motors/assets/...` paths. The bundle included the project configuration and publishable key, with no placeholders.
 - دُفع commit `08212029c3046b7c78cd4cbde2286a3121387a30` إلى فرع `feature/manager-staff-accounts` وتحقق `git ls-remote` من SHA نفسه. طلب السحب الموجود رقم 1 إلى `main` أصبح قابلاً للدمج؛ الشيكات المعروضة فيه تخص معاينة Vercel فقط، وليست اختبار GitHub Pages.
 - Commit `08212029c3046b7c78cd4cbde2286a3121387a30` was pushed to `feature/manager-staff-accounts` and `git ls-remote` returned the same SHA. Existing pull request #1 to `main` is mergeable; its displayed checks are Vercel preview checks only, not GitHub Pages tests.
+- ضُبط Site URL في Supabase Authentication ليكون `https://khayal-1.github.io/elkhayal-motors/` وأُضيف الرابط نفسه إلى allowlist للتحويلات؛ احتُفظ برابط Vercel القديم في القائمة. عُدّل تسجيل العميل وإعادة إرسال التأكيد لاستخدام `import.meta.env.BASE_URL` كوجهة تحويل، لتصل الروابط إلى مسار Pages الفرعي. لم يُرسل بريد تأكيد أو يُنشأ حساب عميل.
+- Supabase Authentication Site URL is now `https://khayal-1.github.io/elkhayal-motors/`, and that URL was added to the redirect allowlist; the old Vercel URL remains allowed. Customer signup and resend-confirmation now use `import.meta.env.BASE_URL` so confirmation links return to the Pages subpath. No confirmation email was sent and no customer account was created.
 - لم يتغير إعداد Pages الحي بعد (`legacy main:/`) ولم يتغير الموقع المنشور بعد. لم تُنفّذ أي migration ولم تُنشأ حسابات موظفين.
 
 
@@ -194,3 +196,7 @@ git ls-remote origin refs/heads/feature/manager-staff-accounts
 القيم بين الأقواس توضّح مكان قيم المشروع العامة، وليست أسرارًا؛ لم يُدرج service-role أو Personal Access Token. نجح البناء و`deno check` و`git diff --check`. لم يُشغّل أي أمر migration أو SQL.
 
 The bracketed values indicate the public project configuration inputs, not secrets; no service-role key or Personal Access Token was included. The build, `deno check`, and `git diff --check` passed. No migration or SQL command was run.
+
+
+- سجّل التغيير إلى redirect URL في Supabase واستخدام مسار Pages في كود التسجيل: `app.js` يحسب `authRedirectUrl` من `import.meta.env.BASE_URL` ويستخدمه في التسجيل وإعادة إرسال تأكيد البريد.
+- Recorded the Supabase redirect URL change and Pages-path code update: `app.js` derives `authRedirectUrl` from `import.meta.env.BASE_URL` and uses it for signup and resend-confirmation.
