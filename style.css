@@ -1129,3 +1129,16 @@ td .mini-img {
 .permission-option small { color: var(--gray-500); line-height: 1.5; }
 .staff-created { border-inline-start: 4px solid var(--success); }
 .staff-created input { display: block; width: 100%; margin: 8px 0; padding: 12px; border: 1px solid var(--gray-200); border-radius: var(--radius); font-family: monospace; direction: ltr; }
+
+
+/* Customer inbox contact actions */
+.contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.contact-actions .btn {
+  white-space: nowrap;
+}
