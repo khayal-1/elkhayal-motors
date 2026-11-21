@@ -688,6 +688,7 @@ function pageExpenses() {
   return '<h2 class="page-title"><i class="fa-solid fa-money-bill-transfer"></i> المصروفات والحسابات</h2>' +
     '<p class="page-sub">سجل المصروفات، أرصدة الخزائن والبنوك، وميزان المراجعة من القيود المرحلة.</p>' +
     '<div class="stats-grid"><div class="stat-card"><div class="stat-label">إجمالي المصروفات المعروضة</div><div class="stat-value">'+money(total)+'</div></div><div class="stat-card"><div class="stat-label">المدفوع</div><div class="stat-value">'+money(paid)+'</div></div><div class="stat-card"><div class="stat-label">المتبقي</div><div class="stat-value">'+money(total-paid)+'</div></div></div>' +
+    (managerAccess ? '<div class="panel"><div class="panel-title"><i class="fa-solid fa-building-columns"></i> إضافة خزينة أو حساب بنكي</div><form id="cashAccountForm" class="form-grid"><div class="form-row"><div class="field"><label>اسم الحساب</label><input name="name" required maxlength="120" placeholder="مثال: خزينة الفرع أو البنك الأهلي"></div><div class="field"><label>نوع الحساب</label><select name="kind" required><option value="cash">خزينة نقدية</option><option value="bank">حساب بنكي</option></select></div></div><button class="btn btn-outline" type="submit"><i class="fa-solid fa-plus"></i> إضافة الحساب</button></form><p class="hint">يُنشأ الحساب برصيد صفر. أدخل الأرصدة الافتتاحية فقط بعد اعتمادها محاسبيًا.</p></div>' : '') +
     (canManage ? '<div class="panel"><div class="panel-title"><i class="fa-solid fa-file-circle-plus"></i> تسجيل مصروف جديد</div><form id="expenseForm" class="form-grid">' +
       '<div class="form-row"><div class="field"><label>تاريخ المصروف</label><input name="expense_date" type="date" value="'+new Date().toISOString().slice(0,10)+'" required></div><div class="field"><label>بند المصروف</label><select name="expense_account_id" required><option value="">اختر البند</option>'+accountOptions+'</select></div></div>' +
       '<div class="field"><label>وصف المصروف</label><input name="description" maxlength="240" required placeholder="مثال: إيجار المعرض لشهر نوفمبر"></div>' +
@@ -1504,6 +1505,19 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+  if (form.id === 'cashAccountForm') {
+    if (!hasRole('admin','manager','owner') || !supabase) { toast('إدارة الخزائن والبنوك متاحة للإدارة فقط','error'); return; }
+    const fd = new FormData(form), name = safeName(fd.get('name')), kind = String(fd.get('kind') || '');
+    if (!name || !['cash','bank'].includes(kind)) { toast('أدخل اسم الحساب ونوعه بصورة صحيحة','error'); return; }
+    const btn = form.querySelector('[type=submit]'); if (btn) btn.disabled = true;
+    const {data,error} = await supabase.rpc('create_cash_account',{p_name:name,p_kind:kind});
+    if (btn) btn.disabled = false;
+    if (error) { toast(error.message || 'تعذرت إضافة الحساب','error'); return; }
+    await loadFinanceData(); render();
+    toast('تمت إضافة '+(kind==='bank'?'الحساب البنكي':'الخزينة')+' برقم حساب '+(data?.account_code || ''),'success');
+    return;
+  }
+
   if (form.id === 'expenseForm') {
     if (!(hasRole('admin','manager','owner') || hasPermission('expenses_manage')) || !supabase) { toast('ليس لديك صلاحية تسجيل المصروفات','error'); return; }
     const fd = new FormData(form), amount = Number(fd.get('amount') || 0), paid = Number(fd.get('paid_amount') || 0);
