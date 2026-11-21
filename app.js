@@ -1224,7 +1224,9 @@ document.addEventListener('submit', async (e) => {
     const name = safeName(fd.get('requester_name'));
     const phone = safeName(fd.get('requester_phone'));
     const email = safeName(fd.get('requester_email')).toLowerCase();
+    const preferred = String(fd.get('preferred_contact') || 'phone');
     if (name.length < 2 || (!phone && !email)) { toast('اكتب اسمك ورقم هاتف أو بريدًا إلكترونيًا واحدًا على الأقل', 'error'); return; }
+    if ((preferred === 'email' && !email) || (preferred !== 'email' && !phone)) { toast('أدخل بيانات وسيلة التواصل التي اخترتها', 'error'); return; }
     const bike = form.id === 'quickBuyRequestForm' ? state.bikes.find((b) => b.id === form.dataset.bikeId) : null;
     if (form.id === 'quickBuyRequestForm' && (!bike || bike.stock <= 0 || bike.status !== 'available')) {
       toast('الدراجة لم تعد متاحة؛ حدّث الصفحة وحاول مرة أخرى', 'error'); return;
@@ -1234,7 +1236,7 @@ document.addEventListener('submit', async (e) => {
       requester_name: name,
       requester_phone: phone || null,
       requester_email: email || null,
-      preferred_contact: String(fd.get('preferred_contact') || 'phone'),
+      preferred_contact: preferred,
       motorcycle_id: bike?.id || null,
       requested_name: bike?.name || safeName(fd.get('bikeName')),
       requested_model_year: bike ? (Number(bike.model) || null) : (Number(fd.get('model')) || null),
@@ -1259,15 +1261,19 @@ document.addEventListener('submit', async (e) => {
     if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
     const phone = safeName(fd.get('phone'));
     const email = safeName(fd.get('email')).toLowerCase();
+    const preferred = String(fd.get('preferred_contact') || 'email');
     if (!safeName(fd.get('name')) || !safeName(fd.get('message')) || (!phone && !email)) {
       toast('اكتب اسمك ورسالتك ورقم هاتف أو بريدًا إلكترونيًا واحدًا على الأقل', 'error'); return;
+    }
+    if ((preferred === 'email' && !email) || (preferred !== 'email' && !phone)) {
+      toast('أدخل بيانات وسيلة التواصل التي اخترتها', 'error'); return;
     }
     const { error } = await supabase.from('contact_messages').insert({
       sender_user_id: currentUser()?.id || null,
       name: safeName(fd.get('name')),
       phone: phone || null,
       email: email || '',
-      preferred_contact: String(fd.get('preferred_contact') || 'email'),
+      preferred_contact: preferred,
       message: safeName(fd.get('message'))
     });
     if (error) { toast(error.message || 'تعذر إرسال الرسالة', 'error'); return; }
