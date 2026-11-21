@@ -806,7 +806,7 @@ function pageManageBikes() {
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> إدارة الدراجات</h2>
     <p class="page-sub">إضافة وتعديل الدراجات المحفوظة في Supabase</p>
     <div class="panel">
-      ${(u.role === 'admin' || hasPermission('catalog_manage')) ? `<button class="btn btn-primary mb-2" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة دراجة جديدة</button>` : ''}
+      ${(u.role === 'admin' || hasPermission('catalog_manage')) ? `<div class="contact-actions mb-2"><button class="btn btn-primary" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة دراجة جديدة</button><button class="btn btn-outline" id="syncTelegramPhotosBtn"><i class="fa-solid fa-rotate"></i> مزامنة الصور القديمة</button></div>` : ''}
       <div class="table-wrap"><table>
         <thead><tr><th>الصورة</th><th>الاسم</th><th>الموديل</th><th>الفئة</th><th>السعر</th><th>المخزون</th><th>إجراءات</th></tr></thead>
         <tbody>${bikes.map((b) => `
@@ -1371,6 +1371,33 @@ document.addEventListener('click', async (e) => {
         <label class="field"><span><input type="checkbox" name="sent" value="yes"> أؤكد أنني أرسلت الرد أو أجريت المكالمة بالفعل</span></label>
         <button class="btn btn-primary" type="submit">حفظ سجل الرد</button>
       </form>`);
+    return;
+  }
+
+  const syncPhotosButton = e.target.closest('#syncTelegramPhotosBtn');
+  if (syncPhotosButton) {
+    if (!hasPermission('catalog_manage') || !supabase) { toast('ليس لديك صلاحية مزامنة صور الكتالوج', 'error'); return; }
+    syncPhotosButton.disabled = true;
+    const originalText = syncPhotosButton.innerHTML;
+    syncPhotosButton.textContent = 'جارٍ مزامنة الصور القديمة...';
+    let synced = 0, failed = 0, pending = null, failureMessage = '';
+    try {
+      for (let batch = 0; batch < 10; batch++) {
+        const { data, error } = await supabase.functions.invoke('telegram-photo-sync', { body: {} });
+        if (error || data?.error) { failureMessage = data?.error || error?.message || 'تعذرت مزامنة الصور'; break; }
+        synced += Number(data?.synced_count || 0);
+        failed += Number(data?.failed_count || 0);
+        pending = data?.pending_remaining;
+        if (!pending || (Number(data?.synced_count || 0) === 0 && Number(data?.failed_count || 0) === 0)) break;
+      }
+      await loadMotorcycles();
+      render();
+      if (failureMessage) toast(failureMessage, 'error');
+      else toast(`تمت مزامنة ${synced} صورة، وتعذر ${failed} صورة، والمتبقي ${pending ?? 'غير معروف'}`, failed ? 'error' : 'success');
+    } finally {
+      const current = $('#syncTelegramPhotosBtn');
+      if (current) { current.disabled = false; current.innerHTML = originalText; }
+    }
     return;
   }
 
