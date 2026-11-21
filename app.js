@@ -42,6 +42,8 @@ const state = {
   purchaseOrders: [],
   supplierBills: [],
   supplierPayments: [],
+  supplierReturns: [],
+  supplierReturnItems: [],
   contactMessages: [],
   requestReplies: [],
   contactReplies: [],
@@ -1731,20 +1733,34 @@ async function loadBusinessData() {
 
 async function loadPurchasingData() {
   if (!state.user || state.user.role !== 'admin' || !supabase) {
-    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierPayments=[]; return;
+    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[]; return;
   }
-  const [supplierResult,orderResult,billResult,paymentResult]=await Promise.all([
+  const [supplierResult,orderResult,billResult,paymentResult,returnResult]=await Promise.all([
     supabase.from('suppliers').select('id,name,phone,email,address,is_active').order('name'),
     supabase.from('purchase_orders').select('id,order_number,supplier_id,status,notes,created_at').order('created_at',{ascending:false}).limit(100),
     supabase.from('supplier_bills').select('id,bill_number,supplier_id,purchase_order_id,bill_date,due_date,total_amount,notes,created_at').order('bill_date',{ascending:false}).limit(200),
-    supabase.from('supplier_payments').select('id,payment_number,supplier_bill_id,supplier_id,amount,method,reference,notes,paid_at').order('paid_at',{ascending:false}).limit(500)
+    supabase.from('supplier_payments').select('id,payment_number,supplier_bill_id,supplier_id,amount,method,reference,notes,paid_at').order('paid_at',{ascending:false}).limit(500),
+    supabase.from('supplier_returns').select('id,return_number,supplier_id,purchase_order_id,supplier_bill_id,notes,created_by,created_at').order('created_at',{ascending:false}).limit(500)
   ]);
-  if(supplierResult.error){toast('تعذر تحميل الموردين','error');console.error(supplierResult.error);return;}
-  if(orderResult.error){toast('تعذر تحميل أوامر التوريد','error');console.error(orderResult.error);return;}
-  if(billResult.error){toast('تعذر تحميل فواتير الموردين','error');console.error(billResult.error);return;}
-  if(paymentResult.error){toast('تعذر تحميل مدفوعات الموردين','error');console.error(paymentResult.error);return;}
-  state.suppliers=supplierResult.data||[]; state.supplierPayments=paymentResult.data||[];
-  state.supplierBills=(billResult.data||[]).map(b=>{const payments=state.supplierPayments.filter(p=>p.supplier_bill_id===b.id);const paid=payments.reduce((n,p)=>n+Number(p.amount||0),0);return {...b,supplierName:state.suppliers.find(s=>s.id===b.supplier_id)?.name||'—',payments,amountPaid:paid,balanceDue:Math.max(0,Number(b.total_amount)-paid)};});
+  for (const [result,label] of [[supplierResult,'الموردين'],[orderResult,'أوامر التوريد'],[billResult,'فواتير الموردين'],[paymentResult,'مدفوعات الموردين'],[returnResult,'مرتجعات الموردين']]) {
+    if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
+  }
+  state.suppliers=supplierResult.data||[];
+  state.supplierPayments=paymentResult.data||[];
+  state.supplierReturns=returnResult.data||[];
+  const returnIds=state.supplierReturns.map(r=>r.id);
+  const returnItemsResult=returnIds.length
+    ?await supabase.from('supplier_return_items').select('id,supplier_return_id,purchase_receipt_item_id,motorcycle_id,quantity,unit_cost,line_total').in('supplier_return_id',returnIds)
+    :{data:[],error:null};
+  if(returnItemsResult.error){toast('تعذر تحميل تفاصيل مرتجعات الموردين','error');console.error(returnItemsResult.error);return;}
+  state.supplierReturnItems=returnItemsResult.data||[];
+  state.supplierBills=(billResult.data||[]).map(b=>{
+    const payments=state.supplierPayments.filter(p=>p.supplier_bill_id===b.id);
+    const paid=payments.reduce((n,p)=>n+Number(p.amount||0),0);
+    const credits=state.supplierReturns.filter(r=>r.supplier_bill_id===b.id).reduce((n,r)=>
+      n+state.supplierReturnItems.filter(i=>i.supplier_return_id===r.id).reduce((sum,i)=>sum+Number(i.line_total||Number(i.quantity)*Number(i.unit_cost)),0),0);
+    return {...b,supplierName:state.suppliers.find(s=>s.id===b.supplier_id)?.name||'—',payments,amountPaid:paid,creditAmount:credits,balanceDue:Math.max(0,Number(b.total_amount)-paid-credits)};
+  });
   const orderIds=(orderResult.data||[]).map(o=>o.id);
   const [itemsResult,receiptResult]=await Promise.all([
     orderIds.length?supabase.from('purchase_order_items').select('id,purchase_order_id,motorcycle_id,motorcycle_name,model_year,quantity_ordered,quantity_received,unit_cost').in('purchase_order_id',orderIds):Promise.resolve({data:[],error:null}),
@@ -1752,9 +1768,19 @@ async function loadPurchasingData() {
   ]);
   if(itemsResult.error)console.error('Purchase order items load failed',itemsResult.error);
   if(receiptResult.error)console.error('Purchase receipts load failed',receiptResult.error);
-  state.purchaseOrders=(orderResult.data||[]).map(o=>({...o,supplierName:state.suppliers.find(s=>s.id===o.supplier_id)?.name||'—',items:(itemsResult.data||[]).filter(i=>i.purchase_order_id===o.id),receipts:(receiptResult.data||[]).filter(r=>r.purchase_order_id===o.id)}));
+  const receiptIds=(receiptResult.data||[]).map(r=>r.id);
+  const receiptItemsResult=receiptIds.length
+    ?await supabase.from('purchase_receipt_items').select('id,receipt_id,purchase_order_item_id,motorcycle_id,quantity,unit_cost').in('receipt_id',receiptIds)
+    :{data:[],error:null};
+  if(receiptItemsResult.error){toast('تعذر تحميل بنود الاستلام','error');console.error(receiptItemsResult.error);return;}
+  const receiptItems=receiptItemsResult.data||[];
+  state.purchaseOrders=(orderResult.data||[]).map(o=>({...o,
+    supplierName:state.suppliers.find(s=>s.id===o.supplier_id)?.name||'—',
+    items:(itemsResult.data||[]).filter(i=>i.purchase_order_id===o.id),
+    receipts:(receiptResult.data||[]).filter(r=>r.purchase_order_id===o.id),
+    receiptItems:receiptItems.filter(ri=>(receiptResult.data||[]).some(r=>r.id===ri.receipt_id&&r.purchase_order_id===o.id))
+  }));
 }
-
 async function loadStaffDirectory() {
   if (!state.user || state.user.role !== 'admin' || !supabase) return;
   const { data, error } = await supabase.functions.invoke('manage-staff', { body: { action: 'list' } });
