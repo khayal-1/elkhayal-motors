@@ -1120,3 +1120,16 @@ td .mini-img {
   color: var(--gray-400); background: linear-gradient(135deg, var(--gray-100), var(--gray-200));
   font-size: 3rem;
 }
+
+
+/* Manager-controlled staff accounts */
+.text-link { color: var(--red); background: none; border: 0; padding: 8px 0; text-decoration: underline; cursor: pointer; font: inherit; }
+.permission-fieldset { border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 14px; }
+.permission-fieldset legend { padding: 0 8px; font-weight: 800; color: var(--gray-800); }
+.permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.permission-option { display: flex; align-items: flex-start; gap: 9px; padding: 12px; border: 1px solid var(--gray-200); border-radius: var(--radius); cursor: pointer; }
+.permission-option input { width: 18px; height: 18px; accent-color: var(--red); flex: 0 0 auto; margin-top: 2px; }
+.permission-option span { display: grid; gap: 4px; }
+.permission-option small { color: var(--gray-500); line-height: 1.5; }
+.staff-created { border-inline-start: 4px solid var(--success); }
+.staff-created input { display: block; width: 100%; margin: 8px 0; padding: 12px; border: 1px solid var(--gray-200); border-radius: var(--radius); font-family: monospace; direction: ltr; }

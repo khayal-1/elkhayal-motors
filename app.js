@@ -35,8 +35,18 @@ const state = {
   filterPrice: 'all',
   sidebarOpen: false,
   bikes: [],
+  staffProvisionResult: null,
   language: localStorage.getItem('ekm_language') === 'en' ? 'en' : 'ar'
 };
+
+const STAFF_PERMISSION_OPTIONS = [
+  { key: 'catalog_view', label: 'عرض الكتالوج والمخزون', description: 'رؤية بيانات الدراجات غير المنشورة أيضًا.' },
+  { key: 'catalog_manage', label: 'إدارة الدراجات والصور', description: 'إضافة وتعديل الدراجات ورفع الصور؛ يشمل العرض.' },
+  { key: 'requests_view', label: 'عرض طلبات العملاء', description: 'رؤية الطلبات وتفاصيلها التي أرسلها العميل.' },
+  { key: 'requests_manage', label: 'تحديث حالة الطلبات', description: 'عرض الطلبات وتغيير حالتها؛ لا يسمح بالحذف.' },
+  { key: 'customer_data_view', label: 'رؤية أسماء وهواتف العملاء', description: 'لعملاء الطلبات التي يحق للموظف عرضها.' },
+];
+const PERMISSION_LABELS = Object.fromEntries(STAFF_PERMISSION_OPTIONS.map((item) => [item.key, item.label]));
 
 /* ---------- Helpers ---------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -78,6 +88,15 @@ function toast(msg, type = 'info') {
    ========================================================= */
 
 function currentUser() { return state.user; }
+function hasPermission(permission) {
+  const user = currentUser();
+  return !!user && (user.role === 'admin' || user.permissions?.includes(permission));
+}
+function hasAnyPermission(...permissions) { return permissions.some(hasPermission); }
+function hasRequestAccess() { return hasAnyPermission('requests_view', 'requests_manage'); }
+function pageNoPermission() {
+  return '<div class="panel"><p>ليس لديك صلاحية لعرض هذا القسم. تواصل مع المدير إذا كنت تحتاجها.</p></div>';
+}
 
 async function login(email, password) {
   if (!supabaseConfigured) throw new Error('Supabase configuration is missing.');
@@ -150,14 +169,12 @@ function sidebarItems() {
   }
 
   if (u.role === 'staff') {
-    return [
-      { section: 'نظام المبيعات' },
-      { route: 'pos', label: 'نقطة البيع POS', icon: 'fa-cash-register' },
-      { section: 'المخزن' },
-      { route: 'inventory', label: 'المخزن والأسعار', icon: 'fa-boxes-stacked' },
-      { section: 'الطلبات' },
-      { route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null }
-    ];
+    const items = [{ section: 'الموظف' }];
+    if (hasAnyPermission('catalog_view', 'catalog_manage')) items.push({ route: 'inventory', label: 'المخزن والأسعار', icon: 'fa-boxes-stacked' });
+    if (hasPermission('catalog_manage')) items.push({ route: 'manage-bikes', label: 'إدارة الدراجات', icon: 'fa-motorcycle' });
+    if (hasRequestAccess()) items.push({ route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null });
+    items.push({ section: 'المتجر' }, { route: 'home', label: 'عرض المتجر', icon: 'fa-store' });
+    return items;
   }
 
   /* Admin */
@@ -396,6 +413,8 @@ function pageLogin() {
           <i class="fa-solid fa-right-to-bracket"></i> دخول
         </button>
       </form>
+      <button class="text-link" type="button" id="resendConfirmationBtn">إعادة إرسال تأكيد البريد</button>
+      <p class="hint">إذا أنشأ المدير حساب موظف لك، استخدم بريد الحساب هنا لطلب رسالة التأكيد أولاً.</p>
       <div class="auth-switch">ليس لديك حساب؟ <a data-nav="signup">أنشئ حساباً جديداً</a></div>
 
     </div>`;
@@ -501,6 +520,7 @@ function pageOrders() {
 function pagePOS() {
   const u = currentUser();
   if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
+  if (u.role === 'staff') return pageNoPermission();
   return `<h2 class="page-title"><i class="fa-solid fa-cash-register"></i> نقطة البيع POS</h2><div class="panel"><p>تسجيل المبيعات والفواتير غير مفعّل بعد؛ لن تُسجّل عملية أو يُخصم مخزون من المتصفح.</p></div>`;
 }
 
@@ -518,6 +538,7 @@ function pageTarget() {
 function pageInventory() {
   const u = currentUser();
   if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
+  if (u.role === 'staff' && !hasAnyPermission('catalog_view', 'catalog_manage')) return pageNoPermission();
   const bikes = get(DB.BIKES);
   const isAdmin = u.role === 'admin';
   return `
@@ -565,15 +586,14 @@ function pageDashboard() {
 
 function pageManageBikes() {
   const u = currentUser();
-  if (!u || u.role !== 'admin') return pageLogin();
+  if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
+  if (u.role === 'staff' && !hasPermission('catalog_manage')) return pageNoPermission();
   const bikes = get(DB.BIKES);
   return `
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> إدارة الدراجات</h2>
     <p class="page-sub">إضافة وتعديل الدراجات المحفوظة في Supabase</p>
     <div class="panel">
-      <button class="btn btn-primary mb-2" id="addBikeBtn">
-        <i class="fa-solid fa-plus"></i> إضافة دراجة جديدة
-      </button>
+      ${(u.role === 'admin' || hasPermission('catalog_manage')) ? `<button class="btn btn-primary mb-2" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة دراجة جديدة</button>` : ''}
       <div class="table-wrap"><table>
         <thead><tr><th>الصورة</th><th>الاسم</th><th>الموديل</th><th>الفئة</th><th>السعر</th><th>المخزون</th><th>إجراءات</th></tr></thead>
         <tbody>${bikes.map((b) => `
@@ -638,11 +658,28 @@ function pageStaff() {
   const u = currentUser();
   if (!u || u.role !== 'admin') return pageLogin();
   const staff = get(DB.USERS).filter((entry) => entry.role === 'staff');
-  return `<h2 class="page-title"><i class="fa-solid fa-users-gear"></i> الموظفون</h2>
-    <p class="page-sub">حسابات الموظفين المقروءة من Supabase</p><div class="panel"><div class="table-wrap"><table>
-      <thead><tr><th>الاسم</th><th>الهاتف</th></tr></thead>
-      <tbody>${staff.map((person) => `<tr><td><b>${esc(person.name || '—')}</b></td><td>${esc(person.phone || '—')}</td></tr>`).join('') || `<tr><td colspan="2" class="text-center">لا توجد حسابات موظفين ظاهرة</td></tr>`}</tbody>
-    </table></div><p class="hint">إنشاء حساب موظف يحتاج إجراءً خادميًا آمنًا؛ النموذج المحلي القديم لم ينشئ حساب Supabase.</p></div>`;
+  const result = state.staffProvisionResult;
+  return `<h2 class="page-title"><i class="fa-solid fa-users-gear"></i> حسابات الموظفين</h2>
+    <p class="page-sub">المدير وحده ينشئ حسابات الموظفين ويحدد صلاحيات كل حساب.</p>
+    ${result ? `<div class="panel staff-created"><h3>تم إنشاء الحساب</h3><p>البريد: <b>${esc(result.staff.email)}</b></p><p>أرسل الموظف طلب تأكيد من صفحة الدخول باستخدام بريده؛ لن تُرسل دعوة تلقائيًا.</p>
+      <label for="staffTempPassword">كلمة المرور الأولية — انسخها وسلمها للموظف بنفسك</label><input id="staffTempPassword" type="text" readonly value="${esc(result.temporary_password)}" autocomplete="off"><button class="btn btn-outline btn-sm" id="copyStaffPassword" type="button">نسخ كلمة المرور</button>
+      <p class="hint">تظهر هنا لهذه الجلسة فقط؛ احفظها قبل مغادرة الصفحة.</p></div>` : ''}
+    <div class="panel"><h3>إنشاء حساب موظف</h3>
+      <p class="hint">تحقق من صحة البريد مع الموظف قبل الإنشاء. لا يُرسل الموقع دعوة أو كلمة مرور بالبريد؛ أنت تسلّم كلمة المرور خارج الموقع.</p>
+      <form id="staffCreateForm" class="form-grid">
+        <div class="form-row"><div class="field"><label>اسم الموظف</label><input name="full_name" required maxlength="120" autocomplete="name"></div>
+          <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" required maxlength="254" autocomplete="email"></div></div>
+        <div class="field"><label>رقم الهاتف (اختياري)</label><input name="phone" type="tel" maxlength="32" autocomplete="tel"></div>
+        <fieldset class="permission-fieldset"><legend>الصلاحيات الممنوحة — لا شيء محدد افتراضيًا</legend><div class="permission-grid">
+          ${STAFF_PERMISSION_OPTIONS.map((item) => `<label class="permission-option"><input type="checkbox" name="permissions" value="${esc(item.key)}"><span><b>${esc(item.label)}</b><small>${esc(item.description)}</small></span></label>`).join('')}
+        </div></fieldset>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-user-plus"></i> إنشاء حساب الموظف</button>
+      </form>
+    </div>
+    <div class="panel"><h3>الموظفون الحاليون</h3><div class="table-wrap"><table>
+      <thead><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الصلاحيات</th></tr></thead>
+      <tbody>${staff.map((person) => `<tr><td><b>${esc(person.name || '—')}</b></td><td>${esc(person.email || '—')}</td><td>${esc(person.phone || '—')}</td><td>${person.permissions.length ? person.permissions.map((key) => esc(PERMISSION_LABELS[key] || key)).join('، ') : 'لا توجد صلاحيات'}</td></tr>`).join('') || `<tr><td colspan="4" class="text-center">لا توجد حسابات موظفين</td></tr>`}</tbody>
+    </table></div></div>`;
 }
 
 function requestStatusLabel(status) {
@@ -652,11 +689,14 @@ function requestStatusLabel(status) {
 function pageStaffOrders() {
   const u = currentUser();
   if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
+  if (u.role === 'staff' && !hasRequestAccess()) return pageNoPermission();
   const requests = get(DB.CUSTOM_REQS);
+  const showContact = hasPermission('customer_data_view');
+  const canManage = hasPermission('requests_manage');
   return `<h2 class="page-title"><i class="fa-solid fa-clipboard-list"></i> طلبات العملاء</h2>
-    <p class="page-sub">الطلبات محفوظة في Supabase وتُعرض وفق صلاحيات الحساب</p><div class="panel">
-      ${requests.length ? `<div class="table-wrap"><table><thead><tr><th>العميل</th><th>الهاتف</th><th>المطلوب</th><th>السنة</th><th>الميزانية</th><th>الحالة</th><th>التاريخ</th><th>إجراء</th></tr></thead><tbody>
-      ${requests.map((r) => `<tr><td>${esc(r.customerName || '—')}</td><td>${esc(r.customerPhone || '—')}</td><td>${esc(r.bikeName || '—')}</td><td>${esc(r.model || '—')}</td><td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td><td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td><td><button class="btn btn-primary btn-sm" data-approve-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''}>✓</button> <button class="btn btn-danger btn-sm" data-reject-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''}>×</button></td></tr>`).join('')}
+    <p class="page-sub">الطلبات محفوظة في Supabase وتُعرض وفق الصلاحيات الممنوحة.</p><div class="panel">
+      ${requests.length ? `<div class="table-wrap"><table><thead><tr>${showContact ? '<th>العميل</th><th>الهاتف</th>' : ''}<th>المطلوب</th><th>السنة</th><th>الميزانية</th><th>الحالة</th><th>التاريخ</th>${canManage ? '<th>إجراء</th>' : ''}</tr></thead><tbody>
+      ${requests.map((r) => `<tr>${showContact ? `<td>${esc(r.customerName || '—')}</td><td>${esc(r.customerPhone || '—')}</td>` : ''}<td>${esc(r.bikeName || '—')}</td><td>${esc(r.model || '—')}</td><td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td><td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td>${canManage ? `<td><button class="btn btn-primary btn-sm" data-approve-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''}>✓</button> <button class="btn btn-danger btn-sm" data-reject-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''}>×</button></td>` : ''}</tr>`).join('')}
       </tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات</p></div>`}</div>`;
 }
 
@@ -746,6 +786,7 @@ function render() {
 
 function navigate(route) {
   if (!ROUTES[route]) route = 'home';
+  if (state.route === 'staff' && route !== 'staff') state.staffProvisionResult = null;
   state.route = route;
   state.search = '';
   state.filterCat = 'all';
@@ -807,6 +848,24 @@ async function confirmBuy(bikeId) {
 
 /* ---------- Event: Click Delegation ---------- */
 document.addEventListener('click', async (e) => {
+  if (e.target.closest('#copyStaffPassword')) {
+    const password = state.staffProvisionResult?.temporary_password;
+    if (!password) return;
+    try { await navigator.clipboard.writeText(password); toast('تم نسخ كلمة المرور', 'success'); }
+    catch { toast('حدد كلمة المرور وانسخها يدويًا', 'error'); }
+    return;
+  }
+
+  if (e.target.closest('#resendConfirmationBtn')) {
+    if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
+    const email = safeName($('#loginForm input[name="email"]')?.value).toLowerCase();
+    if (!email) { toast('اكتب البريد الإلكتروني أولاً', 'error'); return; }
+    const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: window.location.origin } });
+    if (error) toast(error.message || 'تعذر طلب رسالة التأكيد', 'error');
+    else toast('إذا كان الحساب بانتظار التأكيد، ستصل رسالة إلى البريد', 'info');
+    return;
+  }
+
   /* Navigation */
   const nav = e.target.closest('[data-nav]');
   if (nav) {
@@ -894,10 +953,14 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  /* Admin — bikes */
-  if (e.target.closest('#addBikeBtn')) { openModal(bikeFormHTML(null)); return; }
+  /* Manager or explicitly authorized staff — catalog */
+  if (e.target.closest('#addBikeBtn')) {
+    if (!hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
+    openModal(bikeFormHTML(null)); return;
+  }
   const editBike = e.target.closest('[data-edit-bike]');
   if (editBike) {
+    if (!hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
     const bike = get(DB.BIKES).find((b) => b.id === editBike.dataset.editBike);
     if (bike) openModal(bikeFormHTML(bike));
     return;
@@ -907,6 +970,7 @@ document.addEventListener('click', async (e) => {
   /* Update customer request status in Supabase under RLS. */
   const statusButton = e.target.closest('[data-approve-req], [data-reject-req]');
   if (statusButton) {
+    if (!hasPermission('requests_manage')) { toast('ليس لديك صلاحية تحديث الطلبات', 'error'); return; }
     const id = statusButton.dataset.approveReq || statusButton.dataset.rejectReq;
     const status = statusButton.dataset.approveReq ? 'approved' : 'rejected';
     const { error } = await supabase.from('customer_requests').update({ status }).eq('id', id);
@@ -933,7 +997,9 @@ document.addEventListener('submit', async (e) => {
       else { await loadBusinessData(); await loadStaffDirectory(); }
       await loadMotorcycles();
       toast(`أهلاً ${u.name}`, 'success');
-      const route = u.role === 'admin' ? 'dashboard' : u.role === 'staff' ? 'pos' : 'home';
+      const route = u.role === 'admin' ? 'dashboard' : u.role === 'staff'
+        ? (hasRequestAccess() ? 'staff-orders' : hasAnyPermission('catalog_view', 'catalog_manage') ? 'inventory' : 'home')
+        : 'home';
       navigate(route);
     } catch (error) { toast(error.message || 'تعذر تسجيل الدخول', 'error'); }
     return;
@@ -993,8 +1059,34 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
+  /* Create staff through a manager-authorized Edge Function; never from browser credentials. */
+  if (form.id === 'staffCreateForm') {
+    if (!hasRole('admin')) { toast('هذه العملية للمدير فقط', 'error'); return; }
+    const fd = new FormData(form);
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    const { data, error } = await supabase.functions.invoke('manage-staff', { body: {
+      action: 'create',
+      full_name: fd.get('full_name'),
+      email: fd.get('email'),
+      phone: fd.get('phone'),
+      permissions: fd.getAll('permissions')
+    }});
+    if (button) button.disabled = false;
+    if (error || !data?.staff || !data?.temporary_password) {
+      toast(data?.error || error?.message || 'تعذر إنشاء حساب الموظف', 'error');
+      return;
+    }
+    state.staffProvisionResult = data;
+    await loadStaffDirectory();
+    render();
+    toast('تم إنشاء الحساب؛ كلمة المرور المؤقتة ظاهرة للمدير فقط', 'success');
+    return;
+  }
+
   /* Motorcycle catalogue data and Telegram-backed images are stored through Supabase. */
   if (form.id === 'bikeForm') {
+    if (!hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
     const fd = new FormData(form);
     const id = form.dataset.id;
     const images = String(fd.get('images') || '').split('\n').map((s) => s.trim()).filter(Boolean);
@@ -1069,7 +1161,7 @@ async function loadMotorcycles() {
   let query = supabase.from('motorcycles')
     .select('id,name,model_year,category,price,stock,image_urls,status')
     .order('created_at', { ascending: false });
-  if (!state.user || !['staff', 'admin'].includes(state.user.role)) query = query.eq('status', 'available');
+  if (!state.user || (state.user.role === 'customer') || (state.user.role === 'staff' && !hasAnyPermission('catalog_view', 'catalog_manage'))) query = query.eq('status', 'available');
   const { data, error } = await query;
   if (error) { console.error('Catalogue load failed', error); return; }
   state.bikes = (data || []).map((row) => ({
@@ -1095,10 +1187,13 @@ async function loadCustomerData() {
 
 async function loadBusinessData() {
   if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
+  if (state.user.role === 'staff' && !hasRequestAccess()) { set(DB.CUSTOM_REQS, []); return; }
   const { data: requests, error } = await supabase.from('customer_requests').select('id,client_user_id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at').order('created_at', { ascending: false });
   if (error) { console.error('Business request load failed', error); return; }
   const ids = [...new Set((requests || []).map((r) => r.client_user_id).filter(Boolean))];
-  const profileResult = ids.length ? await supabase.from('profiles').select('id,full_name,phone').in('id', ids) : {data:[],error:null};
+  const profileResult = ids.length && hasPermission('customer_data_view')
+    ? await supabase.from('profiles').select('id,full_name,phone').in('id', ids)
+    : {data:[],error:null};
   if (profileResult.error) console.error('Request profile load failed', profileResult.error);
   const profiles = new Map((profileResult.data || []).map((p) => [p.id, p]));
   set(DB.CUSTOM_REQS, (requests || []).map((r) => { const p = profiles.get(r.client_user_id) || {}; return {id:r.id,clientUserId:r.client_user_id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerName:p.full_name || '',customerPhone:p.phone || '',notes:r.notes || ''}; }));
@@ -1106,13 +1201,16 @@ async function loadBusinessData() {
 
 async function loadStaffDirectory() {
   if (!state.user || state.user.role !== 'admin' || !supabase) return;
-  const { data: roles, error } = await supabase.from('user_roles').select('user_id').eq('role', 'employee');
-  if (error) { console.error('Staff role load failed', error); return; }
-  const ids = [...new Set((roles || []).map((r) => r.user_id).filter(Boolean))];
-  if (!ids.length) { set(DB.USERS, []); return; }
-  const { data: profiles, error: profileError } = await supabase.from('profiles').select('id,full_name,phone').in('id', ids);
-  if (profileError) { console.error('Staff profile load failed', profileError); return; }
-  set(DB.USERS, (profiles || []).map((p) => ({id:p.id,name:p.full_name || '',phone:p.phone || '',role:'staff'})));
+  const { data, error } = await supabase.functions.invoke('manage-staff', { body: { action: 'list' } });
+  if (error || !Array.isArray(data?.staff)) { console.error('Staff directory load failed', error || data?.error); return; }
+  set(DB.USERS, data.staff.map((person) => ({
+    id: person.id,
+    name: person.name || '',
+    email: person.email || '',
+    phone: person.phone || '',
+    permissions: person.permissions || [],
+    role: 'staff'
+  })));
 }
 
 async function init() {
@@ -1139,6 +1237,13 @@ async function init() {
 
 const EN = {
   'الرئيسية':'Home','اطلب موتسيكلك':'Request a motorcycle','تواصل معنا':'Contact us','تسجيل الدخول':'Sign in','حساب جديد':'Create account',
+  'حسابات الموظفين':'Staff accounts','الموظفون الحاليون':'Current staff','إنشاء حساب موظف':'Create staff account',
+  'اسم الموظف':'Staff name','البريد الإلكتروني':'Email address','رقم الهاتف (اختياري)':'Phone (optional)',
+  'الصلاحيات الممنوحة — لا شيء محدد افتراضيًا':'Granted permissions — none selected by default',
+  'عرض الكتالوج والمخزون':'View catalog and inventory','إدارة الدراجات والصور':'Manage motorcycles and photos',
+  'عرض طلبات العملاء':'View customer requests','تحديث حالة الطلبات':'Update request status',
+  'رؤية أسماء وهواتف العملاء':'View customer names and phone numbers',
+  'إعادة إرسال تأكيد البريد':'Resend email confirmation',
   'التسوق':'SHOP','الحساب':'ACCOUNT','حسابي':'My account','معرض الدراجات':'Motorcycle catalog',
   'تصفح مجموعتنا المختارة من أفضل الدراجات النارية':'Browse our selected motorcycles',
   'اقــود':'Ride','أسطورتك':'your legend','على عجلتين':'on two wheels',
