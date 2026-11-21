@@ -21,8 +21,8 @@
 - [x] Live GitHub Pages settings were checked through GitHub API: legacy build, source `main:/`.
 - [ ] لم تُنشر `manage-staff`: قائمة الدوال الحية ما زالت تعرض `telegram-photo-upload` فقط. أوقفت محاولة إدخال المصدر الكامل في محرر المتصفح بعد أن فشل الإدخال، ولم أضغط زر النشر.
 - [ ] `manage-staff` is not deployed: the live list still shows only `telegram-photo-upload`. I stopped the browser-editor attempt after full-source input failed; the Deploy button was not submitted.
-- [ ] واجهة الموظفين لم تُنشر إلى GitHub Pages. يجب بناء ملفات الموقع بإعدادات `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` الموثقة محليًا في إعداد البناء، ثم التحقق من تشغيلها على Pages قبل النشر.
-- [ ] Staff UI has not been published to GitHub Pages. Build the site with its existing `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` build settings, then verify the Pages version before publishing.
+- [ ] واجهة الموظفين لم تُنشر إلى GitHub Pages. يجب بناء ملفات الموقع بإعدادات `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` عبر مسار نشر موثوق؛ لم يوجد ملف إعداد محلي سوى `.env.example` في هذا الفحص، لذا لا تفترض أن القيم موجودة محليًا. ثم تحقق من تشغيل النسخة على Pages قبل النشر.
+- [ ] Staff UI has not been published to GitHub Pages. Build the site with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from a trusted deployment configuration; `.env.example` was the only `.env*` file found locally, so do not assume local values are present. Verify the Pages version before publishing.
 - لا تُنشأ حسابات موظفين أثناء النشر أو الاختبار.
 - Do not create employee accounts during deployment or testing.
 
@@ -52,6 +52,10 @@ Note: a prior live review saw the `employee_permissions` table and related polic
 - `gh api repos/khayal-1/elkhayal-motors/contents/.github/workflows` — نُفّذ؛ أعاد 404، ولم يظهر مجلد workflow عبر هذا المسار.
 - `npm run build` — نُفّذ على فرع الميزة؛ نجح Vite build وأنشأ `dist/`.
 - `deno check supabase/functions/manage-staff/index.ts` — نُفّذ؛ اكتمل دون أخطاء فحص.
+- `git add OPERATIONS_LOG.md` و`git diff --cached --check` — نُفّذا؛ التحقق من المسافات/التنسيق نجح.
+- `git commit -m "Document staff deployment operations"` — نُفّذ؛ أنشأ commit التوثيق الأول `e2e99206b83e91b390fcccb9b5e987503a9ab3d9`.
+- `git push origin HEAD:refs/heads/feature/manager-staff-accounts` — نُفّذ بنجاح؛ الإيصال أكد تحديث الفرع البعيد من `c0cc8a1` إلى `e2e9920`.
+- `git ls-remote origin refs/heads/feature/manager-staff-accounts` — نُفّذ بعد الدفع؛ أعاد `e2e99206b83e91b390fcccb9b5e987503a9ab3d9`.
 
 ### أوامر نشر مقترحة ولم تُنفّذ / Suggested deployment commands, not run
 
