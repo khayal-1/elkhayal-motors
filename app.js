@@ -48,7 +48,6 @@ const STAFF_PERMISSION_OPTIONS = [
   { key: 'requests_view', label: 'عرض طلبات العملاء', description: 'رؤية الطلبات وتفاصيلها التي أرسلها العميل.' },
   { key: 'requests_manage', label: 'تحديث حالة الطلبات', description: 'عرض الطلبات وتغيير حالتها؛ لا يسمح بالحذف.' },
   { key: 'customer_data_view', label: 'رؤية أسماء وهواتف العملاء', description: 'لعملاء الطلبات التي يحق للموظف عرضها.' },
-  { key: 'sales_manage', label: 'إدارة نقطة البيع والفواتير', description: 'تسجيل مبيعات المعرض وتحصيل المدفوعات وعرض الفواتير.' },
 ];
 const PERMISSION_LABELS = Object.fromEntries(STAFF_PERMISSION_OPTIONS.map((item) => [item.key, item.label]));
 
@@ -176,7 +175,6 @@ function sidebarItems() {
     const items = [{ section: 'الموظف' }];
     if (hasAnyPermission('catalog_view', 'catalog_manage')) items.push({ route: 'inventory', label: 'المخزن والأسعار', icon: 'fa-boxes-stacked' });
     if (hasPermission('catalog_manage')) items.push({ route: 'manage-bikes', label: 'إدارة الدراجات', icon: 'fa-motorcycle' });
-    if (hasPermission('sales_manage')) items.push({ route: 'pos', label: 'نقطة البيع POS', icon: 'fa-cash-register' });
     if (hasRequestAccess()) items.push({ route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null });
     items.push({ section: 'المتجر' }, { route: 'home', label: 'عرض المتجر', icon: 'fa-store' });
     return items;
@@ -524,8 +522,7 @@ function pageOrders() {
 
 function pagePOS() {
   const u = currentUser();
-  if (!u) return pageLogin();
-  if (u.role !== 'admin' && !hasPermission('sales_manage')) return pageNoPermission();
+  if (!u || u.role !== 'admin') return pageNoPermission();
   const available = state.bikes.filter((bike) => bike.status === 'available' && bike.stock > 0);
   const sales = state.sales || [];
   return `
@@ -1044,7 +1041,7 @@ document.addEventListener('submit', async (e) => {
   const form = e.target;
 
   if (form.id === 'collectPaymentForm') {
-    if (!(hasRole('admin') || hasPermission('sales_manage')) || !supabase) { toast('ليس لديك صلاحية تحصيل المدفوعات', 'error'); return; }
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تحصيل المدفوعات', 'error'); return; }
     const fd = new FormData(form);
     const amount = Number(fd.get('amount'));
     const submit = form.querySelector('button[type="submit"]');
@@ -1064,7 +1061,7 @@ document.addEventListener('submit', async (e) => {
 
   /* Showroom POS: one atomic database RPC creates invoice, lines, payment and stock movements. */
   if (form.id === 'posSaleForm') {
-    if (!(hasRole('admin') || hasPermission('sales_manage')) || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
+    if (!hasRole('admin') || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
     const fd = new FormData(form);
     const bike = state.bikes.find((item) => item.id === fd.get('motorcycle_id'));
     const quantity = Number(fd.get('quantity'));
@@ -1305,7 +1302,7 @@ async function loadMotorcycles() {
 }
 
 async function loadSalesData() {
-  if (!state.user || !(state.user.role === 'admin' || hasPermission('sales_manage')) || !supabase) {
+  if (!state.user || state.user.role !== 'admin' || !supabase) {
     state.sales = [];
     return;
   }
@@ -1382,7 +1379,7 @@ async function init() {
       if (!session) { state.user = null; set(DB.ORDERS, []); set(DB.CUSTOM_REQS, []); set(DB.FAVS, {}); render(); }
     });
     await loadMotorcycles();
-    if (state.user && (state.user.role === 'admin' || hasPermission('sales_manage'))) await loadSalesData();
+    if (state.user?.role === 'admin') await loadSalesData();
   }
   render();
 }
@@ -1394,7 +1391,7 @@ const EN = {
   'الصلاحيات الممنوحة — لا شيء محدد افتراضيًا':'Granted permissions — none selected by default',
   'عرض الكتالوج والمخزون':'View catalog and inventory','إدارة الدراجات والصور':'Manage motorcycles and photos',
   'عرض طلبات العملاء':'View customer requests','تحديث حالة الطلبات':'Update request status',
-  'رؤية أسماء وهواتف العملاء':'View customer names and phone numbers','إدارة نقطة البيع والفواتير':'Manage POS and invoices',
+  'رؤية أسماء وهواتف العملاء':'View customer names and phone numbers', 
   'إعادة إرسال تأكيد البريد':'Resend email confirmation',
   'التسوق':'SHOP','الحساب':'ACCOUNT','حسابي':'My account','معرض الدراجات':'Motorcycle catalog',
   'تصفح مجموعتنا المختارة من أفضل الدراجات النارية':'Browse our selected motorcycles',
