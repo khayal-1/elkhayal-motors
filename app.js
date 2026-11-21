@@ -1182,7 +1182,7 @@ document.addEventListener('click', async (e) => {
   if (collectPayment) {
     const sale = state.sales.find((item) => item.id === collectPayment.dataset.collectPayment);
     if (!sale) return;
-    const balance = Number(sale.total) - Number(sale.amount_paid);
+    const balance = Math.max(0, Number(sale.total) - Number(sale.amount_paid) - Number(sale.returnedAmount || 0));
     openModal(`<div class="modal-header"><h3>تحصيل دفعة — ${esc(sale.invoice_number)}</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
       <p class="mb-2">الرصيد المستحق: <b>${money(balance)}</b></p>
       <form id="collectPaymentForm" class="form-grid" data-sale-id="${esc(sale.id)}">
