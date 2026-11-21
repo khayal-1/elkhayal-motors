@@ -644,13 +644,17 @@ function pageSuppliers() {
       ${activeSuppliers.length && bikes.length ? `
       <form id="purchaseOrderForm" class="form-grid">
         <div class="field"><label>المورد</label><select name="supplier_id" required><option value="">اختر المورد</option>${activeSuppliers.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></div>
-        <div class="form-row">
-          <div class="field"><label>الدراجة / الصنف</label><select name="motorcycle_id" required><option value="">اختر الصنف</option>${bikes.map(b=>`<option value="${esc(b.id)}">${esc(b.name)} — ${esc(b.model)}</option>`).join('')}</select></div>
-          <div class="field"><label>الكمية المطلوبة</label><input name="quantity" type="number" min="1" max="10000" value="1" required></div>
+        <div id="purchaseOrderRows" class="form-grid">
+          <div class="purchase-order-row form-row">
+            <div class="field"><label>الدراجة / الصنف</label><select name="motorcycle_id" required><option value="">اختر الصنف</option>${bikes.map(b=>`<option value="${esc(b.id)}">${esc(b.name)} — ${esc(b.model)}</option>`).join('')}</select></div>
+            <div class="field"><label>الكمية المطلوبة</label><input name="quantity" type="number" min="1" max="10000" value="1" required></div>
+            <div class="field"><label>تكلفة الوحدة (ج.م)</label><input name="unit_cost" type="number" min="0" step="0.01" required></div>
+            <div class="field"><label>إجراء</label><button class="btn btn-outline btn-sm" type="button" data-remove-purchase-row disabled>حذف البند</button></div>
+          </div>
         </div>
-        <div class="field"><label>تكلفة الوحدة لدى المورد (ج.م)</label><input name="unit_cost" type="number" min="0" step="0.01" required></div>
+        <button class="btn btn-outline btn-sm" type="button" id="addPurchaseOrderRow"><i class="fa-solid fa-plus"></i> إضافة صنف آخر</button>
         <div class="field"><label>ملاحظات أمر التوريد</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
-        <small class="hint">هذا الإصدار ينشئ بندًا واحدًا لكل أمر توريد. لا يزيد المخزون عند إنشاء الأمر؛ الزيادة تحدث فقط عند تسجيل الاستلام.</small>
+        <small class="hint">يمكن إضافة حتى 20 صنفًا مختلفًا في الأمر. لا يزيد المخزون عند إنشاء الأمر؛ الزيادة تحدث فقط عند تسجيل الاستلام.</small>
         <button class="btn btn-primary" type="submit">إنشاء أمر التوريد</button>
       </form>` : '<div class="empty">أضف موردًا وصنفًا في الكتالوج أولًا لإنشاء أمر توريد.</div>'}
     </div>
@@ -661,7 +665,7 @@ function pageSuppliers() {
     <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-clipboard-list"></i> أوامر التوريد (${state.purchaseOrders.length})</div>
       ${state.purchaseOrders.length ? `<div class="table-wrap"><table><thead><tr><th>رقم الأمر</th><th>المورد</th><th>الصنف</th><th>مطلوب</th><th>مستلم</th><th>الحالة</th><th>الاستلام</th></tr></thead><tbody>
-      ${state.purchaseOrders.map(o=>{const it=o.items[0]||{};const remaining=Number(it.quantity_ordered||0)-Number(it.quantity_received||0);return `<tr><td><b>${esc(o.order_number)}</b></td><td>${esc(o.supplierName)}</td><td>${esc(it.motorcycle_name||'—')}</td><td>${it.quantity_ordered||0}</td><td>${it.quantity_received||0}</td><td><span class="status-pill">${esc(statusLabel[o.status]||o.status)}</span></td><td>${remaining>0&&o.status!=='cancelled'?`<button class="btn btn-outline btn-sm" data-receive-order="${esc(o.id)}">تسجيل استلام</button>`:'—'}</td></tr>`}).join('')}
+      ${state.purchaseOrders.map(o=>{const ordered=o.items.reduce((n,it)=>n+Number(it.quantity_ordered||0),0);const received=o.items.reduce((n,it)=>n+Number(it.quantity_received||0),0);const remaining=o.items.filter(it=>Number(it.quantity_ordered)>Number(it.quantity_received)).length;return `<tr><td><b>${esc(o.order_number)}</b></td><td>${esc(o.supplierName)}</td><td>${o.items.length} أصناف</td><td>${ordered}</td><td>${received}</td><td><span class="status-pill">${esc(statusLabel[o.status]||o.status)}</span></td><td>${remaining>0&&o.status!=='cancelled'?`<button class="btn btn-outline btn-sm" data-receive-order="${esc(o.id)}">تسجيل استلام (${remaining})</button>`:'—'}</td></tr>`}).join('')}
       </tbody></table></div>` : '<div class="empty">لا توجد أوامر توريد حتى الآن.</div>'}
     </div>`;
 }
@@ -1042,17 +1046,39 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  if (e.target.closest('#addPurchaseOrderRow')) {
+    const rows = $('#purchaseOrderRows');
+    const first = rows?.querySelector('.purchase-order-row');
+    if (!rows || !first) return;
+    if (rows.querySelectorAll('.purchase-order-row').length >= 20) { toast('الحد الأقصى 20 صنفًا في أمر التوريد', 'error'); return; }
+    const clone = first.cloneNode(true);
+    clone.querySelector('select').value = '';
+    clone.querySelector('input[name="quantity"]').value = '1';
+    clone.querySelector('input[name="unit_cost"]').value = '';
+    clone.querySelector('[data-remove-purchase-row]').disabled = false;
+    rows.appendChild(clone);
+    return;
+  }
+  const removePurchaseRow = e.target.closest('[data-remove-purchase-row]');
+  if (removePurchaseRow) {
+    const rows = $('#purchaseOrderRows');
+    if (rows?.querySelectorAll('.purchase-order-row').length > 1) removePurchaseRow.closest('.purchase-order-row').remove();
+    else toast('يجب أن يحتوي الأمر على بند واحد على الأقل', 'info');
+    return;
+  }
+
   const receiveOrderButton = e.target.closest('[data-receive-order]');
   if (receiveOrderButton) {
     const order = state.purchaseOrders.find(o=>o.id===receiveOrderButton.dataset.receiveOrder);
-    const item = order?.items?.[0];
-    const remaining = item ? Number(item.quantity_ordered)-Number(item.quantity_received) : 0;
-    if (!order || !item || remaining<=0) { toast('لا توجد كمية متبقية للاستلام', 'error'); return; }
+    const pendingItems = (order?.items || []).filter(item=>Number(item.quantity_ordered)>Number(item.quantity_received));
+    if (!order || !pendingItems.length) { toast('لا توجد كمية متبقية للاستلام', 'error'); return; }
     openModal(`<div class="modal-header"><h3>استلام أمر ${esc(order.order_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
-      <p>${esc(item.motorcycle_name)} — المتبقي: <b>${remaining}</b></p>
-      <form id="receivePurchaseForm" class="form-grid" data-order-id="${esc(order.id)}" data-item-id="${esc(item.id)}">
-        <div class="field"><label>الكمية المستلمة الآن</label><input name="quantity" type="number" min="1" max="${remaining}" value="${remaining}" required></div>
+      <form id="receivePurchaseForm" class="form-grid" data-order-id="${esc(order.id)}">
+        <div class="form-grid">${pendingItems.map(item=>{const remaining=Number(item.quantity_ordered)-Number(item.quantity_received);return `<div class="purchase-order-row form-row" data-item-id="${esc(item.id)}">
+          <div class="field"><label>${esc(item.motorcycle_name)} — المتبقي ${remaining}</label><input name="quantity" type="number" min="0" max="${remaining}" value="${remaining}" required></div>
+        </div>`}).join('')}</div>
         <div class="field"><label>ملاحظات الاستلام</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
+        <small class="hint">اكتب صفرًا للصنف الذي لم يصل في هذه الشحنة؛ ويمكن تسجيل الاستلام على دفعات.</small>
         <button class="btn btn-primary" type="submit">تأكيد الاستلام وتحديث المخزون</button>
       </form>`);
     return;
@@ -1207,20 +1233,32 @@ document.addEventListener('submit', async (e) => {
   }
   if (form.id === 'purchaseOrderForm') {
     if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية إنشاء أوامر التوريد', 'error'); return; }
-    const fd=new FormData(form),qty=Number(fd.get('quantity')),cost=Number(fd.get('unit_cost'));
-    if(!Number.isInteger(qty)||qty<1||qty>10000||!Number.isFinite(cost)||cost<0){toast('تحقق من الكمية وتكلفة الوحدة','error');return;}
+    const fd=new FormData(form), rows=[...form.querySelectorAll('.purchase-order-row')], items=[], seen=new Set();
+    for (const row of rows) {
+      const motorcycleId=row.querySelector('[name="motorcycle_id"]')?.value;
+      const quantity=Number(row.querySelector('[name="quantity"]')?.value);
+      const unitCost=Number(row.querySelector('[name="unit_cost"]')?.value);
+      if(!motorcycleId||!Number.isInteger(quantity)||quantity<1||quantity>10000||!Number.isFinite(unitCost)||unitCost<0){toast('تحقق من الصنف والكمية وتكلفة الوحدة في كل بند','error');return;}
+      if(seen.has(motorcycleId)){toast('لا تكرر الدراجة في أكثر من بند؛ اجمع الكمية في سطر واحد','error');return;}
+      seen.add(motorcycleId);items.push({motorcycle_id:motorcycleId,quantity,unit_cost:unitCost});
+    }
     const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
-    const {data,error}=await supabase.rpc('create_supplier_purchase_order',{p_supplier_id:String(fd.get('supplier_id')),p_items:[{motorcycle_id:String(fd.get('motorcycle_id')),quantity:qty,unit_cost:cost}],p_notes:safeName(fd.get('notes'))||null});
+    const {data,error}=await supabase.rpc('create_supplier_purchase_order',{p_supplier_id:String(fd.get('supplier_id')),p_items:items,p_notes:safeName(fd.get('notes'))||null});
     if(submit)submit.disabled=false;
     if(error){toast(error.message||'تعذر إنشاء أمر التوريد','error');return;}
-    await loadPurchasingData();render();toast(`تم إنشاء أمر التوريد ${data.order_number}؛ لم يتغير المخزون بعد`,'success');return;
+    await loadPurchasingData();render();toast(`تم إنشاء أمر التوريد ${data.order_number} بعدد ${items.length} أصناف؛ لم يتغير المخزون بعد`,'success');return;
   }
   if (form.id === 'receivePurchaseForm') {
     if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية استلام التوريد', 'error'); return; }
-    const fd=new FormData(form),qty=Number(fd.get('quantity'));
-    if(!Number.isInteger(qty)||qty<1){toast('أدخل كمية استلام صحيحة','error');return;}
+    const fd=new FormData(form), rows=[...form.querySelectorAll('[data-item-id]')], items=[];
+    for (const row of rows) {
+      const quantity=Number(row.querySelector('[name="quantity"]')?.value);
+      if(!Number.isInteger(quantity)||quantity<0){toast('تحقق من كميات الاستلام؛ استخدم صفرًا للصنف غير المستلم','error');return;}
+      if(quantity>0)items.push({purchase_order_item_id:row.dataset.itemId,quantity});
+    }
+    if(!items.length){toast('أدخل كمية مستلمة واحدة على الأقل','error');return;}
     const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
-    const {data,error}=await supabase.rpc('receive_supplier_purchase_order',{p_order_id:form.dataset.orderId,p_items:[{purchase_order_item_id:form.dataset.itemId,quantity:qty}],p_notes:safeName(fd.get('notes'))||null});
+    const {data,error}=await supabase.rpc('receive_supplier_purchase_order',{p_order_id:form.dataset.orderId,p_items:items,p_notes:safeName(fd.get('notes'))||null});
     if(submit)submit.disabled=false;
     if(error){toast(error.message||'تعذر تسجيل الاستلام','error');return;}
     closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast(`تم تسجيل الاستلام ${data.receipt_number} وزيادة المخزون بمقدار ${data.quantity_received}`,'success');return;
