@@ -308,7 +308,9 @@ function productCard(b) {
   const u = currentUser();
   const favMap = get(DB.FAVS, {});
   const favs = u ? (favMap[u.id] || []) : [];
-  const isFav = favs.includes(b.id);
+  const isCustomer = u?.role === 'customer';
+  const isGuest = !u;
+  const isFav = isCustomer && favs.includes(b.id);
   const imgs = (b.images && b.images.length) ? b.images : [];
   const first = imgs[0];
   const dots = imgs.map((_, i) => `<span class="${i === 0 ? 'active' : ''}"></span>`).join('');
@@ -321,9 +323,7 @@ function productCard(b) {
       <div class="slider-wrap" data-slider data-idx="0">
         ${first ? `<img src="${esc(first)}" alt="${esc(b.name)}" data-slide-img loading="lazy">` : `<div class="bike-image-placeholder" aria-hidden="true"><i class="fa-solid fa-motorcycle"></i></div>`}
         <span class="stock-tag ${stockClass}"><i class="fa-solid fa-circle"></i> ${stockText}</span>
-        <button class="fav-btn ${isFav ? 'active' : ''}" data-fav="${esc(b.id)}" aria-label="إضافة للمفضلة">
-          <i class="fa-${isFav ? 'solid' : 'regular'} fa-heart"></i>
-        </button>
+        ${isCustomer ? `<button class="fav-btn ${isFav ? 'active' : ''}" data-fav="${esc(b.id)}" aria-label="إضافة للمفضلة"><i class="fa-${isFav ? 'solid' : 'regular'} fa-heart"></i></button>` : ''}
         <button class="slider-btn prev" data-slide="prev" aria-label="السابق"><i class="fa-solid fa-chevron-right"></i></button>
         <button class="slider-btn next" data-slide="next" aria-label="التالي"><i class="fa-solid fa-chevron-left"></i></button>
         <div class="slider-dots" data-dots>${dots}</div>
@@ -334,9 +334,7 @@ function productCard(b) {
         <div class="product-model">موديل ${esc(b.model)}</div>
         <div class="product-price">${money(b.price)}</div>
         <div class="product-actions">
-          <button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}>
-            <i class="fa-solid fa-cart-shopping"></i> شراء
-          </button>
+          ${isCustomer ? `<button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> شراء</button>` : isGuest ? `<button class="btn btn-primary btn-sm" data-login-action="buy"><i class="fa-solid fa-right-to-bracket"></i> سجل الدخول للشراء</button>` : ''}
           <button class="btn btn-outline btn-sm" data-details="${esc(b.id)}">
             <i class="fa-solid fa-eye"></i> تفاصيل
           </button>
@@ -386,6 +384,8 @@ function pageHome() {
 
 function pageRequest() {
   const u = currentUser();
+  if (!u) return pageLogin();
+  if (u.role !== 'customer') return pageNoPermission();
   return `
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> اطلب موتسيكلك الخاص</h2>
     <p class="page-sub">يمكنك إرسال طلبك دون إنشاء حساب؛ اترك وسيلة تواصل صحيحة لنتواصل معك</p>
@@ -410,6 +410,8 @@ function pageRequest() {
 
 function pageContact() {
   const u = currentUser();
+  if (!u) return pageLogin();
+  if (u.role !== 'customer') return pageNoPermission();
   return `
     <h2 class="page-title"><i class="fa-solid fa-headset"></i> تواصل معنا</h2>
     <p class="page-sub">أرسل استفسارك وسنعود إليك عبر وسيلة التواصل التي تختارها</p>
@@ -1012,6 +1014,9 @@ function navigate(route) {
 
 /* ---------- Buy Flow ---------- */
 function handleBuy(bikeId) {
+  const u = currentUser();
+  if (!u) { toast('سجل الدخول بحساب عميل أولاً لإرسال طلب الشراء', 'info'); navigate('login'); return; }
+  if (u.role !== 'customer') { toast('الشراء وطلبات العملاء متاحة لحسابات العملاء فقط', 'error'); return; }
   const bike = state.bikes.find((b) => b.id === bikeId);
   if (!bike) return toast('الدراجة غير موجودة', 'error');
   if (bike.stock <= 0 || bike.status !== 'available') return toast('الدراجة غير متوفرة حالياً', 'error');
@@ -1264,7 +1269,8 @@ document.addEventListener('click', async (e) => {
   const favBtn = e.target.closest('[data-fav]');
   if (favBtn) {
     const u = currentUser();
-    if (!u) { toast('سجل الدخول أولاً', 'error'); navigate('login'); return; }
+    if (!u) { toast('سجل الدخول بحساب عميل أولاً', 'error'); navigate('login'); return; }
+    if (u.role !== 'customer') { toast('المفضلة متاحة لحسابات العملاء فقط', 'error'); return; }
     const bikeId = favBtn.dataset.fav;
     const { data: existing, error: readError } = await supabase.from('favorites')
       .select('motorcycle_id').eq('user_id', u.id).eq('motorcycle_id', bikeId).maybeSingle();
@@ -1283,6 +1289,8 @@ document.addEventListener('click', async (e) => {
   if (buyBtn) { handleBuy(buyBtn.dataset.buy); return; }
   const confirmBtn = e.target.closest('[data-confirm-buy]');
   if (confirmBtn) { confirmBuy(confirmBtn.dataset.confirmBuy); return; }
+  const loginAction = e.target.closest('[data-login-action]');
+  if (loginAction) { toast('سجل الدخول بحساب عميل أولاً لإتمام الإجراء', 'info'); navigate('login'); return; }
 
   /* Details */
   const detailsBtn = e.target.closest('[data-details]');
@@ -1624,6 +1632,7 @@ document.addEventListener('submit', async (e) => {
 
   /* Customer request: durable data is written only to Supabase under RLS. */
   if (form.id === 'requestForm' || form.id === 'quickBuyRequestForm') {
+    if (!hasRole('customer')) { toast('يجب تسجيل الدخول بحساب عميل لإرسال طلب شراء', 'error'); navigate('login'); return; }
     if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
     const fd = new FormData(form);
     const u = currentUser();
@@ -1663,6 +1672,7 @@ document.addEventListener('submit', async (e) => {
 
   /* Contact messages are sent to the protected Supabase table. */
   if (form.id === 'contactForm') {
+    if (!hasRole('customer')) { toast('يجب تسجيل الدخول بحساب عميل لإرسال رسالة', 'error'); navigate('login'); return; }
     const fd = new FormData(form);
     if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
     const phone = safeName(fd.get('phone'));
