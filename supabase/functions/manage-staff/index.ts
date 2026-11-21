@@ -5,8 +5,7 @@ const allowedPermissions = new Set([
   'catalog_manage',
   'requests_view',
   'requests_manage',
-  'customer_data_view',
-  'sales_manage'
+  'customer_data_view'
 ]);
 const productionOrigin = 'https://khayal-1.github.io';
 const allowedOrigins = new Set([
