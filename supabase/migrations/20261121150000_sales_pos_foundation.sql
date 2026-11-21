@@ -5,6 +5,29 @@ begin;
 
 alter table public.clients alter column user_id drop not null;
 
+-- Extend the existing employee permission allow-list for the POS role.
+do $
+declare
+  permission_check record;
+begin
+  for permission_check in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.employee_permissions'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%catalog_view%'
+  loop
+    execute format('alter table public.employee_permissions drop constraint %I', permission_check.conname);
+  end loop;
+  alter table public.employee_permissions
+    add constraint employee_permissions_permission_key_check
+    check (permission_key in (
+      'catalog_view', 'catalog_manage', 'requests_view',
+      'requests_manage', 'customer_data_view', 'sales_manage'
+    ));
+end
+$;
+
 create sequence if not exists public.sale_invoice_number_seq;
 
 create table if not exists public.sales (
