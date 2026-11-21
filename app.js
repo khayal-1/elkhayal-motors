@@ -37,6 +37,7 @@ const state = {
   filterPrice: 'all',
   sidebarOpen: false,
   bikes: [],
+  sales: [],
   staffProvisionResult: null,
   language: localStorage.getItem('ekm_language') === 'en' ? 'en' : 'ar'
 };
@@ -521,9 +522,48 @@ function pageOrders() {
 
 function pagePOS() {
   const u = currentUser();
-  if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
-  if (u.role === 'staff') return pageNoPermission();
-  return `<h2 class="page-title"><i class="fa-solid fa-cash-register"></i> نقطة البيع POS</h2><div class="panel"><p>تسجيل المبيعات والفواتير غير مفعّل بعد؛ لن تُسجّل عملية أو يُخصم مخزون من المتصفح.</p></div>`;
+  if (!u || u.role !== 'admin') return pageNoPermission();
+  const available = state.bikes.filter((bike) => bike.status === 'available' && bike.stock > 0);
+  const sales = state.sales || [];
+  return `
+    <h2 class="page-title"><i class="fa-solid fa-cash-register"></i> نقطة البيع POS</h2>
+    <p class="page-sub">بيع مباشر من المعرض — لا يحتاج العميل إلى حساب دخول</p>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-cart-plus"></i> فاتورة بيع جديدة</div>
+      ${available.length ? `
+      <form id="posSaleForm" class="form-grid">
+        <div class="form-row">
+          <div class="field"><label for="posCustomerName">اسم العميل (اختياري)</label><input id="posCustomerName" name="customer_name" maxlength="120" placeholder="عميل نقدي"></div>
+          <div class="field"><label for="posCustomerPhone">رقم الهاتف (اختياري)</label><input id="posCustomerPhone" name="customer_phone" maxlength="32" type="tel"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="posMotorcycle">الدراجة</label><select id="posMotorcycle" name="motorcycle_id" required>
+            <option value="">اختر الدراجة</option>
+            ${available.map((bike) => `<option value="${esc(bike.id)}">${esc(bike.name)} — ${esc(bike.model)} — ${money(bike.price)} (المتاح: ${bike.stock})</option>`).join('')}
+          </select></div>
+          <div class="field"><label for="posQuantity">الكمية</label><input id="posQuantity" name="quantity" type="number" min="1" max="100" value="1" required></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="posPaymentAmount">المبلغ المدفوع الآن (ج.م)</label><input id="posPaymentAmount" name="payment_amount" type="number" min="0" step="0.01" value="0" required><small class="hint">يمكن تسجيل دفعة جزئية أو إصدار الفاتورة دون تحصيل.</small></div>
+          <div class="field"><label for="posPaymentMethod">طريقة الدفع</label><select id="posPaymentMethod" name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div>
+        </div>
+        <div class="field"><label for="posPaymentReference">مرجع الدفع (اختياري)</label><input id="posPaymentReference" name="payment_reference" maxlength="120"></div>
+        <div class="field"><label for="posNotes">ملاحظات (اختياري)</label><textarea id="posNotes" name="notes" rows="2" maxlength="1000"></textarea></div>
+        <button class="btn btn-primary btn-block" type="submit"><i class="fa-solid fa-file-invoice"></i> تسجيل البيع وإصدار الفاتورة</button>
+      </form>` : `<div class="empty"><i class="fa-solid fa-box-open"></i><p>لا توجد دراجات متاحة للبيع حاليًا.</p></div>`}
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-receipt"></i> أحدث فواتير المعرض</div>
+      ${sales.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+        <tbody>${sales.map((sale) => `<tr>
+          <td><b>${esc(sale.invoice_number)}</b></td><td>${esc(sale.customer_name)}</td>
+          <td>${money(sale.total)}</td><td>${money(sale.amount_paid)}</td>
+          <td>${money(Number(sale.total) - Number(sale.amount_paid))}</td>
+          <td><span class="status-pill ${sale.payment_status}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
+          <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
+        </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد فواتير مسجلة بعد.</p></div>`}
+    </div>`;
 }
 
 
@@ -796,6 +836,7 @@ function navigate(route) {
   closeModal();
   closeSidebar();
   render();
+  if (route === 'pos') loadSalesData().then(render);
 }
 
 /* ---------- Buy Flow ---------- */
@@ -981,6 +1022,51 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+
+  /* Showroom POS: one atomic database RPC creates invoice, lines, payment and stock movements. */
+  if (form.id === 'posSaleForm') {
+    if (!hasRole('admin') || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
+    const fd = new FormData(form);
+    const bike = state.bikes.find((item) => item.id === fd.get('motorcycle_id'));
+    const quantity = Number(fd.get('quantity'));
+    const paymentAmount = Number(fd.get('payment_amount'));
+    if (!bike || !Number.isInteger(quantity) || quantity < 1 || quantity > bike.stock) {
+      toast('تحقق من الدراجة والكمية المتاحة', 'error'); return;
+    }
+    if (!Number.isFinite(paymentAmount) || paymentAmount < 0 || paymentAmount > bike.price * quantity) {
+      toast('قيمة الدفعة غير صحيحة أو أكبر من إجمالي الفاتورة', 'error'); return;
+    }
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    const { data, error } = await supabase.rpc('create_showroom_sale', {
+      p_customer_name: safeName(fd.get('customer_name')) || null,
+      p_customer_phone: safeName(fd.get('customer_phone')) || null,
+      p_items: [{ motorcycle_id: bike.id, quantity }],
+      p_payment_amount: paymentAmount,
+      p_payment_method: paymentAmount > 0 ? String(fd.get('payment_method')) : null,
+      p_payment_reference: safeName(fd.get('payment_reference')) || null,
+      p_notes: safeName(fd.get('notes')) || null
+    });
+    if (submit) submit.disabled = false;
+    if (error) { toast(error.message || 'تعذر تسجيل البيع', 'error'); return; }
+    await Promise.all([loadMotorcycles(), loadSalesData()]);
+    const customerName = safeName(fd.get('customer_name')) || 'عميل نقدي';
+    const invoice = `
+      <div class="invoice">
+        <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع معرض</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date().toLocaleString('ar-EG')}</span></div></div>
+        <hr><p><b>العميل:</b> ${esc(customerName)}</p><p><b>الهاتف:</b> ${esc(fd.get('customer_phone') || '—')}</p>
+        <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+        <tbody><tr><td>${esc(bike.name)} — ${esc(bike.model)}</td><td>${quantity}</td><td>${money(bike.price)}</td><td>${money(data.total)}</td></tr></tbody></table></div>
+        <p><b>الإجمالي:</b> ${money(data.total)}</p><p><b>المدفوع:</b> ${money(data.amount_paid)}</p>
+        <p><b>المتبقي:</b> ${money(data.balance_due)}</p><p><b>حالة الدفع:</b> ${data.payment_status === 'paid' ? 'مدفوعة' : data.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</p>
+        <p class="text-center">شكرًا لثقتكم في El Khayal Motors</p>
+      </div>
+      <div class="modal-header"><button class="btn btn-primary" id="printInvoiceBtn"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
+    openModal(invoice);
+    render();
+    toast('تم تسجيل البيع وتحديث المخزون وإصدار الفاتورة', 'success');
+    return;
+  }
 
   /* Login */
   if (form.id === 'loginForm') {
@@ -1179,6 +1265,24 @@ async function loadMotorcycles() {
   set(DB.BIKES, state.bikes);
 }
 
+async function loadSalesData() {
+  if (!state.user || state.user.role !== 'admin' || !supabase) {
+    state.sales = [];
+    return;
+  }
+  const { data, error } = await supabase.from('sales')
+    .select('id,invoice_number,customer_name,customer_phone,total,amount_paid,payment_status,created_at')
+    .eq('channel', 'showroom')
+    .order('created_at', { ascending: false })
+    .limit(30);
+  if (error) {
+    console.error('Sales load failed', error);
+    toast('تعذر تحميل سجل الفواتير', 'error');
+    return;
+  }
+  state.sales = data || [];
+}
+
 async function loadCustomerData() {
   const user = state.user;
   if (!user || !supabase) return;
@@ -1239,6 +1343,7 @@ async function init() {
       if (!session) { state.user = null; set(DB.ORDERS, []); set(DB.CUSTOM_REQS, []); set(DB.FAVS, {}); render(); }
     });
     await loadMotorcycles();
+    if (state.user?.role === 'admin') await loadSalesData();
   }
   render();
 }
