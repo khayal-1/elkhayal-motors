@@ -529,6 +529,7 @@ function pageAccount() {
 function pageFavorites() {
   const u = currentUser();
   if (!u) return pageLogin();
+  if (u.role !== 'customer') return pageNoPermission();
   const favIds = get(DB.FAVS, {})[u.id] || [];
   const bikes = get(DB.BIKES).filter((b) => favIds.includes(b.id));
   return `
@@ -542,6 +543,7 @@ function pageFavorites() {
 function pageOrders() {
   const u = currentUser();
   if (!u) return pageLogin();
+  if (u.role !== 'customer') return pageNoPermission();
   const orders = get(DB.CUSTOM_REQS).filter((request) => request.motorcycleId);
   return `
     <h2 class="page-title"><i class="fa-solid fa-receipt"></i> طلباتي</h2>
