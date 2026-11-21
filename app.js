@@ -38,6 +38,8 @@ const state = {
   sidebarOpen: false,
   bikes: [],
   sales: [],
+  saleReturns: [],
+  saleReturnItems: [],
   suppliers: [],
   purchaseOrders: [],
   supplierBills: [],
@@ -603,14 +605,15 @@ function pagePOS() {
     <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-receipt"></i> أحدث فواتير المعرض</div>
       ${sales.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>التاريخ</th><th>تحصيل</th></tr></thead>
+        <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>المرتجعات</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
         <tbody>${sales.map((sale) => `<tr>
           <td><b>${esc(sale.invoice_number)}</b></td><td>${esc(sale.customer_name)}</td>
           <td>${money(sale.total)}</td><td>${money(sale.amount_paid)}</td>
-          <td>${money(Number(sale.total) - Number(sale.amount_paid))}</td>
+          <td>${money(Math.max(0, Number(sale.total) - Number(sale.amount_paid) - Number(sale.returnedAmount || 0)))}</td>
           <td><span class="status-pill ${sale.payment_status}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
+          <td>${money(sale.returnedAmount || 0)}</td>
           <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
-          <td>${Number(sale.total) > Number(sale.amount_paid) ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : '—'}</td>
+          <td>${Number(sale.total) - Number(sale.amount_paid) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد فواتير مسجلة بعد.</p></div>`}
     </div>`;
 }
@@ -1147,6 +1150,34 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const returnSaleButton = e.target.closest('[data-return-sale]');
+  if (returnSaleButton) {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
+    const sale = state.sales.find(s => s.id === returnSaleButton.dataset.returnSale);
+    if (!sale) return;
+    const { data: saleItems, error } = await supabase.from('sale_items')
+      .select('id,motorcycle_id,motorcycle_name,model_year,quantity,unit_price')
+      .eq('sale_id', sale.id).order('created_at');
+    if (error) { toast('تعذر تحميل بنود الفاتورة','error'); return; }
+    const items = (saleItems || []).map(item => {
+      const returned = state.saleReturnItems.filter(x => x.sale_item_id === item.id).reduce((n,x)=>n+Number(x.quantity),0);
+      return {...item, remaining: Number(item.quantity)-returned};
+    }).filter(item => item.remaining > 0);
+    if (!items.length) { toast('تم إرجاع كامل كميات هذه الفاتورة','info'); return; }
+    const rows = items.map(item => `<div class="sale-return-row form-row" data-sale-item-id="${esc(item.id)}">
+      <div class="field"><label>${esc(item.motorcycle_name)} — موديل ${esc(item.model_year || '—')} — المتبقي ${item.remaining}</label>
+      <input name="quantity" type="number" min="0" max="${item.remaining}" value="0" required></div>
+      <div class="field"><label>حالة القطعة</label><select name="disposition"><option value="restock">صالحة لإعادة البيع (إضافة للمخزون)</option><option value="damaged">تالفة / لا تعاد للمخزون</option></select></div>
+      <small class="hint">سعر الوحدة: ${money(item.unit_price)}</small></div>`).join('');
+    openModal(`<div class="modal-header"><h3>مرتجع فاتورة ${esc(sale.invoice_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
+      <p>العميل: <b>${esc(sale.customer_name)}</b> — إجمالي الفاتورة: ${money(sale.total)}</p>
+      <p class="hint">يُسجل مبلغ المرتجع كرصيد دائن للعميل؛ رد المبلغ نقدًا يحتاج تسجيل عملية الصرف الفعلية منفصلة.</p>
+      <form id="saleReturnForm" class="form-grid" data-sale-id="${esc(sale.id)}">
+        ${rows}<div class="field"><label>ملاحظات</label><textarea name="notes" maxlength="1000"></textarea></div>
+        <button class="btn btn-primary" type="submit">تأكيد المرتجع</button></form>`);
+    return;
+  }
+
   const collectPayment = e.target.closest('[data-collect-payment]');
   if (collectPayment) {
     const sale = state.sales.find((item) => item.id === collectPayment.dataset.collectPayment);
@@ -1285,6 +1316,28 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+
+  if (form.id === 'saleReturnForm') {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
+    const fd = new FormData(form), items = [];
+    for (const row of form.querySelectorAll('[data-sale-item-id]')) {
+      const quantity = Number(row.querySelector('[name=quantity]').value || 0);
+      if (!Number.isInteger(quantity) || quantity < 0) { toast('أدخل كمية مرتجع صحيحة','error'); return; }
+      if (quantity > 0) items.push({sale_item_id:row.dataset.saleItemId,quantity,disposition:row.querySelector('[name=disposition]').value});
+    }
+    if (!items.length) { toast('حدد كمية واحدة على الأقل للإرجاع','error'); return; }
+    const btn = form.querySelector('[type=submit]'); if (btn) btn.disabled = true;
+    const {data,error} = await supabase.rpc('create_sale_return',{
+      p_sale_id:form.dataset.saleId,p_items:items,p_notes:safeName(fd.get('notes'))||null
+    });
+    if (btn) btn.disabled = false;
+    if (error) { toast(error.message || 'تعذر تسجيل مرتجع البيع','error'); return; }
+    closeModal();
+    await Promise.all([loadSalesData(),loadMotorcycles()]);
+    render();
+    toast('تم تسجيل المرتجع رقم '+data.return_number+' بقيمة '+money(data.total_amount)+' كرصيد دائن للعميل','success');
+    return;
+  }
 
   if(form.id==='supplierReturnForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية تسجيل مرتجعات الموردين','error');return;}
@@ -1691,13 +1744,29 @@ async function loadSalesData() {
     .select('id,invoice_number,customer_name,customer_phone,total,amount_paid,payment_status,created_at')
     .eq('channel', 'showroom')
     .order('created_at', { ascending: false })
-    .limit(30);
+    .limit(100);
   if (error) {
     console.error('Sales load failed', error);
     toast('تعذر تحميل سجل الفواتير', 'error');
     return;
   }
   state.sales = data || [];
+  const saleIds = state.sales.map(s => s.id);
+  const returnsResult = saleIds.length
+    ? await supabase.from('sale_returns').select('id,return_number,sale_id,total_amount,customer_name,created_at,notes').in('sale_id', saleIds).order('created_at', { ascending: false })
+    : { data: [], error: null };
+  if (returnsResult.error) { console.error('Sale returns load failed', returnsResult.error); toast('تعذر تحميل مرتجعات المبيعات', 'error'); return; }
+  state.saleReturns = returnsResult.data || [];
+  const returnIds = state.saleReturns.map(r => r.id);
+  const itemsResult = returnIds.length
+    ? await supabase.from('sale_return_items').select('id,sale_return_id,sale_item_id,motorcycle_id,quantity,disposition,unit_price,line_total').in('sale_return_id', returnIds)
+    : { data: [], error: null };
+  if (itemsResult.error) { console.error('Sale return items load failed', itemsResult.error); toast('تعذر تحميل تفاصيل المرتجعات', 'error'); return; }
+  state.saleReturnItems = itemsResult.data || [];
+  state.sales = state.sales.map(s => ({...s,
+    returnedAmount: state.saleReturns.filter(r => r.sale_id === s.id).reduce((n,r)=>n+Number(r.total_amount||0),0),
+    returnItems: state.saleReturnItems.filter(i => state.saleReturns.some(r => r.id===i.sale_return_id && r.sale_id===s.id))
+  }));
 }
 
 async function loadCustomerData() {
