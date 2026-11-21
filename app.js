@@ -1072,7 +1072,17 @@ document.addEventListener('submit', async (e) => {
     }});
     if (button) button.disabled = false;
     if (error || !data?.staff) {
-      toast(data?.error || error?.message || 'تعذر إنشاء حساب الموظف', 'error');
+      let serverMessage = data?.error;
+      if (!serverMessage && error?.context && typeof error.context.clone === 'function') {
+        try {
+          const errorBody = await error.context.clone().json();
+          serverMessage = typeof errorBody?.error === 'string' ? errorBody.error : '';
+        } catch { /* Keep the SDK message if the response has no readable JSON body. */ }
+      }
+      if (serverMessage === 'An account already uses this email.') {
+        serverMessage = 'البريد الإلكتروني مستخدم بالفعل؛ استخدم بريدًا آخر للموظف.';
+      }
+      toast(serverMessage || error?.message || 'تعذر إنشاء حساب الموظف', 'error');
       return;
     }
     state.staffProvisionResult = data;

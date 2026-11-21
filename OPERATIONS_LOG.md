@@ -254,3 +254,16 @@ curl -fsSL 'https://khayal-1.github.io/elkhayal-motors/?smoke=<cache-buster>'
 - `npm run build` and `git diff --check` passed. I did not create a real or test employee; the owner should retry the form with the intended employee details to confirm Auth, profile and permissions finish end to end. `manage-staff` still checks the manager/owner/admin role before any writes.
 - لم أعد تشغيل أو تعديل إصلاحات Vite/CORS في `406f2c1`. لا تزال فجوة صورة الدراجة (`image_urls` فارغ) والتحقق المستقل من حالة ترحيل `20261121130000_hardening_requests_indexes.sql` منفصلين عن هذا الإصلاح.
 - I did not rerun or alter the Vite/CORS fixes in `406f2c1`. The motorcycle image gap (`image_urls` is empty) and independent verification of migration `20261121130000_hardening_requests_indexes.sql` remain separate follow-ups.
+
+## متابعة رفض إنشاء الموظف / Follow-up on staff creation conflict
+
+**21 Nov 2026, 14:03 Cairo / 21 نوفمبر 2026، 14:03 القاهرة**
+
+- راجعت أحدث سجلات الإنتاج بعد بلاغ المالك. طلب `manage-staff` اجتاز التحقق من المستخدم وقراءة `user_roles` بعد المنحة المنشورة، ثم أعاد `409`; وسجل Supabase Auth المقابل أعاد `422` مع `email_exists`. لم يصل الطلب إلى حفظ دور أو صلاحيات موظف، ولم يُنشأ حساب جديد.
+- Reviewed the latest production logs after the owner’s report. `manage-staff` passed user validation and the `user_roles` read after the deployed grant, then returned `409`; the corresponding Supabase Auth request returned `422` with `email_exists`. No employee role/permission writes followed, and no account was created.
+- أصل المشكلة في هذه المحاولة أن البريد المُدخل مستخدم بالفعل في Auth؛ الدالة ترفض تكرار البريد عمدًا، ولا تحوّل حسابًا قائمًا إلى موظف. حسّنت `app.js` لقراءة رسالة الخطأ JSON من استجابة Edge Function وعرض سبب واضح بالعربية: «البريد الإلكتروني مستخدم بالفعل؛ استخدم بريدًا آخر للموظف.»
+- The current attempt’s blocker is that the submitted email already exists in Auth; the function intentionally rejects duplicate emails and does not convert an existing account into staff. Updated `app.js` to read the Edge Function JSON error response and show a clear Arabic message: “This email is already in use; use another email for the employee.”
+- لا يُنفّذ هذا التغيير إنشاء حساب أو تحويل مستخدم حالي. إن كان المقصود موظفًا لديه حساب عميل قائم، يلزم توجيه صريح لذلك المستخدم/البريد قبل أي تحويل للصلاحية؛ أما الحساب الجديد فيحتاج بريدًا غير مستخدم.
+- This change does not create an account or convert an existing user. If the intended employee already has a customer account, explicit direction identifying that account is needed before changing its role; a new employee account needs an unused email.
+- جارٍ فحص البناء ورفع تعديل واجهة عرض الخطأ إلى `main` ثم التحقق من نشر Pages.
+- Build validation and publishing the clearer UI error to `main`, followed by Pages verification, are in progress.
