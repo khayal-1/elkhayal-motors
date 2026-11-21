@@ -558,13 +558,14 @@ function pagePOS() {
     <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-receipt"></i> أحدث فواتير المعرض</div>
       ${sales.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+        <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>التاريخ</th><th>تحصيل</th></tr></thead>
         <tbody>${sales.map((sale) => `<tr>
           <td><b>${esc(sale.invoice_number)}</b></td><td>${esc(sale.customer_name)}</td>
           <td>${money(sale.total)}</td><td>${money(sale.amount_paid)}</td>
           <td>${money(Number(sale.total) - Number(sale.amount_paid))}</td>
           <td><span class="status-pill ${sale.payment_status}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
           <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
+          <td>${Number(sale.total) > Number(sale.amount_paid) ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : '—'}</td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد فواتير مسجلة بعد.</p></div>`}
     </div>`;
 }
@@ -926,6 +927,22 @@ document.addEventListener('click', async (e) => {
   /* Print invoice */
   if (e.target.closest('#printInvoiceBtn')) { window.print(); return; }
 
+  const collectPayment = e.target.closest('[data-collect-payment]');
+  if (collectPayment) {
+    const sale = state.sales.find((item) => item.id === collectPayment.dataset.collectPayment);
+    if (!sale) return;
+    const balance = Number(sale.total) - Number(sale.amount_paid);
+    openModal(`<div class="modal-header"><h3>تحصيل دفعة — ${esc(sale.invoice_number)}</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
+      <p class="mb-2">الرصيد المستحق: <b>${money(balance)}</b></p>
+      <form id="collectPaymentForm" class="form-grid" data-sale-id="${esc(sale.id)}">
+        <div class="field"><label for="collectAmount">قيمة الدفعة</label><input id="collectAmount" name="amount" type="number" min="0.01" max="${balance}" step="0.01" required></div>
+        <div class="field"><label for="collectMethod">طريقة الدفع</label><select id="collectMethod" name="method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div>
+        <div class="field"><label for="collectReference">مرجع الدفع (اختياري)</label><input id="collectReference" name="reference" maxlength="120"></div>
+        <button class="btn btn-primary" type="submit">حفظ الدفعة</button>
+      </form>`);
+    return;
+  }
+
   /* Slider prev/next */
   const slideBtn = e.target.closest('[data-slide]');
   if (slideBtn) {
@@ -1025,6 +1042,25 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+
+  if (form.id === 'collectPaymentForm') {
+    if (!(hasRole('admin') || hasPermission('sales_manage')) || !supabase) { toast('ليس لديك صلاحية تحصيل المدفوعات', 'error'); return; }
+    const fd = new FormData(form);
+    const amount = Number(fd.get('amount'));
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    const { error } = await supabase.rpc('record_sale_payment', {
+      p_sale_id: form.dataset.saleId, p_amount: amount, p_method: String(fd.get('method')),
+      p_reference: safeName(fd.get('reference')) || null
+    });
+    if (submit) submit.disabled = false;
+    if (error) { toast(error.message || 'تعذر تسجيل الدفعة', 'error'); return; }
+    closeModal();
+    await loadSalesData();
+    render();
+    toast('تم تسجيل الدفعة وتحديث رصيد الفاتورة', 'success');
+    return;
+  }
 
   /* Showroom POS: one atomic database RPC creates invoice, lines, payment and stock movements. */
   if (form.id === 'posSaleForm') {
