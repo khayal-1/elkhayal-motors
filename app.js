@@ -236,6 +236,7 @@ function sidebarItems() {
     if (hasAnyPermission('catalog_view', 'catalog_manage')) items.push({ route: 'inventory', label: 'المخزن والأسعار', icon: 'fa-boxes-stacked' });
     if (hasPermission('catalog_manage')) items.push({ route: 'manage-bikes', label: 'إدارة الدراجات', icon: 'fa-motorcycle' });
     if (hasRequestAccess()) items.push({ route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null });
+    if (hasPermission('expenses_manage') || hasPermission('accounting_view')) items.push({ route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' });
     items.push({ section: 'المتجر' }, { route: 'home', label: 'عرض المتجر', icon: 'fa-store' });
     return items;
   }
@@ -251,6 +252,7 @@ function sidebarItems() {
     { section: 'الإدارة' },
     { route: 'manage-bikes', label: 'إدارة الدراجات', icon: 'fa-motorcycle' },
     { route: 'staff', label: 'الموظفين والأداء', icon: 'fa-users-gear' },
+    { route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' },
     { route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null },
     { section: 'المتجر' },
     { route: 'home', label: 'عرض المتجر', icon: 'fa-store' }
