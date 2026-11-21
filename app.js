@@ -1106,6 +1106,19 @@ async function confirmBuy(bikeId) {
 
 /* ---------- Event: Click Delegation ---------- */
 document.addEventListener('click', async (e) => {
+  const payExpenseButton = e.target.closest('[data-pay-expense]');
+  if (payExpenseButton) {
+    if (!(hasRole('admin') || hasPermission('expenses_manage'))) { toast('ليس لديك صلاحية سداد المصروفات','error'); return; }
+    const due = Number(payExpenseButton.dataset.due || 0);
+    const options = (state.cashAccounts||[]).map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>').join('');
+    openModal('<div class="modal-header"><h3>تسجيل سداد مصروف</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>' +
+      '<p>الرصيد المستحق: <b>'+money(due)+'</b></p><form id="expensePaymentForm" class="form-grid" data-expense-id="'+esc(payExpenseButton.dataset.payExpense)+'">' +
+      '<div class="field"><label>المبلغ المدفوع</label><input name="amount" type="number" min="0.01" max="'+due+'" step="0.01" required></div>' +
+      '<div class="field"><label>الخزينة / البنك</label><select name="cash_account_id" required><option value="">اختر الحساب</option>'+options+'</select></div>' +
+      '<div class="field"><label>طريقة الدفع</label><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="instapay">إنستاباي</option><option value="card">بطاقة</option><option value="cheque">شيك</option><option value="other">أخرى</option></select></div>' +
+      '<div class="field"><label>رقم المرجع</label><input name="reference_number" maxlength="100"></div><button class="btn btn-primary" type="submit">حفظ السداد</button></form>');
+    return;
+  }
   if (e.target.closest('#resendConfirmationBtn')) {
     if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
     const email = safeName($('#loginForm input[name="email"]')?.value).toLowerCase();
