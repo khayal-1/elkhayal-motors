@@ -388,7 +388,7 @@ function pageRequest() {
   if (u.role !== 'customer') return pageNoPermission();
   return `
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> اطلب موتسيكلك الخاص</h2>
-    <p class="page-sub">يمكنك إرسال طلبك دون إنشاء حساب؛ اترك وسيلة تواصل صحيحة لنتواصل معك</p>
+    <p class="page-sub">سجل الدخول بحساب عميل لإرسال طلبك ومتابعة حالته</p>
     <div class="panel" style="max-width:680px">
       <form id="requestForm" class="form-grid">
         <div class="field"><label>اسمك</label><input name="requester_name" required maxlength="120" value="${esc(u?.name || '')}" placeholder="الاسم بالكامل"></div>
@@ -414,7 +414,7 @@ function pageContact() {
   if (u.role !== 'customer') return pageNoPermission();
   return `
     <h2 class="page-title"><i class="fa-solid fa-headset"></i> تواصل معنا</h2>
-    <p class="page-sub">أرسل استفسارك وسنعود إليك عبر وسيلة التواصل التي تختارها</p>
+    <p class="page-sub">سجل الدخول بحساب عميل لإرسال استفسارك ومتابعة التواصل</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
       <div class="panel">
         <div class="panel-title"><i class="fa-solid fa-comments"></i> قنوات التواصل</div>
@@ -1022,7 +1022,6 @@ function handleBuy(bikeId) {
   const bike = state.bikes.find((b) => b.id === bikeId);
   if (!bike) return toast('الدراجة غير موجودة', 'error');
   if (bike.stock <= 0 || bike.status !== 'available') return toast('الدراجة غير متوفرة حالياً', 'error');
-  const u = currentUser();
   openModal(`
     <div class="modal-header"><h3><i class="fa-solid fa-cart-shopping"></i> طلب شراء ${esc(bike.name)}</h3>
       <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
