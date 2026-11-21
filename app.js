@@ -778,7 +778,7 @@ function pageStaffOrders() {
           <td>${esc(r.bikeName || '—')} ${esc(r.model || '')}<br><small>${esc(r.notes || '')}</small></td>
           <td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td>
           <td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td>
-          <td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="request" data-record-id="${esc(r.id)}">رد / سجل الرد (${replies.length})</button>` : 'عرض فقط'}
+          <td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="request" data-record-id="${esc(r.id)}">رد / سجل الرد (${replies.length})</button>${replies.slice(0,2).map((reply) => `<div class="hint">${esc(reply.channel)}: ${esc(reply.reply_body.slice(0,110))}${reply.sent_at ? ' — تم الإرسال' : ' — ملاحظة داخلية'}</div>`).join('')}` : 'عرض فقط'}
           ${canManage ? `<div class="contact-actions"><button class="btn btn-outline btn-sm" data-approve-req="${esc(r.id)}" ${r.status === 'approved' ? 'disabled' : ''}>قبول</button><button class="btn btn-outline btn-sm" data-reject-req="${esc(r.id)}" ${r.status === 'rejected' ? 'disabled' : ''}>رفض</button></div>` : ''}</td></tr>`;
       }).join('')}
       </tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات شراء</p></div>`}
@@ -789,7 +789,7 @@ function pageStaffOrders() {
         const replies = state.contactReplies.filter((x) => x.message_id === m.id);
         return `<tr><td><b>${esc(m.name)}</b><br><small>${esc(m.phone || m.email || '—')}</small><br><small>يفضل: ${esc(({phone:'اتصال',whatsapp:'واتساب',email:'بريد',sms:'SMS'})[m.preferred_contact] || '—')}</small><div class="contact-actions">${contactCells({phone:m.phone,email:m.email})}</div></td>
           <td>${esc(m.message)}</td><td>${esc(({new:'جديدة',in_progress:'قيد المتابعة',replied:'تم الرد',closed:'مغلقة'})[m.status] || m.status)}</td>
-          <td>${new Date(m.created_at).toLocaleDateString('ar-EG')}</td><td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="message" data-record-id="${esc(m.id)}">رد / سجل الرد (${replies.length})</button>` : 'عرض فقط'}</td></tr>`;
+          <td>${new Date(m.created_at).toLocaleDateString('ar-EG')}</td><td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="message" data-record-id="${esc(m.id)}">رد / سجل الرد (${replies.length})</button>${replies.slice(0,2).map((reply) => `<div class="hint">${esc(reply.channel)}: ${esc(reply.reply_body.slice(0,110))}${reply.sent_at ? ' — تم الإرسال' : ' — ملاحظة داخلية'}</div>`).join('')}` : 'عرض فقط'}</td></tr>`;
       }).join('')}
       </tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-envelope-open"></i><p>لا توجد رسائل تواصل</p></div>`}
     </div>`;
@@ -1498,7 +1498,7 @@ async function init() {
       } catch (error) { console.error('Profile load failed', error); }
     }
     supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) { state.user = null; set(DB.ORDERS, []); set(DB.CUSTOM_REQS, []); set(DB.FAVS, {}); render(); }
+      if (!session) { state.user = null; set(DB.ORDERS, []); set(DB.CUSTOM_REQS, []); set(DB.FAVS, {}); state.contactMessages = []; state.requestReplies = []; state.contactReplies = []; state.sales = []; render(); }
     });
     await loadMotorcycles();
     if (state.user?.role === 'admin') await loadSalesData();
