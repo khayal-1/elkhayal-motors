@@ -896,7 +896,7 @@ function pageStaff() {
 }
 
 function requestStatusLabel(status) {
-  return ({ pending:'قيد المراجعة', reviewing:'جارٍ التواصل', approved:'مقبول', rejected:'مرفوض', completed:'مكتمل' })[status] || status || '—';
+  return ({ pending:'قيد المراجعة', reviewing:'جارٍ التواصل', approved:'مقبول', rejected:'مرفوض', completed:'مكتمل', expired:'منتهي' })[status] || status || '—';
 }
 
 function pageStaffOrders() {
@@ -906,6 +906,7 @@ function pageStaffOrders() {
   const requests = get(DB.CUSTOM_REQS);
   const messages = state.contactMessages || [];
   const canManage = hasPermission('requests_manage');
+  const canDeleteClosed = u.role === 'admin';
   const showContact = hasPermission('customer_data_view') || hasRequestAccess();
   const contactCells = (person) => showContact ? `<div class="contact-actions">${contactActionLinks(person, 'مرحبًا، معك فريق El Khayal Motors بخصوص طلبك.')}</div>` : 'بيانات التواصل تتطلب صلاحية بيانات العملاء';
   return `
@@ -921,7 +922,7 @@ function pageStaffOrders() {
           <td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td>
           <td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td>
           <td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="request" data-record-id="${esc(r.id)}">رد / سجل الرد (${replies.length})</button>${replies.slice(0,2).map((reply) => `<div class="hint">${esc(reply.channel)}: ${esc(reply.reply_body.slice(0,110))}${reply.sent_at ? ' — تم الإرسال' : ' — ملاحظة داخلية'}</div>`).join('')}` : 'عرض فقط'}
-          ${canManage ? `<div class="contact-actions"><button class="btn btn-outline btn-sm" data-approve-req="${esc(r.id)}" ${r.status === 'approved' ? 'disabled' : ''}>قبول</button><button class="btn btn-outline btn-sm" data-reject-req="${esc(r.id)}" ${r.status === 'rejected' ? 'disabled' : ''}>رفض</button></div>` : ''}</td></tr>`;
+          ${canManage ? `<div class="contact-actions"><button class="btn btn-outline btn-sm" data-approve-req="${esc(r.id)}" ${r.status === 'approved' ? 'disabled' : ''}>قبول</button><button class="btn btn-outline btn-sm" data-reject-req="${esc(r.id)}" ${r.status === 'rejected' ? 'disabled' : ''}>رفض</button>${!['rejected','completed','expired'].includes(r.status) ? `<button class="btn btn-outline btn-sm" data-expire-req="${esc(r.id)}">اعتبار منتهي</button>` : ''}${canDeleteClosed && ['rejected','completed','expired'].includes(r.status) ? `<button class="btn btn-danger btn-sm" data-delete-request="${esc(r.id)}">حذف نهائي</button>` : ''} </div>` : ''}</td></tr>`;
       }).join('')}
       </tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات شراء</p></div>`}
     </div>
@@ -1373,16 +1374,34 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  /* Delete only closed customer requests; management permission is enforced again in SQL. */
+  const deleteRequestButton = e.target.closest('[data-delete-request]');
+  if (deleteRequestButton) {
+    if (!hasRole('admin')) { toast('الحذف النهائي متاح للإدارة فقط', 'error'); return; }
+    const request = state.user && get(DB.CUSTOM_REQS).find((item) => item.id === deleteRequestButton.dataset.deleteRequest);
+    if (!request || !['rejected','completed','expired'].includes(request.status)) {
+      toast('لا يمكن حذف طلب مفتوح أو غير موجود', 'error');
+      return;
+    }
+    if (!window.confirm('سيتم حذف الطلب المغلق وسجل الردود المرتبط به نهائيًا. هل تريد المتابعة؟')) return;
+    const { error } = await supabase.rpc('delete_closed_customer_request', { p_request_id: request.id });
+    if (error) { toast(error.message || 'تعذر حذف الطلب', 'error'); return; }
+    await loadBusinessData();
+    render();
+    toast('تم حذف الطلب المغلق وسجل ردوده', 'success');
+    return;
+  }
+
   /* Update customer request status in Supabase under RLS. */
-  const statusButton = e.target.closest('[data-approve-req], [data-reject-req]');
+  const statusButton = e.target.closest('[data-approve-req], [data-reject-req], [data-expire-req]');
   if (statusButton) {
     if (!hasPermission('requests_manage')) { toast('ليس لديك صلاحية تحديث الطلبات', 'error'); return; }
-    const id = statusButton.dataset.approveReq || statusButton.dataset.rejectReq;
-    const status = statusButton.dataset.approveReq ? 'approved' : 'rejected';
+    const id = statusButton.dataset.approveReq || statusButton.dataset.rejectReq || statusButton.dataset.expireReq;
+    const status = statusButton.dataset.approveReq ? 'approved' : statusButton.dataset.rejectReq ? 'rejected' : 'expired';
     const { error } = await supabase.from('customer_requests').update({ status }).eq('id', id);
     if (error) { toast(error.message, 'error'); return; }
     await loadBusinessData();
-    toast(status === 'approved' ? 'تم قبول الطلب' : 'تم رفض الطلب', 'success');
+    toast(status === 'approved' ? 'تم قبول الطلب' : status === 'rejected' ? 'تم رفض الطلب' : 'تم اعتبار الطلب منتهيًا', 'success');
     render();
     return;
   }
