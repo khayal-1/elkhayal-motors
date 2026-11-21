@@ -28,11 +28,9 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return json({ error: 'Sign in is required.' }, 401);
 
-  const { data: roles, error: roleError } = await supabase.from('user_roles').select('role').eq('user_id', user.id);
-  if (roleError) return json({ error: 'Could not verify upload permission.' }, 403);
-  if (!(roles || []).some(({ role }) => ['employee', 'manager', 'owner', 'admin'].includes(role))) {
-    return json({ error: 'You do not have permission to upload catalog photos.' }, 403);
-  }
+  const { data: canUpload, error: permissionError } = await supabase.rpc('has_employee_permission', { p_permission: 'catalog_manage' });
+  if (permissionError) return json({ error: 'Could not verify upload permission.' }, 403);
+  if (canUpload !== true) return json({ error: 'You do not have permission to upload catalog photos.' }, 403);
 
   let form: FormData;
   try { form = await req.formData(); } catch { return json({ error: 'Expected multipart form data.' }, 400); }

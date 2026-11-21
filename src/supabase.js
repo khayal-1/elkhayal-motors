@@ -17,12 +17,14 @@ export const supabase = supabaseConfigured
   : null;
 
 export async function getCurrentProfile(userId) {
-  const [{ data: profile, error: profileError }, { data: roles, error: rolesError }] = await Promise.all([
+  const [{ data: profile, error: profileError }, { data: roles, error: rolesError }, { data: permissions, error: permissionError }] = await Promise.all([
     supabase.from('profiles').select('id, full_name, phone, preferred_language').eq('id', userId).maybeSingle(),
-    supabase.from('user_roles').select('role').eq('user_id', userId)
+    supabase.from('user_roles').select('role').eq('user_id', userId),
+    supabase.from('employee_permissions').select('permission_key').eq('user_id', userId)
   ]);
   if (profileError) throw profileError;
   if (rolesError) throw rolesError;
+  if (permissionError) throw permissionError;
   const roleNames = (roles || []).map((entry) => entry.role);
   const role = roleNames.includes('admin') || roleNames.includes('owner') || roleNames.includes('manager')
     ? 'admin'
@@ -32,6 +34,7 @@ export async function getCurrentProfile(userId) {
     name: profile.full_name || '',
     phone: profile.phone || '',
     preferredLanguage: profile.preferred_language || 'ar',
-    role
+    role,
+    permissions: (permissions || []).map((entry) => entry.permission_key)
   } : null;
 }
