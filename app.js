@@ -38,6 +38,9 @@ const state = {
   sidebarOpen: false,
   bikes: [],
   sales: [],
+  contactMessages: [],
+  requestReplies: [],
+  contactReplies: [],
   staffProvisionResult: null,
   language: localStorage.getItem('ekm_language') === 'en' ? 'en' : 'ar'
 };
@@ -58,6 +61,26 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const money = (n) => Number(n || 0).toLocaleString('en-US') + ' ج.م';
 const nowISO = () => new Date().toISOString();
 const safeName = (s) => String(s || '').trim();
+function whatsappNumber(value) {
+  let digits = String(value || '').replace(/\\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = '20' + digits.slice(1);
+  return digits;
+}
+function contactActionLinks(person, message = '') {
+  const phone = safeName(person.phone);
+  const email = safeName(person.email);
+  const wa = whatsappNumber(phone);
+  const body = encodeURIComponent(message);
+  const links = [];
+  if (phone) {
+    links.push(`<a class="btn btn-outline btn-sm" href="tel:${esc(phone)}"><i class="fa-solid fa-phone"></i> اتصال</a>`);
+    links.push(`<a class="btn btn-outline btn-sm" href="sms:${esc(phone)}?body=${body}"><i class="fa-solid fa-comment-sms"></i> SMS</a>`);
+  }
+  if (wa) links.push(`<a class="btn btn-outline btn-sm" href="https://wa.me/${esc(wa)}?text=${body}" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> واتساب</a>`);
+  if (email) links.push(`<a class="btn btn-outline btn-sm" href="mailto:${esc(email)}?subject=${encodeURIComponent('El Khayal Motors')}&body=${body}"><i class="fa-solid fa-envelope"></i> بريد</a>`);
+  return links.join(' ');
+}
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[c]));
@@ -353,46 +376,51 @@ function pageHome() {
 
 function pageRequest() {
   const u = currentUser();
-  if (!u) return `<section class="panel"><h2>سجّل الدخول لإرسال طلبك</h2><p>يرتبط الطلب بحسابك لحماية بياناتك ومتابعته.</p><button class="btn btn-primary" data-nav="login">تسجيل الدخول</button></section>`;
   return `
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> اطلب موتسيكلك الخاص</h2>
-    <p class="page-sub">لم تجد الدراجة التي تريدها؟ اطلبها وسنتواصل معك</p>
-    <div class="panel" style="max-width:640px">
+    <p class="page-sub">يمكنك إرسال طلبك دون إنشاء حساب؛ اترك وسيلة تواصل صحيحة لنتواصل معك</p>
+    <div class="panel" style="max-width:680px">
       <form id="requestForm" class="form-grid">
-        <div class="field"><label>اسم الدراجة المطلوبة</label>
-          <input name="bikeName" required placeholder="مثال: BMW S1000RR"></div>
+        <div class="field"><label>اسمك</label><input name="requester_name" required maxlength="120" value="${esc(u?.name || '')}" placeholder="الاسم بالكامل"></div>
         <div class="form-row">
-          <div class="field"><label>الموديل / السنة</label><input name="model" required placeholder="2024"></div>
-          <div class="field"><label>الميزانية التقريبية (ج.م)</label><input type="number" name="budget" required min="0"></div>
+          <div class="field"><label>رقم الهاتف</label><input name="requester_phone" type="tel" maxlength="32" value="${esc(u?.phone || '')}" placeholder="01xxxxxxxxx"></div>
+          <div class="field"><label>البريد الإلكتروني</label><input name="requester_email" type="email" maxlength="254" value="${esc(u?.email || '')}" placeholder="name@example.com"></div>
         </div>
-        <div class="field"><label>ملاحظات إضافية</label>
-          <textarea name="notes" placeholder="لون، مواصفات خاصة..."></textarea></div>
-        <button class="btn btn-primary" type="submit">
-          <i class="fa-solid fa-paper-plane"></i> إرسال الطلب
-        </button>
+        <div class="field"><label>تفضّل التواصل عبر</label><select name="preferred_contact"><option value="whatsapp">واتساب</option><option value="phone">مكالمة هاتفية</option><option value="sms">رسالة SMS</option><option value="email">البريد الإلكتروني</option></select></div>
+        <div class="field"><label>اسم الدراجة المطلوبة</label><input name="bikeName" required maxlength="160" placeholder="مثال: BMW S1000RR"></div>
+        <div class="form-row">
+          <div class="field"><label>الموديل / السنة</label><input name="model" inputmode="numeric" placeholder="2024"></div>
+          <div class="field"><label>الميزانية التقريبية (ج.م)</label><input type="number" name="budget" min="0" step="0.01"></div>
+        </div>
+        <div class="field"><label>ملاحظات إضافية</label><textarea name="notes" maxlength="3000" placeholder="اللون والمواصفات وأي تفاصيل أخرى..."></textarea></div>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-paper-plane"></i> إرسال الطلب</button>
       </form>
     </div>`;
 }
 
 function pageContact() {
+  const u = currentUser();
   return `
     <h2 class="page-title"><i class="fa-solid fa-headset"></i> تواصل معنا</h2>
-    <p class="page-sub">نحن هنا لخدمتك</p>
+    <p class="page-sub">أرسل استفسارك وسنعود إليك عبر وسيلة التواصل التي تختارها</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
       <div class="panel">
-        <div class="panel-title"><i class="fa-solid fa-address-card"></i> بيانات المعرض</div>
-        <p style="margin-bottom:12px"><i class="fa-solid fa-location-dot text-red" style="width:24px"></i> شارع التسعين، القاهرة الجديدة</p>
-        <p style="margin-bottom:12px"><i class="fa-solid fa-phone text-red" style="width:24px"></i> 0100 000 0000</p>
-        <p style="margin-bottom:12px"><i class="fa-solid fa-envelope text-red" style="width:24px"></i> info@elkhayal.com</p>
-        <p><i class="fa-solid fa-clock text-red" style="width:24px"></i> السبت - الخميس: 10ص - 10م</p>
+        <div class="panel-title"><i class="fa-solid fa-comments"></i> قنوات التواصل</div>
+        <p>يمكنك ترك رقم هاتفك أو بريدك الإلكتروني، واختيار الاتصال أو واتساب أو SMS أو البريد الإلكتروني.</p>
+        <p class="hint">لا نعرض أرقامًا أو عناوين بريد غير مؤكدة. استخدم نموذج الرسالة وسيتواصل معك فريق المعرض.</p>
+        <button class="btn btn-outline" data-nav="request"><i class="fa-solid fa-motorcycle"></i> إرسال طلب شراء</button>
       </div>
       <div class="panel">
         <div class="panel-title"><i class="fa-solid fa-paper-plane"></i> أرسل رسالة</div>
         <form id="contactForm" class="form-grid">
-          <div class="field"><label>الاسم</label><input name="name" required></div>
-          <div class="field"><label>البريد الإلكتروني</label><input type="email" name="email" required></div>
-          <div class="field"><label>الرسالة</label><textarea name="message" required></textarea></div>
-          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-paper-plane"></i> إرسال</button>
+          <div class="field"><label>الاسم</label><input name="name" required maxlength="120" value="${esc(u?.name || '')}"></div>
+          <div class="form-row">
+            <div class="field"><label>رقم الهاتف</label><input name="phone" type="tel" maxlength="32" value="${esc(u?.phone || '')}"></div>
+            <div class="field"><label>البريد الإلكتروني</label><input type="email" name="email" maxlength="254" value="${esc(u?.email || '')}"></div>
+          </div>
+          <div class="field"><label>طريقة الرد المفضلة</label><select name="preferred_contact"><option value="whatsapp">واتساب</option><option value="phone">مكالمة هاتفية</option><option value="sms">SMS</option><option value="email">البريد الإلكتروني</option></select></div>
+          <div class="field"><label>رسالتك</label><textarea name="message" required maxlength="10000"></textarea></div>
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-paper-plane"></i> إرسال الرسالة</button>
         </form>
       </div>
     </div>`;
@@ -734,13 +762,37 @@ function pageStaffOrders() {
   if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
   if (u.role === 'staff' && !hasRequestAccess()) return pageNoPermission();
   const requests = get(DB.CUSTOM_REQS);
-  const showContact = hasPermission('customer_data_view');
+  const messages = state.contactMessages || [];
   const canManage = hasPermission('requests_manage');
-  return `<h2 class="page-title"><i class="fa-solid fa-clipboard-list"></i> طلبات العملاء</h2>
-    <p class="page-sub">الطلبات محفوظة في Supabase وتُعرض وفق الصلاحيات الممنوحة.</p><div class="panel">
-      ${requests.length ? `<div class="table-wrap"><table><thead><tr>${showContact ? '<th>العميل</th><th>الهاتف</th>' : ''}<th>المطلوب</th><th>السنة</th><th>الميزانية</th><th>الحالة</th><th>التاريخ</th>${canManage ? '<th>إجراء</th>' : ''}</tr></thead><tbody>
-      ${requests.map((r) => `<tr>${showContact ? `<td>${esc(r.customerName || '—')}</td><td>${esc(r.customerPhone || '—')}</td>` : ''}<td>${esc(r.bikeName || '—')}</td><td>${esc(r.model || '—')}</td><td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td><td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td>${canManage ? `<td><button class="btn btn-primary btn-sm" data-approve-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''}>✓</button> <button class="btn btn-danger btn-sm" data-reject-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''}>×</button></td>` : ''}</tr>`).join('')}
-      </tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات</p></div>`}</div>`;
+  const showContact = hasPermission('customer_data_view') || hasRequestAccess();
+  const contactCells = (person) => showContact ? `<div class="contact-actions">${contactActionLinks(person, 'مرحبًا، معك فريق El Khayal Motors بخصوص طلبك.')}</div>` : 'بيانات التواصل تتطلب صلاحية بيانات العملاء';
+  return `
+    <h2 class="page-title"><i class="fa-solid fa-inbox"></i> صندوق طلبات العملاء والرسائل</h2>
+    <p class="page-sub">بيانات المرسل وقنوات الاتصال وسجل الردود؛ لا يتم إرسال الرسائل آليًا من المتصفح.</p>
+    <div class="panel"><div class="panel-title"><i class="fa-solid fa-motorcycle"></i> طلبات الشراء ${requests.length}</div>
+      ${requests.length ? `<div class="table-wrap"><table><thead><tr><th>العميل ووسائل الاتصال</th><th>الطلب</th><th>الميزانية</th><th>الحالة</th><th>التاريخ</th><th>التواصل والرد</th></tr></thead><tbody>
+      ${requests.map((r) => {
+        const person = {phone:r.customerPhone,email:r.customerEmail};
+        const replies = state.requestReplies.filter((x) => x.request_id === r.id);
+        return `<tr><td><b>${esc(r.customerName || '—')}</b><br><small>${esc(r.customerPhone || r.customerEmail || '—')}</small><br><small>يفضل: ${esc(({phone:'اتصال',whatsapp:'واتساب',email:'بريد',sms:'SMS'})[r.preferredContact] || '—')}</small>${contactCells(person)}</td>
+          <td>${esc(r.bikeName || '—')} ${esc(r.model || '')}<br><small>${esc(r.notes || '')}</small></td>
+          <td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td>
+          <td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td>
+          <td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="request" data-record-id="${esc(r.id)}">رد / سجل الرد (${replies.length})</button>` : 'عرض فقط'}
+          ${canManage ? `<div class="contact-actions"><button class="btn btn-outline btn-sm" data-approve-req="${esc(r.id)}" ${r.status === 'approved' ? 'disabled' : ''}>قبول</button><button class="btn btn-outline btn-sm" data-reject-req="${esc(r.id)}" ${r.status === 'rejected' ? 'disabled' : ''}>رفض</button></div>` : ''}</td></tr>`;
+      }).join('')}
+      </tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات شراء</p></div>`}
+    </div>
+    <div class="panel"><div class="panel-title"><i class="fa-solid fa-envelope"></i> رسائل التواصل ${messages.length}</div>
+      ${messages.length ? `<div class="table-wrap"><table><thead><tr><th>المرسل ووسائل الاتصال</th><th>الرسالة</th><th>الحالة</th><th>التاريخ</th><th>إجراء</th></tr></thead><tbody>
+      ${messages.map((m) => {
+        const replies = state.contactReplies.filter((x) => x.message_id === m.id);
+        return `<tr><td><b>${esc(m.name)}</b><br><small>${esc(m.phone || m.email || '—')}</small><br><small>يفضل: ${esc(({phone:'اتصال',whatsapp:'واتساب',email:'بريد',sms:'SMS'})[m.preferred_contact] || '—')}</small><div class="contact-actions">${contactCells({phone:m.phone,email:m.email})}</div></td>
+          <td>${esc(m.message)}</td><td>${esc(({new:'جديدة',in_progress:'قيد المتابعة',replied:'تم الرد',closed:'مغلقة'})[m.status] || m.status)}</td>
+          <td>${new Date(m.created_at).toLocaleDateString('ar-EG')}</td><td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="message" data-record-id="${esc(m.id)}">رد / سجل الرد (${replies.length})</button>` : 'عرض فقط'}</td></tr>`;
+      }).join('')}
+      </tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-envelope-open"></i><p>لا توجد رسائل تواصل</p></div>`}
+    </div>`;
 }
 
 /* =========================================================
@@ -838,56 +890,33 @@ function navigate(route) {
   closeSidebar();
   render();
   if (route === 'pos') loadSalesData().then(render);
+  if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
 }
 
 /* ---------- Buy Flow ---------- */
 function handleBuy(bikeId) {
-  const u = currentUser();
-  if (!u) {
-    toast('يجب تسجيل الدخول أولاً', 'error');
-    navigate('login');
-    return;
-  }
-  const bike = get(DB.BIKES).find((b) => b.id === bikeId);
+  const bike = state.bikes.find((b) => b.id === bikeId);
   if (!bike) return toast('الدراجة غير موجودة', 'error');
-  if (bike.stock <= 0) return toast('الدراجة غير متوفرة حالياً', 'error');
-
-  const img = (bike.images && bike.images[0]) || '';
+  if (bike.stock <= 0 || bike.status !== 'available') return toast('الدراجة غير متوفرة حالياً', 'error');
+  const u = currentUser();
   openModal(`
-    <div class="modal-header">
-      <h3><i class="fa-solid fa-cart-shopping"></i> تأكيد الشراء</h3>
-      <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    ${img ? `<img src="${esc(img)}" alt="${esc(bike.name)}" style="width:100%;height:180px;object-fit:cover;border-radius:12px;margin-bottom:14px">` : ''}
-    <h3 class="mb-1">${esc(bike.name)}</h3>
-    <p class="text-muted mb-2">موديل ${esc(bike.model)} — ${esc(bike.category)}</p>
-    <p class="text-red mb-3" style="font-size:24px;font-weight:900">${money(bike.price)}</p>
-    <p class="mb-3">هل تريد إرسال طلب شراء لهذه الدراجة؟ سيتم التواصل معك من فريق المعرض.</p>
-    <button class="btn btn-primary btn-block" data-confirm-buy="${esc(bike.id)}">
-      <i class="fa-solid fa-check"></i> تأكيد إرسال الطلب
-    </button>
-  `);
+    <div class="modal-header"><h3><i class="fa-solid fa-cart-shopping"></i> طلب شراء ${esc(bike.name)}</h3>
+      <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
+    <p class="text-red mb-2" style="font-size:20px;font-weight:900">${money(bike.price)}</p>
+    <form id="quickBuyRequestForm" class="form-grid" data-bike-id="${esc(bike.id)}">
+      <div class="field"><label>اسمك</label><input name="requester_name" required maxlength="120" value="${esc(u?.name || '')}"></div>
+      <div class="form-row">
+        <div class="field"><label>رقم الهاتف</label><input name="requester_phone" type="tel" maxlength="32" value="${esc(u?.phone || '')}"></div>
+        <div class="field"><label>البريد الإلكتروني</label><input name="requester_email" type="email" maxlength="254" value="${esc(u?.email || '')}"></div>
+      </div>
+      <div class="field"><label>طريقة التواصل المفضلة</label><select name="preferred_contact"><option value="whatsapp">واتساب</option><option value="phone">اتصال</option><option value="sms">SMS</option><option value="email">البريد الإلكتروني</option></select></div>
+      <div class="field"><label>ملاحظات (اختياري)</label><textarea name="notes" maxlength="2000"></textarea></div>
+      <button class="btn btn-primary btn-block" type="submit">إرسال طلب الشراء</button>
+    </form>`);
 }
 
 async function confirmBuy(bikeId) {
-  const u = currentUser();
-  if (!u) return navigate('login');
-  const bike = state.bikes.find((b) => b.id === bikeId);
-  if (!bike) return toast('الدراجة غير موجودة', 'error');
-  if (bike.stock <= 0) return toast('الدراجة غير متوفرة', 'error');
-  const { error } = await supabase.from('customer_requests').insert({
-    client_user_id: u.id,
-    motorcycle_id: bike.id,
-    requested_name: bike.name,
-    requested_model_year: Number(bike.model) || null,
-    budget: bike.price,
-    notes: 'طلب شراء من صفحة الدراجة'
-  });
-  if (error) return toast(error.message, 'error');
-  closeModal();
-  await loadCustomerData();
-  toast('تم إرسال طلبك بنجاح', 'success');
-  navigate('orders');
+  handleBuy(bikeId);
 }
 
 /* ---------- Event: Click Delegation ---------- */
@@ -1019,6 +1048,29 @@ document.addEventListener('click', async (e) => {
   }
 
 
+  const replyButton = e.target.closest('[data-open-reply]');
+  if (replyButton) {
+    if (!hasPermission('requests_manage')) { toast('ليس لديك صلاحية الرد على العملاء', 'error'); return; }
+    const kind = replyButton.dataset.openReply;
+    const id = replyButton.dataset.recordId;
+    const item = kind === 'request' ? get(DB.CUSTOM_REQS).find((x) => x.id === id) : state.contactMessages.find((x) => x.id === id);
+    if (!item) return;
+    const person = kind === 'request'
+      ? {name:item.customerName,phone:item.customerPhone,email:item.customerEmail}
+      : {name:item.name,phone:item.phone,email:item.email};
+    const message = kind === 'request' ? `بخصوص طلب ${item.bikeName || ''}` : item.message;
+    openModal(`<div class="modal-header"><h3>التواصل مع ${esc(person.name || 'العميل')}</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
+      <p class="mb-2">${esc(message)}</p><div class="contact-actions">${contactActionLinks(person, 'مرحبًا ' + (person.name || '') + '، معك فريق El Khayal Motors. ' + message)}</div>
+      <p class="hint">افتح قناة الاتصال وأرسل الرد بنفسك، ثم سجّل الرد أدناه لحفظه في سجل العميل.</p>
+      <form id="customerReplyForm" class="form-grid" data-kind="${esc(kind)}" data-record-id="${esc(id)}">
+        <div class="field"><label>نص الرد أو ملخص المكالمة</label><textarea name="reply_body" required maxlength="10000"></textarea></div>
+        <div class="field"><label>القناة المستخدمة</label><select name="channel"><option value="whatsapp">واتساب</option><option value="phone">مكالمة هاتفية</option><option value="email">بريد إلكتروني</option><option value="sms">SMS</option><option value="internal">ملاحظة داخلية فقط</option></select></div>
+        <label class="field"><span><input type="checkbox" name="sent" value="yes"> أؤكد أنني أرسلت الرد أو أجريت المكالمة بالفعل</span></label>
+        <button class="btn btn-primary" type="submit">حفظ سجل الرد</button>
+      </form>`);
+    return;
+  }
+
   /* Update customer request status in Supabase under RLS. */
   const statusButton = e.target.closest('[data-approve-req], [data-reject-req]');
   if (statusButton) {
@@ -1039,6 +1091,31 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+
+  if (form.id === 'customerReplyForm') {
+    if (!hasPermission('requests_manage') || !supabase) { toast('ليس لديك صلاحية تسجيل الردود', 'error'); return; }
+    const fd = new FormData(form);
+    const kind = form.dataset.kind;
+    const sent = fd.get('sent') === 'yes';
+    const channel = String(fd.get('channel'));
+    if (channel !== 'internal' && !sent) {
+      toast('أكد إرسال الرسالة أو اختر ملاحظة داخلية فقط', 'error'); return;
+    }
+    const payload = {reply_body:safeName(fd.get('reply_body')),channel,sent_by:state.user.id,sent_at:sent ? new Date().toISOString() : null};
+    const table = kind === 'request' ? 'customer_request_replies' : 'contact_message_replies';
+    const foreignKey = kind === 'request' ? 'request_id' : 'message_id';
+    const {error} = await supabase.from(table).insert({...payload,[foreignKey]:form.dataset.recordId});
+    if (error) { toast(error.message || 'تعذر حفظ سجل الرد', 'error'); return; }
+    if (kind === 'message' && sent) {
+      const statusResult = await supabase.from('contact_messages').update({status:'replied'}).eq('id',form.dataset.recordId);
+      if (statusResult.error) console.error('Contact status update failed',statusResult.error);
+    }
+    closeModal();
+    await loadBusinessData();
+    render();
+    toast('تم حفظ سجل التواصل', 'success');
+    return;
+  }
 
   if (form.id === 'collectPaymentForm') {
     if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تحصيل المدفوعات', 'error'); return; }
@@ -1140,22 +1217,39 @@ document.addEventListener('submit', async (e) => {
   }
 
   /* Customer request: durable data is written only to Supabase under RLS. */
-  if (form.id === 'requestForm') {
+  if (form.id === 'requestForm' || form.id === 'quickBuyRequestForm') {
+    if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
     const fd = new FormData(form);
     const u = currentUser();
-    if (!u || !supabase) { toast('سجّل الدخول أولاً', 'error'); navigate('login'); return; }
+    const name = safeName(fd.get('requester_name'));
+    const phone = safeName(fd.get('requester_phone'));
+    const email = safeName(fd.get('requester_email')).toLowerCase();
+    if (name.length < 2 || (!phone && !email)) { toast('اكتب اسمك ورقم هاتف أو بريدًا إلكترونيًا واحدًا على الأقل', 'error'); return; }
+    const bike = form.id === 'quickBuyRequestForm' ? state.bikes.find((b) => b.id === form.dataset.bikeId) : null;
+    if (form.id === 'quickBuyRequestForm' && (!bike || bike.stock <= 0 || bike.status !== 'available')) {
+      toast('الدراجة لم تعد متاحة؛ حدّث الصفحة وحاول مرة أخرى', 'error'); return;
+    }
     const { error } = await supabase.from('customer_requests').insert({
-      client_user_id: u.id,
-      requested_name: safeName(fd.get('bikeName')),
-      requested_model_year: Number(fd.get('model')) || null,
-      budget: Number(fd.get('budget')) || null,
-      notes: safeName(fd.get('notes')) || null
+      client_user_id: u?.id || null,
+      requester_name: name,
+      requester_phone: phone || null,
+      requester_email: email || null,
+      preferred_contact: String(fd.get('preferred_contact') || 'phone'),
+      motorcycle_id: bike?.id || null,
+      requested_name: bike?.name || safeName(fd.get('bikeName')),
+      requested_model_year: bike ? (Number(bike.model) || null) : (Number(fd.get('model')) || null),
+      budget: bike ? bike.price : (Number(fd.get('budget')) || null),
+      notes: safeName(fd.get('notes')) || (bike ? 'طلب شراء من صفحة الدراجة' : null)
     });
-    if (error) { toast(error.message, 'error'); return; }
-    await loadCustomerData();
-    toast('تم إرسال طلبك، سنتواصل معك قريباً', 'success');
+    if (error) { toast(error.message || 'تعذر حفظ الطلب', 'error'); return; }
+    if (u) await loadCustomerData();
+    else if (state.user && ['staff','admin'].includes(state.user.role)) await loadBusinessData();
+    closeModal();
     form.reset();
-    renderSidebar();
+    toast('تم استلام طلبك بنجاح؛ سيتواصل معك فريق المعرض', 'success');
+    if (u) navigate('orders');
+    else if (hasRole('admin')) { await loadBusinessData(); render(); }
+    else if (state.route === 'request') render();
     return;
   }
 
@@ -1163,14 +1257,21 @@ document.addEventListener('submit', async (e) => {
   if (form.id === 'contactForm') {
     const fd = new FormData(form);
     if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
+    const phone = safeName(fd.get('phone'));
+    const email = safeName(fd.get('email')).toLowerCase();
+    if (!safeName(fd.get('name')) || !safeName(fd.get('message')) || (!phone && !email)) {
+      toast('اكتب اسمك ورسالتك ورقم هاتف أو بريدًا إلكترونيًا واحدًا على الأقل', 'error'); return;
+    }
     const { error } = await supabase.from('contact_messages').insert({
       sender_user_id: currentUser()?.id || null,
       name: safeName(fd.get('name')),
-      email: safeName(fd.get('email')),
+      phone: phone || null,
+      email: email || '',
+      preferred_contact: String(fd.get('preferred_contact') || 'email'),
       message: safeName(fd.get('message'))
     });
-    if (error) { toast(error.message, 'error'); return; }
-    toast('تم إرسال رسالتك', 'success');
+    if (error) { toast(error.message || 'تعذر إرسال الرسالة', 'error'); return; }
+    toast('وصلتنا رسالتك؛ سنعود إليك عبر وسيلة التواصل المفضلة', 'success');
     form.reset();
     return;
   }
@@ -1335,16 +1436,37 @@ async function loadCustomerData() {
 
 async function loadBusinessData() {
   if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
-  if (state.user.role === 'staff' && !hasRequestAccess()) { set(DB.CUSTOM_REQS, []); return; }
-  const { data: requests, error } = await supabase.from('customer_requests').select('id,client_user_id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at').order('created_at', { ascending: false });
-  if (error) { console.error('Business request load failed', error); return; }
-  const ids = [...new Set((requests || []).map((r) => r.client_user_id).filter(Boolean))];
+  if (state.user.role === 'staff' && !hasRequestAccess()) { set(DB.CUSTOM_REQS, []); state.contactMessages = []; return; }
+  const canSeeContacts = hasPermission('customer_data_view') || hasRequestAccess();
+  const requestFields = 'id,client_user_id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at' +
+    (canSeeContacts ? ',requester_name,requester_phone,requester_email,preferred_contact' : '');
+  const [requestResult, messageResult] = await Promise.all([
+    supabase.from('customer_requests').select(requestFields).order('created_at', { ascending: false }).limit(200),
+    canSeeContacts ? supabase.from('contact_messages').select('id,sender_user_id,name,email,phone,message,preferred_contact,status,created_at').order('created_at', { ascending: false }).limit(200) : Promise.resolve({data:[],error:null})
+  ]);
+  if (requestResult.error) { console.error('Business request load failed', requestResult.error); toast('تعذر تحميل طلبات العملاء', 'error'); return; }
+  if (messageResult.error) console.error('Contact inbox load failed', messageResult.error);
+  const requests = requestResult.data || [];
+  const ids = [...new Set(requests.filter((r) => r.client_user_id && !r.requester_name).map((r) => r.client_user_id))];
   const profileResult = ids.length && hasPermission('customer_data_view')
     ? await supabase.from('profiles').select('id,full_name,phone').in('id', ids)
     : {data:[],error:null};
-  if (profileResult.error) console.error('Request profile load failed', profileResult.error);
   const profiles = new Map((profileResult.data || []).map((p) => [p.id, p]));
-  set(DB.CUSTOM_REQS, (requests || []).map((r) => { const p = profiles.get(r.client_user_id) || {}; return {id:r.id,clientUserId:r.client_user_id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerName:p.full_name || '',customerPhone:p.phone || '',notes:r.notes || ''}; }));
+  set(DB.CUSTOM_REQS, requests.map((r) => {
+    const p = profiles.get(r.client_user_id) || {};
+    return {id:r.id,clientUserId:r.client_user_id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerName:r.requester_name || p.full_name || '',customerPhone:r.requester_phone || p.phone || '',customerEmail:r.requester_email || '',preferredContact:r.preferred_contact || 'phone',notes:r.notes || ''};
+  }));
+  state.contactMessages = messageResult.data || [];
+  const requestIds = requests.map((r) => r.id);
+  const messageIds = state.contactMessages.map((m) => m.id);
+  const [requestReplies, contactReplies] = await Promise.all([
+    requestIds.length ? supabase.from('customer_request_replies').select('id,request_id,reply_body,channel,sent_at,created_at').in('request_id', requestIds).order('created_at', {ascending:false}) : Promise.resolve({data:[],error:null}),
+    messageIds.length ? supabase.from('contact_message_replies').select('id,message_id,reply_body,channel,sent_at,created_at').in('message_id', messageIds).order('created_at', {ascending:false}) : Promise.resolve({data:[],error:null})
+  ]);
+  if (requestReplies.error) console.error('Request reply history failed', requestReplies.error);
+  if (contactReplies.error) console.error('Contact reply history failed', contactReplies.error);
+  state.requestReplies = requestReplies.data || [];
+  state.contactReplies = contactReplies.data || [];
 }
 
 async function loadStaffDirectory() {
