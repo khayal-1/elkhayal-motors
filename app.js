@@ -50,7 +50,7 @@ const state = {
   financeAccounts: [],
   cashAccounts: [],
   expenses: [],
-  contactMessages: []
+  contactMessages: [],
   requestReplies: [],
   contactReplies: [],
   staffProvisionResult: null,
