@@ -121,3 +121,38 @@ cat package.json
 الحالة: نُفذت للقراءة والتحقق فقط؛ نجح الاستنساخ، وكانت شجرة العمل نظيفة، ولم تُغيّر ملفات التطبيق أو قاعدة البيانات.
 
 Status: executed for read-only inspection; clone succeeded, the working tree was clean, and no app or database files were changed.
+
+## متابعة التنفيذ / Execution continuation
+
+**21 Nov 2026, 12:20–12:30 Cairo / 21 نوفمبر 2026، 12:20–12:30 القاهرة**
+
+- تمت مصادقة GitHub عبر تسجيل الدخول الاجتماعي إلى Supabase؛ ظهر تحدي تحقق الجهاز، واستُخدم رمز GitHub المرسل للبريد من خلال مرجع التحقق الآمن. بعد العودة إلى Supabase، ظهرت صفحة الوظائف للمشروع الصحيح؛ القراءة الحية أكدت أن القائمة لا تزال تعرض `telegram-photo-upload` فقط.
+- GitHub authentication completed through Supabase's GitHub sign-in; the device-verification challenge was completed using the secure email-code reference. Back in Supabase, the correct project functions page was visible; its live list still contained only `telegram-photo-upload`.
+- فتحت إرشادات Supabase CLI؛ تعرض أمر النشر، وتذكر الحاجة إلى access token. لم يُنشأ رمز جديد ولم يُمرر أي رمز إلى CLI، ولم تُرسل محاولة نشر للدالة.
+- Supabase CLI guidance was inspected; it shows the deploy command and notes that an access token may be needed. No new access token was created or passed to the CLI, and no function deployment was submitted.
+- `vite.config.js` عُدّل في فرع الميزة لتحديد `base: '/elkhayal-motors/'` حتى تشير ملفات Vite إلى المسار الصحيح لموقع GitHub Pages ذي المسار الفرعي. هذا التعديل لم يُنشر إلى `main`.
+- `vite.config.js` was changed on the feature branch to set `base: '/elkhayal-motors/'`, so Vite output uses the project's GitHub Pages subpath. This change has not been published to `main`.
+- `corepack pnpm install --frozen-lockfile` — نُفذ بنجاح، دون تغيير lockfile.
+- `corepack pnpm run build` — نُفذ بنجاح بعد تثبيت الحزم؛ أُنتجت ملفات `dist/`.
+- `deno check supabase/functions/manage-staff/index.ts` — نُفذ بنجاح.
+- `npm run build` — محاولة أولى فشلت لأن حزم Vite لم تكن مثبتة في هذا checkout (`vite: not found`)، ثم عُولج ذلك بـ`corepack pnpm install --frozen-lockfile` وأُعيد البناء بنجاح.
+- `git fetch origin`, `git status --short --branch`, `git log --oneline --decorate -5`, `git ls-remote origin refs/heads/feature/manager-staff-accounts refs/heads/main`, `git show --stat`, و`git ls-files 'supabase/migrations/*'` — نُفذت للتحقق؛ أكدت الفرع النظيف وHEAD البعيد `0c7b62d` قبل تعديل هذا السجل، مع migrations 001–003 فقط في الفرع.
+- حالة النشر لا تزال معلّقة: `manage-staff` غير منشورة، ولم يُنشر البناء إلى GitHub Pages. لا توجد إعدادات عامة فعلية في `.env` لهذا checkout (`.env.example` فقط)، وإعداد Pages الحالي legacy `main:/` لا يشغّل Vite.
+- Deployment remains blocked: `manage-staff` is undeployed, and the build has not been published to GitHub Pages. This checkout has no actual public `.env` values (`.env.example` only), and the current legacy `main:/` Pages source does not run Vite.
+
+## متابعة مراجعة وإصلاح ميزة الموظفين / Staff feature review and fixes
+
+**21 Nov 2026, 12:20 Cairo / 21 نوفمبر 2026، 12:20 القاهرة**
+
+- بعد `git fetch origin` والتحقق من `git status --short`, `git log -1 --oneline --decorate`, و`git ls-remote origin refs/heads/feature/manager-staff-accounts`، كان الفرع `feature/manager-staff-accounts` مطابقًا للمرجع البعيد عند `0c7b62d` قبل هذه التغييرات. لم تُستبدل التزامات التوثيق السابقة.
+- After `git fetch origin`, `git status --short`, `git log -1 --oneline --decorate`, and `git ls-remote origin refs/heads/feature/manager-staff-accounts`, the local feature branch matched remote commit `0c7b62d` before these changes. Earlier documentation commits were preserved.
+- مراجعة `git show c0cc8a1` و`rg` وملفات SQL أظهرت ثغرتين وظيفيتين في الشيفرة المحلية: نموذج المدير لم يكن يرسل كلمة مرور يختارها، والـtrigger ينشئ دور/ملف عميل تلقائيًا لكل مستخدم جديد. عُدلت `app.js` لإضافة إدخال كلمة المرور وتأكيدها وحذف واجهة كلمة المرور المؤقتة القديمة؛ عُدلت `supabase/functions/manage-staff/index.ts` للتحقق من كلمة المرور، تأكيد البريد لحساب الموظف الذي ينشئه المدير، إزالة دور العميل وملف العميل الافتراضي، إضافة دور الموظف والصلاحيات، والتراجع بحذف الحساب الجديد عند فشل خطوة الحفظ. أزيل أيضًا معالج نسخ كلمة المرور المؤقتة.
+- Review of `git show c0cc8a1`, `rg`, and SQL files exposed two behavior gaps in local code: the manager form did not send a chosen password, while the auth trigger creates a default customer role/profile for each new user. `app.js` now has password/confirmation inputs and removes the obsolete temporary-password UI; `supabase/functions/manage-staff/index.ts` validates the password, confirms manager-created staff email, removes the auto-created customer role/client row, adds the employee role and permissions, and rolls back the new auth user when a save step fails. The stale temporary-password copy handler was removed.
+- عُدّل `vite.config.js` إلى `base: '/elkhayal-motors/'` ليتوافق خرج Vite مع مسار GitHub Pages للمشروع. لم يُنشر هذا التعديل.
+- `vite.config.js` now sets `base: '/elkhayal-motors/'` for the GitHub Pages project path. This change has not been published.
+- أوامر التحقق: `corepack pnpm run build` نجح؛ `deno check supabase/functions/manage-staff/index.ts` نجح؛ `git diff --check` نجح؛ وتأكد `rg` من إزالة مراجع `temporary_password` و`copyStaffPassword` من واجهة الموظفين ودالتها. لم تُنشأ حسابات موظفين.
+- Checks: `corepack pnpm run build` passed; `deno check supabase/functions/manage-staff/index.ts` passed; `git diff --check` passed; `rg` confirmed the staff UI/function no longer reference `temporary_password` or `copyStaffPassword`. No staff accounts were created.
+- لا يوجد ترحيل جديد مطلوب أو منفذ لهذه التغييرات المحلية. الفرع يتتبع ملفات الترحيلات `202611210001_initial_foundation.sql` و`202611210002_customer_requests_no_delete.sql` و`202611210003_least_privilege_catalog_and_requests.sql` فقط. سجل المشروع السابق يقول إن ترحيل صلاحيات الموظفين طُبق حيًا، لكن مصدر SQL الذي أنشأ جدول `employee_permissions` غير موجود ضمن الملفات المتتبعة؛ لا أستطيع استعادته أو توثيقه كملف ترحيل دون قراءة تعريفه الحي. حالة 001 غير متحققة، بينما سُجل سابقًا تطبيق 002 و003.
+- No new migration was needed or executed for these local code changes. The branch tracks only `202611210001_initial_foundation.sql`, `202611210002_customer_requests_no_delete.sql`, and `202611210003_least_privilege_catalog_and_requests.sql`. Prior project notes report that the staff-permissions migration was applied live, but the SQL source that created `employee_permissions` is absent from tracked files; it cannot safely be recreated/documented as a migration without reading its live definition. Migration 001 remains unverified; 002 and 003 were previously recorded as applied.
+- لا تزال `manage-staff` غير منشورة، ولم يُحدّث الموقع. لا ينفذ مصدر Pages الحالي `main:/` بناء Vite تلقائيًا، ولا توجد قيم إعداد Supabase عامة في checkout سوى أمثلة `.env.example`. لا يُرسل هذا الفرع إلى `main`، ولا يُنشأ رمز جديد أو يوضع مفتاح سري في المستودع.
+- `manage-staff` remains undeployed and the live site unchanged. Current Pages source `main:/` does not build Vite, and the checkout has no actual public Supabase build settings beyond `.env.example` placeholders. This branch is not being published to `main`; no new token was created and no secret was added to the repository.

@@ -7,7 +7,7 @@ const allowedPermissions = new Set([
   'requests_manage',
   'customer_data_view'
 ]);
-const productionOrigin = 'https://elkhayal-motors-website.vercel.app';
+const productionOrigin = 'https://khayal-1.github.io';
 const allowedOrigins = new Set([productionOrigin, 'http://localhost:5173']);
 const responseHeaders = (origin: string | null) => ({
   ...(origin && allowedOrigins.has(origin) ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
@@ -18,13 +18,6 @@ const responseHeaders = (origin: string | null) => ({
 });
 const json = (body: unknown, status: number, origin: string | null) =>
   new Response(JSON.stringify(body), { status, headers: responseHeaders(origin) });
-
-function generateTemporaryPassword() {
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-}
 
 Deno.serve(async (req) => {
   const origin = req.headers.get('Origin');
@@ -97,11 +90,13 @@ Deno.serve(async (req) => {
   const email = String(body.email || '').trim().toLowerCase();
   const fullName = String(body.full_name || '').trim();
   const phone = String(body.phone || '').trim();
+  const password = String(body.password || '');
   const rawPermissions = body.permissions;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
     return json({ error: 'Enter a valid staff email address.' }, 400, origin);
   }
   if (!fullName || fullName.length > 120) return json({ error: 'Name must be 1–120 characters.' }, 400, origin);
+  if (password.length < 8 || password.length > 128) return json({ error: 'Password must be 8–128 characters.' }, 400, origin);
   if (phone.length > 32) return json({ error: 'Phone number must be 32 characters or fewer.' }, 400, origin);
   if (!Array.isArray(rawPermissions) || rawPermissions.length > allowedPermissions.size ||
       rawPermissions.some((permission) => typeof permission !== 'string' || !allowedPermissions.has(permission)) ||
@@ -112,12 +107,10 @@ Deno.serve(async (req) => {
   if (permissions.includes('customer_data_view') && !permissions.some((permission) => ['requests_view', 'requests_manage'].includes(permission))) {
     return json({ error: 'Customer names and phones can only be granted with request access.' }, 400, origin);
   }
-  const temporaryPassword = generateTemporaryPassword();
-
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
-    password: temporaryPassword,
-    email_confirm: false,
+    password,
+    email_confirm: true,
     user_metadata: { full_name: fullName, phone: phone || null },
     app_metadata: { account_type: 'employee', staff_assigned_by: actor.id }
   });
@@ -126,24 +119,45 @@ Deno.serve(async (req) => {
     return json({ error: conflict ? 'An account already uses this email.' : 'Could not create the staff account.' }, conflict ? 409 : 400, origin);
   }
 
+  const rollbackCreatedUser = async () => {
+    const { error } = await admin.auth.admin.deleteUser(created.user!.id);
+    return !error;
+  };
+  const { error: removeCustomerRoleError } = await admin.from('user_roles').delete()
+    .eq('user_id', created.user.id).eq('role', 'customer');
+  if (removeCustomerRoleError) {
+    const rolledBack = await rollbackCreatedUser();
+    return json({ error: rolledBack ? 'Could not assign employee role; the new account was removed.' : 'Account creation needs administrator repair.' }, 500, origin);
+  }
+  const { error: employeeRoleError } = await admin.from('user_roles').upsert(
+    { user_id: created.user.id, role: 'employee', assigned_by: actor.id }, { onConflict: 'user_id,role' }
+  );
+  if (employeeRoleError) {
+    const rolledBack = await rollbackCreatedUser();
+    return json({ error: rolledBack ? 'Could not assign employee role; the new account was removed.' : 'Account creation needs administrator repair.' }, 500, origin);
+  }
+  const { error: clientDeleteError } = await admin.from('clients').delete().eq('user_id', created.user.id);
+  if (clientDeleteError) {
+    const rolledBack = await rollbackCreatedUser();
+    return json({ error: rolledBack ? 'Could not remove the customer-only profile; the new account was removed.' : 'Account creation needs administrator repair.' }, 500, origin);
+  }
+
   if (permissions.length) {
     const { error: permissionError } = await admin.from('employee_permissions').insert(
       permissions.map((permission_key) => ({ user_id: created.user!.id, permission_key, granted_by: actor.id }))
     );
     if (permissionError) {
-      const { error: rollbackError } = await admin.auth.admin.deleteUser(created.user.id);
+      const rolledBack = await rollbackCreatedUser();
       return json({
-        error: rollbackError
-          ? 'Account creation needs administrator repair; no permissions were granted.'
-          : 'Could not save permissions; the new account was removed.'
+        error: rolledBack
+          ? 'Could not save permissions; the new account was removed.'
+          : 'Account creation needs administrator repair.'
       }, 500, origin);
     }
   }
 
   return json({
     staff: { id: created.user.id, email: created.user.email, full_name: fullName, phone: phone || null, permissions },
-    temporary_password: temporaryPassword,
-    email_confirmation_required: true,
-    email_sent: false
+    email_confirmation_required: false,
   }, 201, origin);
 });

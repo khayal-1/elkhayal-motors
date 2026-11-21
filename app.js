@@ -661,15 +661,15 @@ function pageStaff() {
   const result = state.staffProvisionResult;
   return `<h2 class="page-title"><i class="fa-solid fa-users-gear"></i> حسابات الموظفين</h2>
     <p class="page-sub">المدير وحده ينشئ حسابات الموظفين ويحدد صلاحيات كل حساب.</p>
-    ${result ? `<div class="panel staff-created"><h3>تم إنشاء الحساب</h3><p>البريد: <b>${esc(result.staff.email)}</b></p><p>أرسل الموظف طلب تأكيد من صفحة الدخول باستخدام بريده؛ لن تُرسل دعوة تلقائيًا.</p>
-      <label for="staffTempPassword">كلمة المرور الأولية — انسخها وسلمها للموظف بنفسك</label><input id="staffTempPassword" type="text" readonly value="${esc(result.temporary_password)}" autocomplete="off"><button class="btn btn-outline btn-sm" id="copyStaffPassword" type="button">نسخ كلمة المرور</button>
-      <p class="hint">تظهر هنا لهذه الجلسة فقط؛ احفظها قبل مغادرة الصفحة.</p></div>` : ''}
+    ${result ? `<div class="panel staff-created"><h3>تم إنشاء الحساب</h3><p>البريد: <b>${esc(result.staff.email)}</b></p><p>تم حفظ كلمة المرور التي أدخلتها، والحساب جاهز لتسجيل الدخول.</p></div>` : ''}
     <div class="panel"><h3>إنشاء حساب موظف</h3>
-      <p class="hint">تحقق من صحة البريد مع الموظف قبل الإنشاء. لا يُرسل الموقع دعوة أو كلمة مرور بالبريد؛ أنت تسلّم كلمة المرور خارج الموقع.</p>
+      <p class="hint">تحقق من صحة البريد مع الموظف قبل الإنشاء. كلمة المرور تُحفظ لحساب الموظف؛ شاركها معه بأمان خارج الموقع.</p>
       <form id="staffCreateForm" class="form-grid">
         <div class="form-row"><div class="field"><label>اسم الموظف</label><input name="full_name" required maxlength="120" autocomplete="name"></div>
           <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" required maxlength="254" autocomplete="email"></div></div>
         <div class="field"><label>رقم الهاتف (اختياري)</label><input name="phone" type="tel" maxlength="32" autocomplete="tel"></div>
+        <div class="form-row"><div class="field"><label>كلمة المرور</label><input name="password" type="password" required minlength="8" autocomplete="new-password"></div>
+          <div class="field"><label>تأكيد كلمة المرور</label><input name="password_confirm" type="password" required minlength="8" autocomplete="new-password"></div></div>
         <fieldset class="permission-fieldset"><legend>الصلاحيات الممنوحة — لا شيء محدد افتراضيًا</legend><div class="permission-grid">
           ${STAFF_PERMISSION_OPTIONS.map((item) => `<label class="permission-option"><input type="checkbox" name="permissions" value="${esc(item.key)}"><span><b>${esc(item.label)}</b><small>${esc(item.description)}</small></span></label>`).join('')}
         </div></fieldset>
@@ -848,14 +848,6 @@ async function confirmBuy(bikeId) {
 
 /* ---------- Event: Click Delegation ---------- */
 document.addEventListener('click', async (e) => {
-  if (e.target.closest('#copyStaffPassword')) {
-    const password = state.staffProvisionResult?.temporary_password;
-    if (!password) return;
-    try { await navigator.clipboard.writeText(password); toast('تم نسخ كلمة المرور', 'success'); }
-    catch { toast('حدد كلمة المرور وانسخها يدويًا', 'error'); }
-    return;
-  }
-
   if (e.target.closest('#resendConfirmationBtn')) {
     if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
     const email = safeName($('#loginForm input[name="email"]')?.value).toLowerCase();
@@ -1063,6 +1055,9 @@ document.addEventListener('submit', async (e) => {
   if (form.id === 'staffCreateForm') {
     if (!hasRole('admin')) { toast('هذه العملية للمدير فقط', 'error'); return; }
     const fd = new FormData(form);
+    const password = String(fd.get('password') || '');
+    const passwordConfirm = String(fd.get('password_confirm') || '');
+    if (password !== passwordConfirm) { toast('كلمتا المرور غير متطابقتين', 'error'); return; }
     const button = form.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     const { data, error } = await supabase.functions.invoke('manage-staff', { body: {
@@ -1070,10 +1065,11 @@ document.addEventListener('submit', async (e) => {
       full_name: fd.get('full_name'),
       email: fd.get('email'),
       phone: fd.get('phone'),
+      password,
       permissions: fd.getAll('permissions')
     }});
     if (button) button.disabled = false;
-    if (error || !data?.staff || !data?.temporary_password) {
+    if (error || !data?.staff) {
       toast(data?.error || error?.message || 'تعذر إنشاء حساب الموظف', 'error');
       return;
     }
