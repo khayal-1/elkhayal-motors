@@ -569,12 +569,20 @@ function pagePOS() {
           <div class="field"><label for="posCustomerName">اسم العميل (اختياري)</label><input id="posCustomerName" name="customer_name" maxlength="120" placeholder="عميل نقدي"></div>
           <div class="field"><label for="posCustomerPhone">رقم الهاتف (اختياري)</label><input id="posCustomerPhone" name="customer_phone" maxlength="32" type="tel"></div>
         </div>
-        <div class="form-row">
-          <div class="field"><label for="posMotorcycle">الدراجة</label><select id="posMotorcycle" name="motorcycle_id" required>
-            <option value="">اختر الدراجة</option>
-            ${available.map((bike) => `<option value="${esc(bike.id)}">${esc(bike.name)} — ${esc(bike.model)} — ${money(bike.price)} (المتاح: ${bike.stock})</option>`).join('')}
-          </select></div>
-          <div class="field"><label for="posQuantity">الكمية</label><input id="posQuantity" name="quantity" type="number" min="1" max="100" value="1" required></div>
+        <div class="field">
+          <label>أصناف الفاتورة</label>
+          <div id="posCartRows">
+            <div class="form-row pos-cart-row">
+              <div class="field"><label>الدراجة</label><select name="motorcycle_id" required>
+                <option value="">اختر الدراجة</option>
+                ${available.map((bike) => `<option value="${esc(bike.id)}">${esc(bike.name)} — ${esc(bike.model)} — ${money(bike.price)} (المتاح: ${bike.stock})</option>`).join('')}
+              </select></div>
+              <div class="field"><label>الكمية</label><input name="quantity" type="number" min="1" max="100" value="1" required></div>
+              <div class="field"><label>إجراء</label><button class="btn btn-outline btn-sm" type="button" data-remove-pos-row disabled>حذف الصنف</button></div>
+            </div>
+          </div>
+          <button class="btn btn-outline btn-sm" type="button" id="addPosItemBtn"><i class="fa-solid fa-plus"></i> إضافة صنف آخر</button>
+          <small class="hint">يمكن إضافة عدة دراجات مختلفة إلى الفاتورة نفسها؛ تُراجع الكميات مرة أخرى داخل قاعدة البيانات قبل الخصم.</small>
         </div>
         <div class="form-row">
           <div class="field"><label for="posPaymentAmount">المبلغ المدفوع الآن (ج.م)</label><input id="posPaymentAmount" name="payment_amount" type="number" min="0" step="0.01" value="0" required><small class="hint">يمكن تسجيل دفعة جزئية أو إصدار الفاتورة دون تحصيل.</small></div>
@@ -958,6 +966,27 @@ document.addEventListener('click', async (e) => {
   /* Print invoice */
   if (e.target.closest('#printInvoiceBtn')) { window.print(); return; }
 
+  if (e.target.closest('#addPosItemBtn')) {
+    const rows = $('#posCartRows');
+    const first = rows?.querySelector('.pos-cart-row');
+    if (!rows || !first) return;
+    if (rows.querySelectorAll('.pos-cart-row').length >= 20) { toast('الحد الأقصى 20 صنفًا في الفاتورة', 'error'); return; }
+    const clone = first.cloneNode(true);
+    clone.querySelector('select').value = '';
+    clone.querySelector('input[name="quantity"]').value = '1';
+    const remove = clone.querySelector('[data-remove-pos-row]');
+    if (remove) remove.disabled = false;
+    rows.appendChild(clone);
+    return;
+  }
+  const removePosRow = e.target.closest('[data-remove-pos-row]');
+  if (removePosRow) {
+    const rows = $('#posCartRows');
+    if (rows?.querySelectorAll('.pos-cart-row').length > 1) removePosRow.closest('.pos-cart-row').remove();
+    else toast('يجب أن تحتوي الفاتورة على سطر واحد على الأقل', 'info');
+    return;
+  }
+
   const collectPayment = e.target.closest('[data-collect-payment]');
   if (collectPayment) {
     const sale = state.sales.find((item) => item.id === collectPayment.dataset.collectPayment);
@@ -1145,13 +1174,24 @@ document.addEventListener('submit', async (e) => {
   if (form.id === 'posSaleForm') {
     if (!hasRole('admin') || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
     const fd = new FormData(form);
-    const bike = state.bikes.find((item) => item.id === fd.get('motorcycle_id'));
-    const quantity = Number(fd.get('quantity'));
-    const paymentAmount = Number(fd.get('payment_amount'));
-    if (!bike || !Number.isInteger(quantity) || quantity < 1 || quantity > bike.stock) {
-      toast('تحقق من الدراجة والكمية المتاحة', 'error'); return;
+    const rows = [...form.querySelectorAll('.pos-cart-row')];
+    const items = [];
+    const seen = new Set();
+    for (const row of rows) {
+      const motorcycleId = row.querySelector('[name="motorcycle_id"]')?.value;
+      const quantity = Number(row.querySelector('[name="quantity"]')?.value);
+      const bike = state.bikes.find((item) => item.id === motorcycleId);
+      if (!bike || !Number.isInteger(quantity) || quantity < 1 || quantity > bike.stock) {
+        toast('تحقق من كل دراجة والكمية المتاحة لها', 'error'); return;
+      }
+      if (seen.has(bike.id)) { toast('لا تكرر الدراجة في أكثر من سطر؛ اجمع الكمية في سطر واحد', 'error'); return; }
+      seen.add(bike.id);
+      items.push({ motorcycle_id: bike.id, quantity, bike });
     }
-    if (!Number.isFinite(paymentAmount) || paymentAmount < 0 || paymentAmount > bike.price * quantity) {
+    if (!items.length) { toast('أضف صنفًا واحدًا على الأقل', 'error'); return; }
+    const subtotal = items.reduce((sum, item) => sum + item.bike.price * item.quantity, 0);
+    const paymentAmount = Number(fd.get('payment_amount'));
+    if (!Number.isFinite(paymentAmount) || paymentAmount < 0 || paymentAmount > subtotal) {
       toast('قيمة الدفعة غير صحيحة أو أكبر من إجمالي الفاتورة', 'error'); return;
     }
     const submit = form.querySelector('button[type="submit"]');
@@ -1159,7 +1199,7 @@ document.addEventListener('submit', async (e) => {
     const { data, error } = await supabase.rpc('create_showroom_sale', {
       p_customer_name: safeName(fd.get('customer_name')) || null,
       p_customer_phone: safeName(fd.get('customer_phone')) || null,
-      p_items: [{ motorcycle_id: bike.id, quantity }],
+      p_items: items.map(({ motorcycle_id, quantity, bike }) => ({ motorcycle_id: bike.id, quantity })),
       p_payment_amount: paymentAmount,
       p_payment_method: paymentAmount > 0 ? String(fd.get('payment_method')) : null,
       p_payment_reference: safeName(fd.get('payment_reference')) || null,
@@ -1169,12 +1209,12 @@ document.addEventListener('submit', async (e) => {
     if (error) { toast(error.message || 'تعذر تسجيل البيع', 'error'); return; }
     await Promise.all([loadMotorcycles(), loadSalesData()]);
     const customerName = safeName(fd.get('customer_name')) || 'عميل نقدي';
+    const invoiceRows = items.map(({bike,quantity}) => `<tr><td>${esc(bike.name)} — ${esc(bike.model)}</td><td>${quantity}</td><td>${money(bike.price)}</td><td>${money(bike.price * quantity)}</td></tr>`).join('');
     const invoice = `
       <div class="invoice">
         <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع معرض</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date().toLocaleString('ar-EG')}</span></div></div>
         <hr><p><b>العميل:</b> ${esc(customerName)}</p><p><b>الهاتف:</b> ${esc(fd.get('customer_phone') || '—')}</p>
-        <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
-        <tbody><tr><td>${esc(bike.name)} — ${esc(bike.model)}</td><td>${quantity}</td><td>${money(bike.price)}</td><td>${money(data.total)}</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
         <p><b>الإجمالي:</b> ${money(data.total)}</p><p><b>المدفوع:</b> ${money(data.amount_paid)}</p>
         <p><b>المتبقي:</b> ${money(data.balance_due)}</p><p><b>حالة الدفع:</b> ${data.payment_status === 'paid' ? 'مدفوعة' : data.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</p>
         <p class="text-center">شكرًا لثقتكم في El Khayal Motors</p>
