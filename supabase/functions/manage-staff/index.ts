@@ -8,7 +8,11 @@ const allowedPermissions = new Set([
   'customer_data_view'
 ]);
 const productionOrigin = 'https://khayal-1.github.io';
-const allowedOrigins = new Set([productionOrigin, 'http://localhost:5173']);
+const allowedOrigins = new Set([
+  productionOrigin,
+  'https://elkhayal-motors-website.vercel.app',
+  'http://localhost:5173'
+]);
 const responseHeaders = (origin: string | null) => ({
   ...(origin && allowedOrigins.has(origin) ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
