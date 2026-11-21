@@ -41,7 +41,6 @@ revoke all on public.supplier_bills from anon, authenticated;
 revoke all on public.supplier_payments from anon, authenticated;
 grant select on public.supplier_bills to authenticated;
 grant select on public.supplier_payments to authenticated;
-grant usage, select on all sequences in schema public to authenticated;
 
 create or replace function public.create_supplier_bill(
   p_supplier_id uuid,
