@@ -1,3 +1,5 @@
+drop sequence if exists public.supplier_return_number_seq;
+
 create or replace function public.record_motorcycle_stock_movement()
 returns trigger
 language plpgsql
