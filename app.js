@@ -606,15 +606,15 @@ function pagePOS() {
     <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-receipt"></i> أحدث فواتير المعرض</div>
       ${sales.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>المرتجعات</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
+        <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>رصيد مستخدم</th><th>المتبقي</th><th>الحالة</th><th>المرتجعات</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
         <tbody>${sales.map((sale) => `<tr>
           <td><b>${esc(sale.invoice_number)}</b></td><td>${esc(sale.customer_name)}</td>
-          <td>${money(sale.total)}</td><td>${money(sale.amount_paid)}</td>
-          <td>${money(Math.max(0, Number(sale.total) - Number(sale.amount_paid) - Number(sale.returnedAmount || 0)))}</td>
+          <td>${money(sale.total)}</td><td>${money(sale.amount_paid)}</td><td>${money(sale.credit_applied || 0)}</td>
+          <td>${money(Math.max(0, Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0)))}</td>
           <td><span class="status-pill ${sale.payment_status}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
           <td>${money(sale.returnedAmount || 0)}</td>
           <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
-          <td>${Number(sale.total) - Number(sale.amount_paid) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
+          <td>${Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} ${(state.customerCredits.find(c => c.customerId === sale.customer_id)?.balance || 0) > 0 && Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-apply-credit="${esc(sale.id)}">استخدام رصيد</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد فواتير مسجلة بعد.</p></div>`}
     </div>
     <div class="panel">
@@ -1202,11 +1202,32 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const applyCredit = e.target.closest('[data-apply-credit]');
+  if (applyCredit) {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
+    const sale = state.sales.find(x=>x.id===applyCredit.dataset.applyCredit);
+    const credit = sale && state.customerCredits.find(x=>x.customerId===sale.customer_id);
+    if (!sale || !credit || credit.balance<=0) return;
+    const due = Math.max(0,Number(sale.total)-Number(sale.amount_paid)-Number(sale.credit_applied||0)-Number(sale.returnedAmount||0));
+    const max = Math.min(due,credit.balance);
+    if (max<=0) { toast('لا يوجد رصيد مستحق على الفاتورة أو رصيد دائن متاح','info'); return; }
+    openModal(`<div class="modal-header"><h3>استخدام رصيد العميل</h3><button class="modal-close" data-close-modal aria-label="إغلاق">×</button></div>
+      <p>الفاتورة: <b>${esc(sale.invoice_number)}</b> — العميل: <b>${esc(sale.customer_name)}</b></p>
+      <p>الرصيد الدائن المتاح: <b>${money(credit.balance)}</b> — المتبقي على الفاتورة: <b>${money(due)}</b></p>
+      <form id="applyCustomerCreditForm" class="form-grid" data-sale-id="${esc(sale.id)}" data-max="${max}">
+        <div class="field"><label>قيمة الرصيد المستخدم (ج.م)</label><input name="amount" type="number" min="0.01" max="${max}" step="0.01" required></div>
+        <div class="field"><label>مرجع أو ملاحظة (اختياري)</label><input name="reference" maxlength="120"></div>
+        <small class="hint">سيُخصم المبلغ من رصيد العميل ويُسجل كجزء من تسوية هذه الفاتورة، دون إنشاء دفعة نقدية.</small>
+        <button class="btn btn-primary" type="submit">تأكيد استخدام الرصيد</button>
+      </form>`);
+    return;
+  }
+
   const collectPayment = e.target.closest('[data-collect-payment]');
   if (collectPayment) {
     const sale = state.sales.find((item) => item.id === collectPayment.dataset.collectPayment);
     if (!sale) return;
-    const balance = Math.max(0, Number(sale.total) - Number(sale.amount_paid) - Number(sale.returnedAmount || 0));
+    const balance = Math.max(0, Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0));
     openModal(`<div class="modal-header"><h3>تحصيل دفعة — ${esc(sale.invoice_number)}</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
       <p class="mb-2">الرصيد المستحق: <b>${money(balance)}</b></p>
       <form id="collectPaymentForm" class="form-grid" data-sale-id="${esc(sale.id)}">
@@ -1473,6 +1494,21 @@ document.addEventListener('submit', async (e) => {
     await loadSalesData();
     render();
     toast('تم تسجيل رد '+money(data.refunded_amount)+'؛ الرصيد المتبقي '+money(data.remaining_credit),'success');
+    return;
+  }
+
+  if (form.id === 'applyCustomerCreditForm') {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
+    const fd = new FormData(form), amount = Number(fd.get('amount')), max = Number(form.dataset.max);
+    if (!Number.isFinite(amount) || amount<=0 || amount>max) { toast('قيمة استخدام الرصيد غير صحيحة','error'); return; }
+    const submit = form.querySelector('button[type="submit"]'); if (submit) submit.disabled = true;
+    const {data,error}=await supabase.rpc('apply_customer_credit_to_sale',{
+      p_sale_id:form.dataset.saleId,p_amount:amount,p_reference:safeName(fd.get('reference'))||null
+    });
+    if(submit)submit.disabled=false;
+    if(error){toast(error.message||'تعذر استخدام رصيد العميل','error');return;}
+    closeModal(); await loadSalesData(); render();
+    toast('تم استخدام '+money(data.applied_amount)+' من رصيد العميل؛ المتبقي على الفاتورة '+money(data.remaining_due),'success');
     return;
   }
 
@@ -1784,7 +1820,7 @@ async function loadSalesData() {
     return;
   }
   const { data, error } = await supabase.from('sales')
-    .select('id,invoice_number,customer_name,customer_phone,total,amount_paid,payment_status,created_at')
+    .select('id,invoice_number,customer_id,customer_name,customer_phone,total,amount_paid,credit_applied,payment_status,created_at')
     .eq('channel', 'showroom')
     .order('created_at', { ascending: false })
     .limit(100);
