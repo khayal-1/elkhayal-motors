@@ -89,3 +89,35 @@ Status: previously suggested only; not run during this work. The CLI route requi
 6. Review changes and push documentation alone first to the feature branch. Do not publish app code to `main` until compatibility is verified and the appropriate release path is established.
 7. بعد النشر إلى Pages، تحقق من صفحة الموقع والميزة من المصدر الحي، ثم وثّق الـcommit وعنوان Pages ونتيجة التحقق هنا. لا تنشئ حسابات موظفين دون طلب منفصل.
 8. After a Pages release, verify the live site and feature, then record the commit, Pages URL, and verification result here. Do not create employee accounts without a separate request.
+
+## تحديث تدقيق المستودع / Repository audit update
+
+**21 Nov 2026, 12:20 Cairo / 21 نوفمبر 2026، 12:20 القاهرة**
+
+- تحقق checkout نظيف لفرع `feature/manager-staff-accounts`؛ آخر commit قبل هذا التحديث `4a1ab47afb37b33f80e6843d5987724078c275d3` ويعدّل `OPERATIONS_LOG.md` فقط. لا يحتوي على نشر للدالة أو كود التطبيق.
+- A clean checkout of `feature/manager-staff-accounts` was verified. Before this update its HEAD was `4a1ab47afb37b33f80e6843d5987724078c275d3`, changing `OPERATIONS_LOG.md` only. It does not deploy the function or contain the app-code changes.
+- الملفات الوحيدة المتتبعة تحت `supabase/migrations/` في هذا الفرع هي `202611210001_initial_foundation.sql` و`202611210002_customer_requests_no_delete.sql` و`202611210003_least_privilege_catalog_and_requests.sql`. لم يُنفّذ أي SQL أو migration جديد أثناء هذا التدقيق.
+- The only tracked files under `supabase/migrations/` on this branch are `202611210001_initial_foundation.sql`, `202611210002_customer_requests_no_delete.sql`, and `202611210003_least_privilege_catalog_and_requests.sql`. No SQL or migration was executed during this audit.
+- يسجل هذا السجل أن تطبيق `001` غير متحقق هنا، وأن `002` و`003` سبق توثيق تطبيقهما في المراجعة السابقة. ملف `202611210005_manager_staff_permissions.sql` الذي شوهد في مساحة عمل محلية منفصلة غير موجود في الفرع البعيد الحالي، ولا يوجد دليل هنا على تطبيقه؛ لا تشغّله بناءً على اسمه أو وجوده المحلي وحده.
+- This log records migration `001` as not verified here, and `002`/`003` as previously recorded applied. `202611210005_manager_staff_permissions.sql`, seen in a separate local worktree, is absent from this remote branch; its application is not established. Do not run it based only on its name or local presence.
+- أُعيد التحقق من أن `package.json` يعرّف `npm run build` على أنه `vite build`. هذا لا يجعل GitHub Pages legacy يبني المشروع تلقائيًا؛ لا يزال نشر الواجهة غير مكتمل.
+- Rechecked that `package.json` defines `npm run build` as `vite build`. That does not make legacy GitHub Pages build the project automatically; frontend publication remains incomplete.
+- نتيجة النشر الحالية: `manage-staff` غير موجودة في قائمة Supabase الحية؛ محرر لوحة التحكم لم يقبل المصدر الكامل ولم يُرسل Deploy. لم تُنشأ حسابات موظفين، ولم يتغير `main` أو الموقع الحي.
+- Current deployment result: `manage-staff` is absent from the live Supabase function list; the Dashboard editor did not accept the full source and no Deploy submission occurred. No staff accounts were created, and neither `main` nor the live website changed.
+
+### أوامر التدقيق المنفذة / Audit commands executed
+
+```sh
+git clone --branch feature/manager-staff-accounts --single-branch https://github.com/khayal-1/elkhayal-motors.git motors-log
+git status --short --branch
+ls -la
+sed -n '1,260p' OPERATIONS_LOG.md
+git rev-parse HEAD
+git show --stat --oneline -1
+git ls-files 'supabase/migrations/*'
+cat package.json
+```
+
+الحالة: نُفذت للقراءة والتحقق فقط؛ نجح الاستنساخ، وكانت شجرة العمل نظيفة، ولم تُغيّر ملفات التطبيق أو قاعدة البيانات.
+
+Status: executed for read-only inspection; clone succeeded, the working tree was clean, and no app or database files were changed.
