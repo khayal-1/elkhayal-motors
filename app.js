@@ -701,7 +701,7 @@ function pageSuppliers() {
     <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-clipboard-list"></i> أوامر التوريد (${state.purchaseOrders.length})</div>
       ${state.purchaseOrders.length ? `<div class="table-wrap"><table><thead><tr><th>رقم الأمر</th><th>المورد</th><th>الصنف</th><th>مطلوب</th><th>مستلم</th><th>الحالة</th><th>الاستلام</th></tr></thead><tbody>
-      ${state.purchaseOrders.map(o=>{const ordered=o.items.reduce((n,it)=>n+Number(it.quantity_ordered||0),0);const received=o.items.reduce((n,it)=>n+Number(it.quantity_received||0),0);const remaining=o.items.filter(it=>Number(it.quantity_ordered)>Number(it.quantity_received)).length;return `<tr><td><b>${esc(o.order_number)}</b></td><td>${esc(o.supplierName)}</td><td>${o.items.length} أصناف</td><td>${ordered}</td><td>${received}</td><td><span class="status-pill">${esc(statusLabel[o.status]||o.status)}</span></td><td>${remaining>0&&o.status!=='cancelled'?`<button class="btn btn-outline btn-sm" data-receive-order="${esc(o.id)}">تسجيل استلام (${remaining})</button>`:'—'}</td></tr>`}).join('')}
+      ${state.purchaseOrders.map(o=>{const ordered=o.items.reduce((n,it)=>n+Number(it.quantity_ordered||0),0);const received=o.items.reduce((n,it)=>n+Number(it.quantity_received||0),0);const remaining=o.items.filter(it=>Number(it.quantity_ordered)>Number(it.quantity_received)).length;return `<tr><td><b>${esc(o.order_number)}</b></td><td>${esc(o.supplierName)}</td><td>${o.items.length} أصناف</td><td>${ordered}</td><td>${received}</td><td><span class="status-pill">${esc(statusLabel[o.status]||o.status)}</span></td><td>${remaining>0&&o.status!=='cancelled'?`<button class="btn btn-outline btn-sm" data-receive-order="${esc(o.id)}">تسجيل استلام (${remaining})</button>${o.receiptItems?.length?'<button class=btn data-return-order='+esc(o.id)+'>مرتجع</button>':''}`:'—'}</td></tr>`}).join('')}
       </tbody></table></div>` : '<div class="empty">لا توجد أوامر توريد حتى الآن.</div>'}
     </div>`;
 }
@@ -1119,6 +1119,17 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const returnOrderButton = e.target.closest('[data-return-order]');
+  if(returnOrderButton){
+    const order=state.purchaseOrders.find(o=>o.id===returnOrderButton.dataset.returnOrder); if(!order)return;
+    const available=(order.receiptItems||[]).map(ri=>({...ri,returned:state.supplierReturnItems.filter(x=>x.purchase_receipt_item_id===ri.id).reduce((n,x)=>n+Number(x.quantity),0)})).filter(ri=>Number(ri.quantity)>ri.returned);
+    const bills=state.supplierBills.filter(b=>b.supplier_id===order.supplier_id&&(!b.purchase_order_id||b.purchase_order_id===order.id));
+    if(!available.length){toast('لا توجد كميات مستلمة متبقية للإرجاع','info');return;}
+    if(!bills.length){toast('سجّل فاتورة المورد واربطها بالمورد أو أمر التوريد قبل إنشاء إشعار الخصم','error');return;}
+    const rows=available.map(ri=>{const rem=Number(ri.quantity)-ri.returned;const po=order.items.find(it=>it.id===ri.purchase_order_item_id);return '<div data-receipt-item-id="'+esc(ri.id)+'"><label>'+esc(po?.motorcycle_name||'الصنف')+' — متاح '+rem+' — تكلفة '+money(ri.unit_cost)+'</label><input name=quantity type=number min=0 max='+rem+' value=0 required></div>';}).join('');
+    const opts=bills.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.bill_number)+' — الرصيد '+money(b.balanceDue)+'</option>').join('');
+    openModal('<div class=modal-header><h3>مرتجع مشتريات '+esc(order.order_number)+'</h3><button class=modal-close data-close-modal>×</button></div><form id=supplierReturnForm data-order-id="'+esc(order.id)+'"><label>فاتورة المورد</label><select name=supplier_bill_id required><option value="">اختر الفاتورة</option>'+opts+'</select>'+rows+'<label>ملاحظات</label><textarea name=notes maxlength=1000></textarea><button class=btn btn-primary type=submit>تأكيد المرتجع</button></form>'); return;
+  }
   const receiveOrderButton = e.target.closest('[data-receive-order]');
   if (receiveOrderButton) {
     const order = state.purchaseOrders.find(o=>o.id===receiveOrderButton.dataset.receiveOrder);
@@ -1275,6 +1286,13 @@ document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
 
+  if(form.id==='supplierReturnForm'){
+    if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية تسجيل مرتجعات الموردين','error');return;}
+    const fd=new FormData(form),items=[];for(const row of form.querySelectorAll('[data-receipt-item-id]')){const quantity=Number(row.querySelector('[name=quantity]').value||0);if(!Number.isInteger(quantity)||quantity<0){toast('أدخل كمية صحيحة','error');return;}if(quantity>0)items.push({purchase_receipt_item_id:row.dataset.receiptItemId,quantity});}
+    if(!items.length){toast('حدد كمية واحدة على الأقل','error');return;}const btn=form.querySelector('[type=submit]');if(btn)btn.disabled=true;
+    const {data,error}=await supabase.rpc('create_supplier_return',{p_purchase_order_id:form.dataset.orderId,p_supplier_bill_id:String(fd.get('supplier_bill_id')),p_items:items,p_notes:safeName(fd.get('notes'))||null});if(btn)btn.disabled=false;
+    if(error){toast(error.message||'تعذر تسجيل المرتجع','error');return;}closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast('تم تسجيل المرتجع رقم '+data.return_number+' بقيمة '+money(data.credit_amount),'success');return;
+  }
   if(form.id==='supplierBillForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية إدارة فواتير الموردين','error');return;}
     const fd=new FormData(form),amount=Number(fd.get('total_amount'));
