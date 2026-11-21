@@ -1965,6 +1965,22 @@ async function loadCustomerData() {
   set(DB.FAVS, { [user.id]: (favorites || []).map((f) => f.motorcycle_id) });
 }
 
+async function loadFinanceData() {
+  const u = currentUser();
+  if (!u || !supabase || !(u.role === 'admin' || hasPermission('expenses_manage') || hasPermission('accounting_view'))) return;
+  const [accountsResult, cashResult, expensesResult] = await Promise.all([
+    supabase.from('accounting_accounts').select('id,code,name,account_type').eq('is_active', true).eq('account_type', 'expense').order('code'),
+    supabase.from('cash_accounts').select('id,name,account_kind,currency').eq('is_active', true).order('name'),
+    supabase.from('expenses').select('id,expense_number,expense_date,description,vendor_name,reference_number,amount,paid_amount,due_date,notes,accounting_accounts(name,code)').order('expense_date', {ascending:false}).limit(250)
+  ]);
+  if (accountsResult.error || cashResult.error || expensesResult.error) {
+    console.error('Finance data load failed', accountsResult.error || cashResult.error || expensesResult.error);
+    toast('تعذر تحميل بيانات المصروفات والحسابات', 'error'); return;
+  }
+  state.financeAccounts = accountsResult.data || [];
+  state.cashAccounts = cashResult.data || [];
+  state.expenses = expensesResult.data || [];
+}
 async function loadBusinessData() {
   if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
   if (state.user.role === 'staff' && !hasRequestAccess()) { set(DB.CUSTOM_REQS, []); state.contactMessages = []; return; }
