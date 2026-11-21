@@ -1804,25 +1804,13 @@ async function loadSalesData() {
     : { data: [], error: null };
   if (itemsResult.error) { console.error('Sale return items load failed', itemsResult.error); toast('تعذر تحميل تفاصيل المرتجعات', 'error'); return; }
   state.saleReturnItems = itemsResult.data || [];
-  const creditResult = await supabase.from('customer_credit_transactions')
-    .select('id,customer_id,transaction_type,amount,method,reference,notes,created_at')
-    .order('created_at', { ascending: false }).limit(1000);
-  if (creditResult.error) { console.error('Customer credit ledger load failed', creditResult.error); toast('تعذر تحميل أرصدة العملاء', 'error'); return; }
-  const credits = creditResult.data || [];
-  const customerIds = [...new Set(credits.map(x => x.customer_id))];
-  const customerResult = customerIds.length
-    ? await supabase.from('clients').select('id,display_name,phone').in('id', customerIds)
-    : { data: [], error: null };
-  if (customerResult.error) { console.error('Customer credit contacts load failed', customerResult.error); toast('تعذر تحميل بيانات أصحاب الأرصدة', 'error'); return; }
-  const customerMap = new Map((customerResult.data || []).map(c => [c.id,c]));
-  const creditGroups = new Map();
-  for (const tx of credits) {
-    const current = creditGroups.get(tx.customer_id) || { customerId:tx.customer_id, name:customerMap.get(tx.customer_id)?.display_name || 'عميل', phone:customerMap.get(tx.customer_id)?.phone || '', balance:0, transactions:[] };
-    current.balance += Number(tx.amount || 0);
-    current.transactions.push(tx);
-    creditGroups.set(tx.customer_id,current);
-  }
-  state.customerCredits = [...creditGroups.values()].filter(c => c.balance > 0.009).sort((a,b)=>b.balance-a.balance);
+  const creditResult = await supabase.from('customer_credit_balances')
+    .select('customer_id,customer_name,customer_phone,balance')
+    .order('balance', { ascending: false });
+  if (creditResult.error) { console.error('Customer credit balances load failed', creditResult.error); toast('تعذر تحميل أرصدة العملاء', 'error'); return; }
+  state.customerCredits = (creditResult.data || []).map(c => ({
+    customerId:c.customer_id,name:c.customer_name || 'عميل',phone:c.customer_phone || '',balance:Number(c.balance || 0)
+  }));
   state.sales = state.sales.map(s => ({...s,
     returnedAmount: state.saleReturns.filter(r => r.sale_id === s.id).reduce((n,r)=>n+Number(r.total_amount||0),0),
     returnItems: state.saleReturnItems.filter(i => state.saleReturns.some(r => r.id===i.sale_return_id && r.sale_id===s.id))
