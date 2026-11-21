@@ -21,8 +21,8 @@
 - [x] Live GitHub Pages settings were checked through GitHub API: legacy build, source `main:/`.
 - [ ] لم تُنشر `manage-staff`: قائمة الدوال الحية ما زالت تعرض `telegram-photo-upload` فقط. أوقفت محاولة إدخال المصدر الكامل في محرر المتصفح بعد أن فشل الإدخال، ولم أضغط زر النشر.
 - [ ] `manage-staff` is not deployed: the live list still shows only `telegram-photo-upload`. I stopped the browser-editor attempt after full-source input failed; the Deploy button was not submitted.
-- [ ] واجهة الموظفين لم تُنشر إلى GitHub Pages. يجب بناء ملفات الموقع بإعدادات `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` عبر مسار نشر موثوق؛ لم يوجد ملف إعداد محلي سوى `.env.example` في هذا الفحص، لذا لا تفترض أن القيم موجودة محليًا. ثم تحقق من تشغيل النسخة على Pages قبل النشر.
-- [ ] Staff UI has not been published to GitHub Pages. Build the site with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from a trusted deployment configuration; `.env.example` was the only `.env*` file found locally, so do not assume local values are present. Verify the Pages version before publishing.
+- [ ] واجهة الموظفين لم تُنشر إلى GitHub Pages. الفحص الحي أعاد صفحة HTML من المصدر `main`، والصفحة تحمل `app.js` مباشرة؛ هذا الملف يستورد `src/supabase.js` الذي يستورد حزمة `@supabase/supabase-js`، بينما إعداد Pages الحالي legacy/static ولا يبني Vite. يلزم مسار بناء صالح وقيم إعداد عامة موثوقة قبل نشر نسخة bundle؛ لم تُجرَ تغييرات على `main`. يجب أثبت مسار بناء Vite متوافقًا مع GitHub Pages وجهّز إعدادَي `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` من مصدر نشر موثوق؛ لم يوجد ملف إعداد محلي سوى `.env.example` في هذا الفحص، لذا لا تفترض أن القيم موجودة محليًا. ثم تحقق من تشغيل النسخة على Pages قبل النشر.
+- [ ] Staff UI has not been published to GitHub Pages. The live page serves the `main` HTML directly, which loads `app.js`; that file imports `src/supabase.js`, which imports `@supabase/supabase-js`, while Pages is configured as legacy/static and does not run Vite. A valid build route and trusted public build settings are needed before publishing a bundle; `main` has not been changed. Establish a GitHub Pages-compatible Vite build and trusted `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` configuration; `.env.example` was the only `.env*` file found locally, so do not assume local values are present. Verify the Pages version before publishing.
 - لا تُنشأ حسابات موظفين أثناء النشر أو الاختبار.
 - Do not create employee accounts during deployment or testing.
 
@@ -52,6 +52,10 @@ Note: a prior live review saw the `employee_permissions` table and related polic
 - `gh api repos/khayal-1/elkhayal-motors/contents/.github/workflows` — نُفّذ؛ أعاد 404، ولم يظهر مجلد workflow عبر هذا المسار.
 - `npm run build` — نُفّذ على فرع الميزة؛ نجح Vite build وأنشأ `dist/`.
 - `deno check supabase/functions/manage-staff/index.ts` — نُفّذ؛ اكتمل دون أخطاء فحص.
+- `curl -sSIL --max-time 20 https://khayal-1.github.io/elkhayal-motors/` — نُفّذ؛ أعاد HTTP 200 من GitHub Pages.
+- `curl -fsSL --max-time 20 https://khayal-1.github.io/elkhayal-motors/` — نُفّذ؛ أعاد HTML يحمّل `app.js` مباشرة.
+- `curl -fsSL --max-time 20 https://khayal-1.github.io/elkhayal-motors/app.js` — نُفّذ؛ أظهر أن الملف الحي يستورد `./src/supabase.js`.
+- `git show main:src/supabase.js` — نُفّذ؛ أظهر اعتماد الحزمة على متغيرات `import.meta.env` واستيراد `@supabase/supabase-js`؛ لم يُبنَ هذا المسار عبر Vite في إعداد Pages الحالي حسب إعداد legacy الموثق.
 - `git add OPERATIONS_LOG.md` و`git diff --cached --check` — نُفّذا؛ التحقق من المسافات/التنسيق نجح.
 - `git commit -m "Document staff deployment operations"` — نُفّذ؛ أنشأ commit التوثيق الأول `e2e99206b83e91b390fcccb9b5e987503a9ab3d9`.
 - `git push origin HEAD:refs/heads/feature/manager-staff-accounts` — نُفّذ بنجاح؛ الإيصال أكد تحديث الفرع البعيد من `c0cc8a1` إلى `e2e9920`.
