@@ -62,7 +62,7 @@ const money = (n) => Number(n || 0).toLocaleString('en-US') + ' ج.م';
 const nowISO = () => new Date().toISOString();
 const safeName = (s) => String(s || '').trim();
 function whatsappNumber(value) {
-  let digits = String(value || '').replace(/\\D/g, '');
+  let digits = String(value || '').replace(/\D/g, '');
   if (digits.startsWith('00')) digits = digits.slice(2);
   if (digits.startsWith('0')) digits = '20' + digits.slice(1);
   return digits;
