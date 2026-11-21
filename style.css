@@ -1142,3 +1142,22 @@ td .mini-img {
 .contact-actions .btn {
   white-space: nowrap;
 }
+
+
+.contact-details {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+.contact-details p {
+  margin: 0;
+  line-height: 1.9;
+}
+.contact-details a:not(.btn) {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-weight: 700;
+}
+.contact-details i {
+  margin-inline-end: 6px;
+}
