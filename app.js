@@ -1270,7 +1270,7 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
-  /* Showroom POS: one atomic database RPC creates invoice, lines, payment and stock movements. */
+  /* Showroom POS: one atomic database RPC creates a multi-item invoice, payment and stock movements. */
   if (form.id === 'posSaleForm') {
     if (!hasRole('admin') || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
     const fd = new FormData(form);
