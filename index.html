@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>El Khayal Motors | معرض الدراجات النارية</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- شريط علوي -->
+  <header class="topbar">
+    <div class="topbar-right">
+      <button class="menu-toggle" id="menuToggle" aria-label="فتح القائمة">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <a href="#" class="brand" data-nav="home">
+        <div class="brand-logo"><i class="fa-solid fa-motorcycle"></i></div>
+        <div class="brand-name">
+          <span class="brand-title">El Khayal</span>
+          <span class="brand-sub">MOTORS</span>
+        </div>
+      </a>
+    </div>
+    <div class="topbar-left" id="accountArea"></div>
+  </header>
+
+  <!-- شريط جانبي -->
+  <aside class="sidebar" id="sidebar">
+    <nav class="sidebar-nav" id="sidebarNav"></nav>
+  </aside>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- منطقة المحتوى الرئيسي -->
+  <main class="main-content" id="mainContent"></main>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modalBox"></div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
