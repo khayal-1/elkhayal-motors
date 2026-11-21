@@ -173,5 +173,24 @@ Status: executed for read-only inspection; clone succeeded, the working tree was
 - Added `.github/workflows/deploy-pages.yml` to build Vite on pushes to `main` or manual dispatch and deploy `dist/` through GitHub Pages Actions. The live Pages setting remains legacy `main:/` until the Actions path is enabled during release.
 - دمجت آخر `origin/main` في فرع الميزة؛ لا تعارض، وتغييره الوحيد كان تعديل نص في `app.js`. أُعيد البناء محليًا بأوامر `NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=... corepack pnpm run build`؛ نجح Vite، وتحقق `dist/index.html` من روابط `/elkhayal-motors/assets/...`. الحزمة تحتوي إعداد المشروع ومفتاح النشر العام ولا تحتوي placeholders.
 - Merged the latest `origin/main` into the feature branch without conflicts; its only change was a text edit in `app.js`. Rebuilt locally with the public `NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=... corepack pnpm run build`; Vite passed and `dist/index.html` contained `/elkhayal-motors/assets/...` paths. The bundle included the project configuration and publishable key, with no placeholders.
-- لا يزال آخر فرع الميزة يحمل تغييرات الدمج والـworkflow دون دفع. إعداد Pages الحي لم يتغير، ولم يتغير الموقع المنشور حتى الآن.
-- The feature branch currently has the merge and workflow changes locally but has not been pushed. Live Pages settings and the published website remain unchanged.
+- دُفع commit `08212029c3046b7c78cd4cbde2286a3121387a30` إلى فرع `feature/manager-staff-accounts` وتحقق `git ls-remote` من SHA نفسه. طلب السحب الموجود رقم 1 إلى `main` أصبح قابلاً للدمج؛ الشيكات المعروضة فيه تخص معاينة Vercel فقط، وليست اختبار GitHub Pages.
+- Commit `08212029c3046b7c78cd4cbde2286a3121387a30` was pushed to `feature/manager-staff-accounts` and `git ls-remote` returned the same SHA. Existing pull request #1 to `main` is mergeable; its displayed checks are Vercel preview checks only, not GitHub Pages tests.
+- لم يتغير إعداد Pages الحي بعد (`legacy main:/`) ولم يتغير الموقع المنشور بعد. لم تُنفّذ أي migration ولم تُنشأ حسابات موظفين.
+
+
+### أوامر متابعة النشر / Deployment continuation commands
+
+```sh
+git merge --no-edit origin/main
+NEXT_PUBLIC_SUPABASE_URL='https://ztkiavqmbswyxkmddtno.supabase.co' NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='<public publishable key from Supabase API Keys>' corepack pnpm run build
+deno check supabase/functions/manage-staff/index.ts
+git diff --check
+gh variable set NEXT_PUBLIC_SUPABASE_URL -R khayal-1/elkhayal-motors --body '<project URL>'
+gh variable set NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY -R khayal-1/elkhayal-motors --body '<public publishable key>'
+git push origin feature/manager-staff-accounts
+git ls-remote origin refs/heads/feature/manager-staff-accounts
+```
+
+القيم بين الأقواس توضّح مكان قيم المشروع العامة، وليست أسرارًا؛ لم يُدرج service-role أو Personal Access Token. نجح البناء و`deno check` و`git diff --check`. لم يُشغّل أي أمر migration أو SQL.
+
+The bracketed values indicate the public project configuration inputs, not secrets; no service-role key or Personal Access Token was included. The build, `deno check`, and `git diff --check` passed. No migration or SQL command was run.
