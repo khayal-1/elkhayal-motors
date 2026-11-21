@@ -1,3 +1,5 @@
+create sequence if not exists public.supplier_return_number_seq;
+
 create table public.supplier_returns (
   id uuid primary key default gen_random_uuid(),
   return_number bigint generated always as identity unique,
