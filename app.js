@@ -1175,7 +1175,7 @@ document.addEventListener('click', async (e) => {
       <small class="hint">سعر الوحدة: ${money(item.unit_price)}</small></div>`).join('');
     openModal(`<div class="modal-header"><h3>مرتجع فاتورة ${esc(sale.invoice_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
       <p>العميل: <b>${esc(sale.customer_name)}</b> — إجمالي الفاتورة: ${money(sale.total)}</p>
-      <p class="hint">يُسجل مبلغ المرتجع كرصيد دائن للعميل؛ رد المبلغ نقدًا يحتاج تسجيل عملية الصرف الفعلية منفصلة.</p>
+      <p class="hint">تُخصم قيمة المرتجع من مديونية الفاتورة أولًا؛ لا ينشأ رصيد قابل للرد إلا إذا تجاوز ما دفعه العميل إجمالي الفاتورة بعد المرتجعات.</p>
       <form id="saleReturnForm" class="form-grid" data-sale-id="${esc(sale.id)}">
         ${rows}<div class="field"><label>ملاحظات</label><textarea name="notes" maxlength="1000"></textarea></div>
         <button class="btn btn-primary" type="submit">تأكيد المرتجع</button></form>`);
@@ -1357,7 +1357,7 @@ document.addEventListener('submit', async (e) => {
     closeModal();
     await Promise.all([loadSalesData(),loadMotorcycles()]);
     render();
-    toast('تم تسجيل المرتجع رقم '+data.return_number+' بقيمة '+money(data.total_amount)+' كرصيد دائن للعميل','success');
+    toast('تم تسجيل المرتجع رقم '+data.return_number+' بقيمة '+money(data.total_amount)+'؛ الرصيد الدائن الفعلي '+money(data.customer_credit || 0),'success');
     return;
   }
 
