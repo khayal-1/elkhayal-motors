@@ -47,7 +47,10 @@ const state = {
   supplierPayments: [],
   supplierReturns: [],
   supplierReturnItems: [],
-  contactMessages: [],
+  financeAccounts: [],
+  cashAccounts: [],
+  expenses: [],
+  contactMessages: []
   requestReplies: [],
   contactReplies: [],
   staffProvisionResult: null,
@@ -60,6 +63,8 @@ const STAFF_PERMISSION_OPTIONS = [
   { key: 'requests_view', label: 'عرض طلبات العملاء', description: 'رؤية الطلبات وتفاصيلها التي أرسلها العميل.' },
   { key: 'requests_manage', label: 'تحديث حالة الطلبات', description: 'عرض الطلبات وتغيير حالتها؛ لا يسمح بالحذف.' },
   { key: 'customer_data_view', label: 'رؤية أسماء وهواتف العملاء', description: 'لعملاء الطلبات التي يحق للموظف عرضها.' },
+  { key: 'expenses_manage', label: 'إدارة المصروفات', description: 'تسجيل المصروفات وسدادها ومراجعة سجلها.' },
+  { key: 'accounting_view', label: 'عرض الحسابات والتقارير المالية', description: 'عرض دليل الحسابات والقيود والأرصدة المالية.' },
 ];
 const PERMISSION_LABELS = Object.fromEntries(STAFF_PERMISSION_OPTIONS.map((item) => [item.key, item.label]));
 
