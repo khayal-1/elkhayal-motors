@@ -267,3 +267,5 @@ curl -fsSL 'https://khayal-1.github.io/elkhayal-motors/?smoke=<cache-buster>'
 - This change does not create an account or convert an existing user. If the intended employee already has a customer account, explicit direction identifying that account is needed before changing its role; a new employee account needs an unused email.
 - جارٍ فحص البناء ورفع تعديل واجهة عرض الخطأ إلى `main` ثم التحقق من نشر Pages.
 - Build validation and publishing the clearer UI error to `main`, followed by Pages verification, are in progress.
+- اكتمل التحديث: الالتزام `36e2492ec12b3c467dfc75ff3edf4bb1b86af1fb` على `main`؛ نجح بناء ونشر GitHub Pages في التشغيل `44902269545`. أعاد HTML وملفا JS/CSS من Pages HTTP 200، واحتوى ملف JS الحي على رسالة الخطأ العربية الجديدة. لم يُجر اختبار إنشاء مستخدم أو تحويل حساب قائم.
+- Release complete: commit `36e2492ec12b3c467dfc75ff3edf4bb1b86af1fb` is on `main`; GitHub Pages build/deployment run `44902269545` succeeded. Live Pages HTML and JS/CSS assets returned HTTP 200, and the live JS bundle contains the new Arabic conflict message. No user creation or existing-account conversion was tested.
