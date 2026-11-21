@@ -70,6 +70,29 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const money = (n) => Number(n || 0).toLocaleString('en-US') + ' ج.م';
 const nowISO = () => new Date().toISOString();
 const safeName = (s) => String(s || '').trim();
+
+async function optimizeCatalogImage(file) {
+  const bitmap = await createImageBitmap(file);
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { alpha: false });
+  if (!context) throw new Error('تعذر تجهيز الصورة للضغط');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob((value) => value ? resolve(value) : reject(new Error('تعذر ضغط الصورة')), 'image/jpeg', 0.82);
+  });
+  const baseName = String(file.name || 'motorcycle-photo').replace(/\.[^.]+$/, '') || 'motorcycle-photo';
+  return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+}
+
 function whatsappNumber(value) {
   let digits = String(value || '').replace(/\D/g, '');
   if (digits.startsWith('00')) digits = digits.slice(2);
@@ -834,9 +857,9 @@ function bikeFormHTML(bike) {
         <textarea name="images" rows="4" placeholder="https://...">${esc((b.images || []).join('\n'))}</textarea>
       </div>
       <div class="field">
-        <label>رفع صور إلى Telegram</label>
+        <label>رفع الصور (ضغط تلقائي ومزامنة)</label>
         <input type="file" name="photos" accept="image/*" multiple>
-        <span class="hint">ترتبط الصور بالدراجة وتُسجل في Supabase. اتركه فارغًا لتخطي الرفع.</span>
+        <span class="hint">تُصغّر إلى 1600 بكسل وتُضغط بصيغة JPEG، ثم تُحفظ في Telegram وSupabase Storage وتُربط بالكتالوج تلقائيًا.</span>
       </div>
       <button class="btn btn-primary btn-block" type="submit">
         <i class="fa-solid fa-floppy-disk"></i> حفظ
@@ -1761,13 +1784,20 @@ document.addEventListener('submit', async (e) => {
     const savedId = result.data.id;
     const photos = fd.getAll('photos').filter((file) => file instanceof File && file.size > 0);
     let uploadFailure = null;
-    for (const photo of photos) {
+    for (const originalPhoto of photos) {
+      let photo;
+      try {
+        photo = await optimizeCatalogImage(originalPhoto);
+      } catch (error) {
+        uploadFailure = error?.message || 'تعذر ضغط الصورة قبل الرفع';
+        break;
+      }
       const body = new FormData();
       body.append('photo', photo, photo.name);
       body.append('motorcycle_id', savedId);
       const { data, error } = await supabase.functions.invoke('telegram-photo-upload', { body });
-      if (error || !data?.photo_asset?.id) {
-        uploadFailure = error?.message || 'تعذر تأكيد حفظ صورة في سجل الصور';
+      if (error || !data?.photo_asset?.id || !data?.public_url) {
+        uploadFailure = data?.error || error?.message || 'تعذر حفظ الصورة وربطها بالكتالوج';
         break;
       }
     }
@@ -1775,7 +1805,7 @@ document.addEventListener('submit', async (e) => {
     closeModal();
     render();
     if (uploadFailure) toast(`تم حفظ بيانات الدراجة، لكن رفع الصور توقف: ${uploadFailure}`, 'error');
-    else toast(photos.length ? 'تم حفظ الدراجة وربط الصور في Telegram وSupabase' : 'تم حفظ الدراجة في Supabase', 'success');
+    else toast(photos.length ? 'تم ضغط الصور ومزامنتها وربطها بالكتالوج' : 'تم حفظ الدراجة في Supabase', 'success');
     return;
   }
 
