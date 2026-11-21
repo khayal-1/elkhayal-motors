@@ -1011,7 +1011,8 @@ const ROUTES = {
   dashboard: pageDashboard,
   'manage-bikes': pageManageBikes,
   staff: pageStaff,
-  'staff-orders': pageStaffOrders
+  'staff-orders': pageStaffOrders,
+  expenses: pageExpenses
 };
 
 function render() {
@@ -1043,6 +1044,7 @@ function navigate(route) {
   if (route === 'pos') loadSalesData().then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
+  if (route === 'expenses' && state.user && (state.user.role === 'admin' || hasPermission('expenses_manage') || hasPermission('accounting_view'))) loadFinanceData().then(render);
 }
 
 /* ---------- Buy Flow ---------- */
