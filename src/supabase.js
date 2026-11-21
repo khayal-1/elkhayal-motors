@@ -17,15 +17,21 @@ export const supabase = supabaseConfigured
   : null;
 
 export async function getCurrentProfile(userId) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, full_name, phone, user_roles(role)')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error) throw error;
-  const roles = (data?.user_roles || []).map((entry) => entry.role);
-  const role = roles.includes('admin') || roles.includes('owner') || roles.includes('manager')
+  const [{ data: profile, error: profileError }, { data: roles, error: rolesError }] = await Promise.all([
+    supabase.from('profiles').select('id, full_name, phone, preferred_language').eq('id', userId).maybeSingle(),
+    supabase.from('user_roles').select('role').eq('user_id', userId)
+  ]);
+  if (profileError) throw profileError;
+  if (rolesError) throw rolesError;
+  const roleNames = (roles || []).map((entry) => entry.role);
+  const role = roleNames.includes('admin') || roleNames.includes('owner') || roleNames.includes('manager')
     ? 'admin'
-    : roles.includes('employee') ? 'staff' : 'customer';
-  return data ? { id: data.id, name: data.full_name || '', phone: data.phone || '', role } : null;
+    : roleNames.includes('employee') ? 'staff' : 'customer';
+  return profile ? {
+    id: profile.id,
+    name: profile.full_name || '',
+    phone: profile.phone || '',
+    preferredLanguage: profile.preferred_language || 'ar',
+    role
+  } : null;
 }

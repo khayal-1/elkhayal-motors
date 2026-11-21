@@ -73,152 +73,6 @@ function toast(msg, type = 'info') {
   el._t = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
-/* ---------- Seed Data ---------- */
-function seedData() {
-  if (localStorage.getItem(DB.SEEDED) === '1') return;
-
-  /* Users */
-  const users = [
-    {
-      id: 'admin-1',
-      name: 'مدير النظام',
-      email: 'admin@elkhayal.com',
-      password: 'admin123',
-      phone: '01000000001',
-      role: 'admin',
-      target: 0,
-      createdAt: nowISO()
-    },
-    {
-      id: 'staff-1',
-      name: 'أحمد الموظف',
-      email: 'staff@elkhayal.com',
-      password: 'staff123',
-      phone: '01000000002',
-      role: 'staff',
-      target: 500000,
-      createdAt: nowISO()
-    }
-  ];
-  set(DB.USERS, users);
-
-  /* Bikes — 6 bikes, 3 images each */
-  const bikes = [
-    {
-      id: 'bike-bmw',
-      name: 'BMW S1000RR',
-      model: '2024',
-      category: 'سبورت',
-      price: 850000,
-      stock: 3,
-      images: [
-        'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=900&q=80',
-        'https://images.unsplash.com/photo-1591637333184-19aa84b3e01f?w=900&q=80',
-        'https://images.unsplash.com/photo-1558981359-219d6364c9c8?w=900&q=80'
-      ]
-    },
-    {
-      id: 'bike-yamaha',
-      name: 'Yamaha YZF-R1',
-      model: '2024',
-      category: 'سبورت',
-      price: 720000,
-      stock: 2,
-      images: [
-        'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?w=900&q=80',
-        'https://images.unsplash.com/photo-1609630875171-b1321377ee65?w=900&q=80',
-        'https://images.unsplash.com/photo-1591637333184-19aa84b3e01f?w=900&q=80'
-      ]
-    },
-    {
-      id: 'bike-ducati',
-      name: 'Ducati Panigale V4',
-      model: '2024',
-      category: 'سبورت',
-      price: 1250000,
-      stock: 1,
-      images: [
-        'https://images.unsplash.com/photo-1571646034647-52e6ea84b28c?w=900&q=80',
-        'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=900&q=80',
-        'https://images.unsplash.com/photo-1591637333184-19aa84b3e01f?w=900&q=80'
-      ]
-    },
-    {
-      id: 'bike-kawasaki',
-      name: 'Kawasaki Ninja H2',
-      model: '2023',
-      category: 'سبورت',
-      price: 1500000,
-      stock: 2,
-      images: [
-        'https://images.unsplash.com/photo-1558980664-10e7170b5df9?w=900&q=80',
-        'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?w=900&q=80',
-        'https://images.unsplash.com/photo-1591637333184-19aa84b3e01f?w=900&q=80'
-      ]
-    },
-    {
-      id: 'bike-honda',
-      name: 'Honda CBR1000RR',
-      model: '2024',
-      category: 'سبورت',
-      price: 680000,
-      stock: 4,
-      images: [
-        'https://images.unsplash.com/photo-1591637333184-19aa84b3e01f?w=900&q=80',
-        'https://images.unsplash.com/photo-1609630875171-b1321377ee65?w=900&q=80',
-        'https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=900&q=80'
-      ]
-    },
-    {
-      id: 'bike-benelli',
-      name: 'Benelli TNT 600',
-      model: '2024',
-      category: 'naked',
-      price: 320000,
-      stock: 5,
-      images: [
-        'https://images.unsplash.com/photo-1609630875171-b1321377ee65?w=900&q=80',
-        'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?w=900&q=80',
-        'https://images.unsplash.com/photo-1571646034647-52e6ea84b28c?w=900&q=80'
-      ]
-    }
-  ];
-  set(DB.BIKES, bikes);
-
-  /* Seed invoice + order for testing */
-  const seedInvoice = {
-    id: uid(),
-    number: 'INV-0001',
-    customer: 'عميل تجريبي',
-    customerEmail: 'customer@demo.com',
-    bikeId: 'bike-yamaha',
-    bikeName: 'Yamaha YZF-R1',
-    price: 720000,
-    staffId: 'staff-1',
-    staffName: 'أحمد الموظف',
-    createdAt: nowISO()
-  };
-  set(DB.INVOICES, [seedInvoice]);
-
-  const seedOrder = {
-    id: uid(),
-    customer: 'عميل تجريبي',
-    customerEmail: 'customer@demo.com',
-    bikeId: 'bike-bmw',
-    bikeName: 'BMW S1000RR',
-    price: 850000,
-    status: 'pending',
-    createdAt: nowISO()
-  };
-  set(DB.ORDERS, [seedOrder]);
-
-  set(DB.FAVS, {});
-  set(DB.CUSTOM_REQS, []);
-  set(DB.MESSAGES, []);
-
-  localStorage.setItem(DB.SEEDED, '1');
-}
-
 /* =========================================================
    SECTION 2 — AUTH & RBAC
    ========================================================= */
@@ -230,6 +84,7 @@ async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   const profile = await getCurrentProfile(data.user.id);
+  if (!profile) throw new Error('Supabase profile is missing for this account.');
   state.user = { ...profile, id: data.user.id, email: data.user.email };
   return state.user;
 }
@@ -253,6 +108,7 @@ async function signup({ name, email, phone, password }) {
   if (error) throw error;
   if (data.session && data.user) {
     const profile = await getCurrentProfile(data.user.id);
+    if (!profile) throw new Error('Supabase profile is missing for this account.');
     state.user = { ...profile, id: data.user.id, email: data.user.email };
   }
   return { ok: true, requiresEmailConfirmation: !data.session, user: state.user };
@@ -266,9 +122,7 @@ function hasRole(...roles) {
 /* ---------- Sidebar Items (Role-based) ---------- */
 function sidebarItems() {
   const u = currentUser();
-  const pendingReqs = get(DB.CUSTOM_REQS).filter((r) => r.status === 'pending').length;
-  const pendingOrders = get(DB.ORDERS).filter((o) => o.status === 'pending').length;
-  const pendingTotal = pendingReqs + pendingOrders;
+  const pendingTotal = get(DB.CUSTOM_REQS).filter((r) => ['pending', 'reviewing'].includes(r.status)).length;
 
   if (!u) {
     return [
@@ -299,7 +153,6 @@ function sidebarItems() {
     return [
       { section: 'نظام المبيعات' },
       { route: 'pos', label: 'نقطة البيع POS', icon: 'fa-cash-register' },
-      { route: 'target', label: 'تارجت الشهر', icon: 'fa-bullseye' },
       { section: 'المخزن' },
       { route: 'inventory', label: 'المخزن والأسعار', icon: 'fa-boxes-stacked' },
       { section: 'الطلبات' },
@@ -486,10 +339,6 @@ function pageRequest() {
     <p class="page-sub">لم تجد الدراجة التي تريدها؟ اطلبها وسنتواصل معك</p>
     <div class="panel" style="max-width:640px">
       <form id="requestForm" class="form-grid">
-        <div class="form-row">
-          <div class="field"><label>الاسم</label><input name="name" required value="${esc(u ? u.name : '')}"></div>
-          <div class="field"><label>رقم الهاتف</label><input name="phone" required value="${esc(u && u.phone ? u.phone : '')}"></div>
-        </div>
         <div class="field"><label>اسم الدراجة المطلوبة</label>
           <input name="bikeName" required placeholder="مثال: BMW S1000RR"></div>
         <div class="form-row">
@@ -577,13 +426,14 @@ function pageSignup() {
 function pageAccount() {
   const u = currentUser();
   if (!u) return pageLogin();
-  const orders = get(DB.ORDERS).filter((o) => o.customerEmail === u.email);
-  const reqs = get(DB.CUSTOM_REQS).filter((r) => r.customerEmail === u.email);
+  const allRequests = get(DB.CUSTOM_REQS);
+  const orders = allRequests.filter((request) => request.motorcycleId);
+  const reqs = allRequests.filter((request) => !request.motorcycleId);
   return `
     <h2 class="page-title"><i class="fa-solid fa-user"></i> ملفي الشخصي</h2>
     <p class="page-sub">بياناتك، طلباتك، وحالة طلباتك الخاصة</p>
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-receipt"></i></div><div class="stat-label">إجمالي طلباتي</div><div class="stat-value">${orders.length}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-receipt"></i></div><div class="stat-label">إجمالي الطلبات</div><div class="stat-value">${orders.length}</div></div>
       <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-motorcycle"></i></div><div class="stat-label">طلبات خاصة</div><div class="stat-value">${reqs.length}</div></div>
     </div>
     <div class="panel">
@@ -602,7 +452,7 @@ function pageAccount() {
               <td>${esc(r.bikeName)}</td>
               <td>${esc(r.model)}</td>
               <td>${money(r.budget)}</td>
-              <td><span class="status-pill ${r.status}">${r.status === 'pending' ? 'قيد المراجعة' : r.status === 'approved' ? 'تم القبول' : 'مرفوض'}</span></td>
+              <td><span class="status-pill ${r.status}">${esc(requestStatusLabel(r.status))}</span></td>
               <td>${new Date(r.createdAt).toLocaleDateString('ar-EG')}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات خاصة بعد</p></div>`}
@@ -625,19 +475,19 @@ function pageFavorites() {
 function pageOrders() {
   const u = currentUser();
   if (!u) return pageLogin();
-  const orders = get(DB.ORDERS).filter((o) => o.customerEmail === u.email);
+  const orders = get(DB.CUSTOM_REQS).filter((request) => request.motorcycleId);
   return `
     <h2 class="page-title"><i class="fa-solid fa-receipt"></i> طلباتي</h2>
-    <p class="page-sub">سجل طلبات الشراء الخاصة بك</p>
+    <p class="page-sub">طلباتك المسجلة في Supabase</p>
     <div class="panel">
       ${orders.length ? `
         <div class="table-wrap"><table>
-          <thead><tr><th>الدراجة</th><th>السعر</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+          <thead><tr><th>الدراجة</th><th>الميزانية</th><th>الحالة</th><th>التاريخ</th></tr></thead>
           <tbody>${orders.map((o) => `
             <tr>
               <td>${esc(o.bikeName)}</td>
-              <td style="color:var(--red);font-weight:700">${money(o.price)}</td>
-              <td><span class="status-pill ${o.status}">${o.status === 'pending' ? 'قيد المراجعة' : o.status === 'approved' ? 'مقبول' : 'مرفوض'}</span></td>
+              <td style="color:var(--red);font-weight:700">${money(o.budget)}</td>
+              <td><span class="status-pill ${o.status}">${esc(requestStatusLabel(o.status))}</span></td>
               <td>${new Date(o.createdAt).toLocaleDateString('ar-EG')}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات</p></div>`}
@@ -651,135 +501,9 @@ function pageOrders() {
 function pagePOS() {
   const u = currentUser();
   if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
-  const bikes = get(DB.BIKES).filter((b) => b.stock > 0);
-  return `
-    <h2 class="page-title"><i class="fa-solid fa-cash-register"></i> نقطة البيع POS</h2>
-    <p class="page-sub">سجل عملية بيع جديدة وأصدر فاتورة قابلة للطباعة</p>
-    <div class="pos-grid">
-      <div class="panel">
-        <div class="panel-title"><i class="fa-solid fa-cart-plus"></i> بيانات البيع</div>
-        <form id="posForm" class="form-grid">
-          <div class="field"><label>اسم العميل</label><input name="customer" required></div>
-          <div class="field"><label>إيميل العميل (اختياري)</label><input type="email" name="customerEmail"></div>
-          <div class="field"><label>اختر الدراجة</label>
-            <select name="bikeId" id="posBikeSelect" required>
-              <option value="">-- اختر --</option>
-              ${bikes.map((b) => `<option value="${esc(b.id)}" data-price="${b.price}">${esc(b.name)} (${esc(b.model)}) — ${money(b.price)} — متبقي ${b.stock}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field"><label>السعر النهائي (ج.م)</label>
-            <input type="number" name="price" id="posPrice" required min="0"></div>
-          <button class="btn btn-primary btn-block" type="submit">
-            <i class="fa-solid fa-file-invoice-dollar"></i> إتمام البيع وإصدار فاتورة
-          </button>
-        </form>
-      </div>
-      <div class="panel">
-        <div class="panel-title"><i class="fa-solid fa-clock-rotate-left"></i> آخر فواتيري</div>
-        <div id="myInvoicesMini"></div>
-      </div>
-    </div>`;
+  return `<h2 class="page-title"><i class="fa-solid fa-cash-register"></i> نقطة البيع POS</h2><div class="panel"><p>تسجيل المبيعات والفواتير غير مفعّل بعد؛ لن تُسجّل عملية أو يُخصم مخزون من المتصفح.</p></div>`;
 }
 
-function renderMyInvoicesMini() {
-  const u = currentUser();
-  if (!u) return;
-  const el = $('#myInvoicesMini');
-  if (!el) return;
-  const invoices = get(DB.INVOICES).filter((i) => i.staffId === u.id).slice(-5).reverse();
-  if (!invoices.length) {
-    el.innerHTML = `<div class="empty"><i class="fa-solid fa-receipt"></i><p>لا توجد فواتير بعد</p></div>`;
-    return;
-  }
-  el.innerHTML = invoices.map((inv) => `
-    <div class="flex-between" style="padding:10px 0;border-bottom:1px solid var(--gray-100)">
-      <div>
-        <b style="font-size:13px">#${esc(inv.number)}</b>
-        <div style="font-size:11px;color:var(--gray-500)">${esc(inv.bikeName)}</div>
-      </div>
-      <div style="text-align:left">
-        <b class="text-red" style="font-size:14px">${money(inv.price)}</b>
-        <div style="font-size:10px;color:var(--gray-400)">${new Date(inv.createdAt).toLocaleDateString('ar-EG')}</div>
-      </div>
-    </div>`).join('');
-}
-
-function handlePOSSubmit(formData) {
-  const u = currentUser();
-  if (!u) return;
-  const bikeId = formData.get('bikeId');
-  const bikes = get(DB.BIKES);
-  const bike = bikes.find((b) => b.id === bikeId);
-  if (!bike) return toast('اختر دراجة صحيحة', 'error');
-  if (bike.stock <= 0) return toast('نفذ المخزون من هذه الدراجة', 'error');
-
-  const price = Number(formData.get('price'));
-  if (!price || price <= 0) return toast('أدخل سعراً صحيحاً', 'error');
-
-  const customer = safeName(formData.get('customer'));
-  const customerEmail = String(formData.get('customerEmail') || '').trim();
-  if (!customer) return toast('اسم العميل مطلوب', 'error');
-
-  bike.stock -= 1;
-  set(DB.BIKES, bikes);
-
-  const invoices = get(DB.INVOICES);
-  const nextNum = invoices.length + 1;
-  const number = 'INV-' + String(nextNum).padStart(4, '0');
-  const inv = {
-    id: uid(),
-    number,
-    customer,
-    customerEmail,
-    bikeId: bike.id,
-    bikeName: bike.name,
-    price,
-    staffId: u.id,
-    staffName: u.name,
-    createdAt: nowISO()
-  };
-  invoices.push(inv);
-  set(DB.INVOICES, invoices);
-
-  showInvoiceModal(inv);
-  renderMyInvoicesMini();
-  renderSidebar();
-  toast('تمت العملية بنجاح', 'success');
-}
-
-function showInvoiceModal(inv) {
-  openModal(`
-    <div class="modal-header">
-      <h3><i class="fa-solid fa-file-invoice"></i> فاتورة #${esc(inv.number)}</h3>
-      <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <div class="invoice" id="printableInvoice">
-      <div class="invoice-header">
-        <div>
-          <div class="logo">El Khayal <span>Motors</span></div>
-          <div style="font-size:11px;color:var(--gray-500)">معرض الدراجات النارية</div>
-        </div>
-        <div class="invoice-meta">
-          <div><b>${esc(inv.number)}</b></div>
-          <div>${new Date(inv.createdAt).toLocaleString('ar-EG')}</div>
-        </div>
-      </div>
-      <div class="flex-between" style="font-size:13px;margin-bottom:10px">
-        <div><b>العميل:</b> ${esc(inv.customer)}</div>
-        <div><b>الموظف:</b> ${esc(inv.staffName)}</div>
-      </div>
-      <table class="invoice-table">
-        <thead><tr><th>المنتج</th><th>السعر</th></tr></thead>
-        <tbody><tr><td>${esc(inv.bikeName)}</td><td>${money(inv.price)}</td></tr></tbody>
-      </table>
-      <div class="invoice-total"><span>الإجمالي</span><span>${money(inv.price)}</span></div>
-      <p style="text-align:center;font-size:11px;color:var(--gray-400);margin-top:14px">شكراً لتعاملكم مع El Khayal Motors</p>
-    </div>
-    <button class="btn btn-primary btn-block mt-2" id="printInvoiceBtn">
-      <i class="fa-solid fa-print"></i> طباعة الفاتورة
-    </button>
-  `);
-}
 
 /* =========================================================
    SECTION 5 — ADMIN & STAFF MONITORING
@@ -788,32 +512,7 @@ function showInvoiceModal(inv) {
 function pageTarget() {
   const u = currentUser();
   if (!u) return pageLogin();
-  const now = new Date();
-  const invoices = get(DB.INVOICES).filter((i) => {
-    const d = new Date(i.createdAt);
-    return i.staffId === u.id && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  });
-  const achieved = invoices.reduce((s, i) => s + i.price, 0);
-  const target = u.target || 0;
-  const percent = target ? Math.min(100, Math.round((achieved / target) * 100)) : 0;
-  const remaining = Math.max(0, target - achieved);
-
-  return `
-    <h2 class="page-title"><i class="fa-solid fa-bullseye"></i> تارجت الشهر</h2>
-    <p class="page-sub">مبيعاتك الشهرية مقارنة بالهدف المحدد</p>
-    <div class="panel">
-      <div class="flex-between mb-1">
-        <span style="font-weight:700">${esc(u.name)}</span>
-        <span class="text-red" style="font-weight:900">${percent}%</span>
-      </div>
-      <div class="progress-outer"><div class="progress-inner" style="width:${percent}%">${percent}%</div></div>
-      <div class="stats-grid" style="margin-top:18px;margin-bottom:0">
-        <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-coins"></i></div><div class="stat-label">محقق</div><div class="stat-value" style="font-size:18px">${money(achieved)}</div></div>
-        <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-flag-checkered"></i></div><div class="stat-label">التارجت</div><div class="stat-value" style="font-size:18px">${money(target)}</div></div>
-        <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-receipt"></i></div><div class="stat-label">عدد الفواتير</div><div class="stat-value" style="font-size:18px">${invoices.length}</div></div>
-        <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-hourglass-half"></i></div><div class="stat-label">المتبقي</div><div class="stat-value" style="font-size:18px">${money(remaining)}</div></div>
-      </div>
-    </div>`;
+  return `<h2 class="page-title"><i class="fa-solid fa-bullseye"></i> تارجت الشهر</h2><div class="panel"><p>تقارير الأهداف والمبيعات غير مفعّلة حتى تُحفظ بيانات المبيعات في Supabase.</p></div>`;
 }
 
 function pageInventory() {
@@ -853,43 +552,15 @@ function pageInventory() {
 function pageDashboard() {
   const u = currentUser();
   if (!u || u.role !== 'admin') return pageLogin();
-  const invoices = get(DB.INVOICES);
-  const bikes = get(DB.BIKES);
-  const users = get(DB.USERS);
-  const orders = get(DB.ORDERS);
-  const reqs = get(DB.CUSTOM_REQS);
-  const totalSales = invoices.reduce((s, i) => s + i.price, 0);
-  const totalStock = bikes.reduce((s, b) => s + b.stock, 0);
-  const customers = users.filter((x) => x.role === 'customer').length;
-  const pendingTotal =
-    orders.filter((o) => o.status === 'pending').length +
-    reqs.filter((r) => r.status === 'pending').length;
-
-  return `
-    <h2 class="page-title"><i class="fa-solid fa-chart-line"></i> لوحة الإحصائيات</h2>
-    <p class="page-sub">نظرة عامة على أداء المعرض</p>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-sack-dollar"></i></div><div class="stat-label">إجمالي المبيعات</div><div class="stat-value" style="font-size:18px">${money(totalSales)}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-motorcycle"></i></div><div class="stat-label">الدراجات بالمخزن</div><div class="stat-value">${totalStock}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-users"></i></div><div class="stat-label">العملاء</div><div class="stat-value">${customers}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-bell"></i></div><div class="stat-label">طلبات جديدة</div><div class="stat-value">${pendingTotal}</div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title"><i class="fa-solid fa-receipt"></i> آخر الفواتير</div>
-      ${invoices.length ? `
-      <div class="table-wrap"><table>
-        <thead><tr><th>#</th><th>العميل</th><th>الدراجة</th><th>السعر</th><th>الموظف</th><th>التاريخ</th></tr></thead>
-        <tbody>${invoices.slice(-8).reverse().map((i) => `
-          <tr>
-            <td>#${esc(i.number)}</td>
-            <td>${esc(i.customer)}</td>
-            <td>${esc(i.bikeName)}</td>
-            <td class="text-red" style="font-weight:700">${money(i.price)}</td>
-            <td>${esc(i.staffName)}</td>
-            <td>${new Date(i.createdAt).toLocaleDateString('ar-EG')}</td>
-          </tr>`).join('')}</tbody>
-      </table></div>` : `<div class="empty"><i class="fa-solid fa-receipt"></i><p>لا توجد فواتير بعد</p></div>`}
-    </div>`;
+  const bikes = get(DB.BIKES), requests = get(DB.CUSTOM_REQS);
+  const totalStock = bikes.reduce((sum, bike) => sum + Number(bike.stock || 0), 0);
+  const pending = requests.filter((r) => ['pending', 'reviewing'].includes(r.status)).length;
+  return `<h2 class="page-title"><i class="fa-solid fa-chart-line"></i> لوحة الإحصائيات</h2>
+    <p class="page-sub">ملخص من بيانات Supabase</p><div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-motorcycle"></i></div><div class="stat-label">الدراجات المسجلة</div><div class="stat-value">${bikes.length}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="stat-label">إجمالي المخزون</div><div class="stat-value">${totalStock}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-clipboard-list"></i></div><div class="stat-label">طلبات العملاء المفتوحة</div><div class="stat-value">${pending}</div></div></div>
+    <div class="panel"><p>تقارير المبيعات والفواتير غير متاحة حتى تُربط بجدول محفوظ في Supabase.</p></div>`;
 }
 
 function pageManageBikes() {
@@ -898,7 +569,7 @@ function pageManageBikes() {
   const bikes = get(DB.BIKES);
   return `
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> إدارة الدراجات</h2>
-    <p class="page-sub">إضافة، تعديل، وحذف الدراجات</p>
+    <p class="page-sub">إضافة وتعديل الدراجات المحفوظة في Supabase</p>
     <div class="panel">
       <button class="btn btn-primary mb-2" id="addBikeBtn">
         <i class="fa-solid fa-plus"></i> إضافة دراجة جديدة
@@ -915,7 +586,6 @@ function pageManageBikes() {
             <td>${b.stock}</td>
             <td style="display:flex;gap:6px">
               <button class="btn btn-outline btn-sm" data-edit-bike="${esc(b.id)}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
-              <button class="btn btn-danger btn-sm" data-del-bike="${esc(b.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button>
             </td>
           </tr>`).join('')}</tbody>
       </table></div>
@@ -924,7 +594,7 @@ function pageManageBikes() {
 
 function bikeFormHTML(bike) {
   const isEdit = !!bike;
-  const b = bike || { id: '', name: '', model: '', category: '', price: '', stock: 0, images: [] };
+  const b = bike || { id: '', name: '', model: '', category: '', price: '', stock: 0, images: [], status: 'draft' };
   return `
     <div class="modal-header">
       <h3><i class="fa-solid fa-${isEdit ? 'pen' : 'plus'}"></i> ${isEdit ? 'تعديل' : 'إضافة'} دراجة</h3>
@@ -939,11 +609,24 @@ function bikeFormHTML(bike) {
         <div class="field"><label>الفئة</label><input name="category" required value="${esc(b.category)}" placeholder="سبورت / naked ..."></div>
         <div class="field"><label>السعر</label><input type="number" name="price" required min="0" value="${esc(b.price)}"></div>
       </div>
-      <div class="field"><label>المخزون</label><input type="number" name="stock" required min="0" value="${esc(b.stock)}"></div>
+      <div class="form-row">
+        <div class="field"><label>المخزون</label><input type="number" name="stock" required min="0" value="${esc(b.stock)}"></div>
+        <div class="field"><label>حالة العرض</label><select name="status">
+          <option value="draft" ${b.status === 'draft' ? 'selected' : ''}>مسودة</option>
+          <option value="available" ${b.status === 'available' ? 'selected' : ''}>متاحة</option>
+          <option value="reserved" ${b.status === 'reserved' ? 'selected' : ''}>محجوزة</option>
+          <option value="sold" ${b.status === 'sold' ? 'selected' : ''}>مباعة</option>
+          <option value="unavailable" ${b.status === 'unavailable' ? 'selected' : ''}>غير متاحة</option>
+        </select></div>
+      </div>
       <div class="field">
-        <label>روابط الصور (كل رابط في سطر)</label>
+        <label>روابط الصور العامة (كل رابط في سطر)</label>
         <textarea name="images" rows="4" placeholder="https://...">${esc((b.images || []).join('\n'))}</textarea>
-        <span class="hint">أضف 3 روابط لتظهر كسلايدر</span>
+      </div>
+      <div class="field">
+        <label>رفع صور إلى Telegram</label>
+        <input type="file" name="photos" accept="image/*" multiple>
+        <span class="hint">ترتبط الصور بالدراجة وتُسجل في Supabase. اتركه فارغًا لتخطي الرفع.</span>
       </div>
       <button class="btn btn-primary btn-block" type="submit">
         <i class="fa-solid fa-floppy-disk"></i> حفظ
@@ -954,88 +637,27 @@ function bikeFormHTML(bike) {
 function pageStaff() {
   const u = currentUser();
   if (!u || u.role !== 'admin') return pageLogin();
-  const staff = get(DB.USERS).filter((x) => x.role === 'staff');
-  const invoices = get(DB.INVOICES);
-  return `
-    <h2 class="page-title"><i class="fa-solid fa-users-gear"></i> الموظفين والأداء</h2>
-    <p class="page-sub">إدارة الموظفين ومتابعة التارجت</p>
-    <div class="panel">
-      <button class="btn btn-primary mb-2" id="addStaffBtn">
-        <i class="fa-solid fa-user-plus"></i> إضافة موظف
-      </button>
-      <div class="table-wrap"><table>
-        <thead><tr><th>الاسم</th><th>الإيميل</th><th>التارجت</th><th>المحقق</th><th>النسبة</th><th>إجراءات</th></tr></thead>
-        <tbody>${staff.map((s) => {
-          const achieved = invoices.filter((i) => i.staffId === s.id).reduce((sum, i) => sum + i.price, 0);
-          const percent = s.target ? Math.min(100, Math.round((achieved / s.target) * 100)) : 0;
-          return `<tr>
-            <td><b>${esc(s.name)}</b></td>
-            <td>${esc(s.email)}</td>
-            <td>${money(s.target || 0)}</td>
-            <td class="text-red" style="font-weight:700">${money(achieved)}</td>
-            <td style="min-width:130px">
-              <div class="progress-outer" style="height:8px;margin:0"><div class="progress-inner" style="width:${percent}%"></div></div>
-              <small>${percent}%</small>
-            </td>
-            <td style="display:flex;gap:6px">
-              <button class="btn btn-outline btn-sm" data-view-staff="${esc(s.id)}" title="عرض السجل"><i class="fa-solid fa-eye"></i></button>
-              <button class="btn btn-danger btn-sm" data-del-staff="${esc(s.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button>
-            </td>
-          </tr>`;
-        }).join('') || `<tr><td colspan="6" class="text-center">لا يوجد موظفون</td></tr>`}</tbody>
-      </table></div>
-    </div>`;
+  const staff = get(DB.USERS).filter((entry) => entry.role === 'staff');
+  return `<h2 class="page-title"><i class="fa-solid fa-users-gear"></i> الموظفون</h2>
+    <p class="page-sub">حسابات الموظفين المقروءة من Supabase</p><div class="panel"><div class="table-wrap"><table>
+      <thead><tr><th>الاسم</th><th>الهاتف</th></tr></thead>
+      <tbody>${staff.map((person) => `<tr><td><b>${esc(person.name || '—')}</b></td><td>${esc(person.phone || '—')}</td></tr>`).join('') || `<tr><td colspan="2" class="text-center">لا توجد حسابات موظفين ظاهرة</td></tr>`}</tbody>
+    </table></div><p class="hint">إنشاء حساب موظف يحتاج إجراءً خادميًا آمنًا؛ النموذج المحلي القديم لم ينشئ حساب Supabase.</p></div>`;
+}
+
+function requestStatusLabel(status) {
+  return ({ pending:'قيد المراجعة', reviewing:'جارٍ التواصل', approved:'مقبول', rejected:'مرفوض', completed:'مكتمل' })[status] || status || '—';
 }
 
 function pageStaffOrders() {
   const u = currentUser();
   if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
-  const reqs = get(DB.CUSTOM_REQS);
-  const orders = get(DB.ORDERS);
-  return `
-    <h2 class="page-title"><i class="fa-solid fa-clipboard-list"></i> طلبات العملاء</h2>
-    <p class="page-sub">مراجعة وتأكيد الطلبات</p>
-
-    <div class="panel">
-      <div class="panel-title"><i class="fa-solid fa-motorcycle"></i> طلبات الشراء</div>
-      ${orders.length ? `
-      <div class="table-wrap"><table>
-        <thead><tr><th>العميل</th><th>الدراجة</th><th>السعر</th><th>الحالة</th><th>التاريخ</th><th>إجراء</th></tr></thead>
-        <tbody>${orders.slice().reverse().map((o) => `
-          <tr>
-            <td>${esc(o.customer)}${o.customerEmail ? `<br><small style="color:var(--gray-400)">${esc(o.customerEmail)}</small>` : ''}</td>
-            <td>${esc(o.bikeName)}</td>
-            <td>${money(o.price)}</td>
-            <td><span class="status-pill ${o.status}">${o.status === 'pending' ? 'قيد المراجعة' : o.status === 'approved' ? 'مقبول' : 'مرفوض'}</span></td>
-            <td>${new Date(o.createdAt).toLocaleDateString('ar-EG')}</td>
-            <td style="display:flex;gap:4px">
-              <button class="btn btn-primary btn-sm" data-approve-order="${esc(o.id)}" ${o.status !== 'pending' ? 'disabled' : ''} title="قبول"><i class="fa-solid fa-check"></i></button>
-              <button class="btn btn-danger btn-sm" data-reject-order="${esc(o.id)}" ${o.status !== 'pending' ? 'disabled' : ''} title="رفض"><i class="fa-solid fa-xmark"></i></button>
-            </td>
-          </tr>`).join('')}</tbody>
-      </table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات شراء</p></div>`}
-    </div>
-
-    <div class="panel">
-      <div class="panel-title"><i class="fa-solid fa-star"></i> الطلبات الخاصة</div>
-      ${reqs.length ? `
-      <div class="table-wrap"><table>
-        <thead><tr><th>العميل</th><th>الهاتف</th><th>الدراجة</th><th>الموديل</th><th>الميزانية</th><th>الحالة</th><th>إجراء</th></tr></thead>
-        <tbody>${reqs.slice().reverse().map((r) => `
-          <tr>
-            <td>${esc(r.name)}</td>
-            <td>${esc(r.phone)}</td>
-            <td>${esc(r.bikeName)}</td>
-            <td>${esc(r.model)}</td>
-            <td>${money(r.budget)}</td>
-            <td><span class="status-pill ${r.status}">${r.status === 'pending' ? 'قيد المراجعة' : r.status === 'approved' ? 'مقبول' : 'مرفوض'}</span></td>
-            <td style="display:flex;gap:4px">
-              <button class="btn btn-primary btn-sm" data-approve-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''} title="قبول"><i class="fa-solid fa-check"></i></button>
-              <button class="btn btn-danger btn-sm" data-reject-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''} title="رفض"><i class="fa-solid fa-xmark"></i></button>
-            </td>
-          </tr>`).join('')}</tbody>
-      </table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات خاصة</p></div>`}
-    </div>`;
+  const requests = get(DB.CUSTOM_REQS);
+  return `<h2 class="page-title"><i class="fa-solid fa-clipboard-list"></i> طلبات العملاء</h2>
+    <p class="page-sub">الطلبات محفوظة في Supabase وتُعرض وفق صلاحيات الحساب</p><div class="panel">
+      ${requests.length ? `<div class="table-wrap"><table><thead><tr><th>العميل</th><th>الهاتف</th><th>المطلوب</th><th>السنة</th><th>الميزانية</th><th>الحالة</th><th>التاريخ</th><th>إجراء</th></tr></thead><tbody>
+      ${requests.map((r) => `<tr><td>${esc(r.customerName || '—')}</td><td>${esc(r.customerPhone || '—')}</td><td>${esc(r.bikeName || '—')}</td><td>${esc(r.model || '—')}</td><td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td><td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td><td><button class="btn btn-primary btn-sm" data-approve-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''}>✓</button> <button class="btn btn-danger btn-sm" data-reject-req="${esc(r.id)}" ${r.status !== 'pending' ? 'disabled' : ''}>×</button></td></tr>`).join('')}
+      </tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد طلبات</p></div>`}</div>`;
 }
 
 /* =========================================================
@@ -1118,7 +740,6 @@ function render() {
   main.innerHTML = fn();
   applyLanguage(document);
 
-  if (state.route === 'pos') renderMyInvoicesMini();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -1179,6 +800,7 @@ async function confirmBuy(bikeId) {
   });
   if (error) return toast(error.message, 'error');
   closeModal();
+  await loadCustomerData();
   toast('تم إرسال طلبك بنجاح', 'success');
   navigate('orders');
 }
@@ -1280,102 +902,21 @@ document.addEventListener('click', async (e) => {
     if (bike) openModal(bikeFormHTML(bike));
     return;
   }
-  const delBike = e.target.closest('[data-del-bike]');
-  if (delBike) {
-    if (!confirm('هل أنت متأكد من حذف الدراجة؟')) return;
-    const bikes = get(DB.BIKES).filter((b) => b.id !== delBike.dataset.delBike);
-    set(DB.BIKES, bikes);
-    toast('تم الحذف', 'success');
+
+
+  /* Update customer request status in Supabase under RLS. */
+  const statusButton = e.target.closest('[data-approve-req], [data-reject-req]');
+  if (statusButton) {
+    const id = statusButton.dataset.approveReq || statusButton.dataset.rejectReq;
+    const status = statusButton.dataset.approveReq ? 'approved' : 'rejected';
+    const { error } = await supabase.from('customer_requests').update({ status }).eq('id', id);
+    if (error) { toast(error.message, 'error'); return; }
+    await loadBusinessData();
+    toast(status === 'approved' ? 'تم قبول الطلب' : 'تم رفض الطلب', 'success');
     render();
     return;
   }
 
-  /* Admin — staff */
-  if (e.target.closest('#addStaffBtn')) {
-    openModal(`
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-user-plus"></i> إضافة موظف</h3>
-        <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <form id="staffForm" class="form-grid">
-        <div class="field"><label>الاسم</label><input name="name" required></div>
-        <div class="field"><label>الإيميل</label><input type="email" name="email" required></div>
-        <div class="field"><label>الباسورد</label><input type="password" name="password" required minlength="6"></div>
-        <div class="field"><label>التارجت الشهري (ج.م)</label><input type="number" name="target" required value="100000" min="0"></div>
-        <button class="btn btn-primary btn-block" type="submit"><i class="fa-solid fa-floppy-disk"></i> إضافة</button>
-      </form>
-    `);
-    return;
-  }
-  const delStaff = e.target.closest('[data-del-staff]');
-  if (delStaff) {
-    if (!confirm('حذف الموظف؟')) return;
-    const users = get(DB.USERS).filter((u) => u.id !== delStaff.dataset.delStaff);
-    set(DB.USERS, users);
-    toast('تم الحذف', 'success');
-    render();
-    return;
-  }
-  const viewStaff = e.target.closest('[data-view-staff]');
-  if (viewStaff) {
-    const sid = viewStaff.dataset.viewStaff;
-    const staff = get(DB.USERS).find((u) => u.id === sid);
-    if (!staff) return;
-    const invs = get(DB.INVOICES).filter((i) => i.staffId === sid);
-    const total = invs.reduce((s, i) => s + i.price, 0);
-    openModal(`
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-user"></i> ${esc(staff.name)}</h3>
-        <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="stats-grid" style="grid-template-columns:1fr 1fr">
-        <div class="stat-card"><div class="stat-label">التارجت</div><div class="stat-value" style="font-size:16px">${money(staff.target || 0)}</div></div>
-        <div class="stat-card"><div class="stat-label">المحقق</div><div class="stat-value text-red" style="font-size:16px">${money(total)}</div></div>
-      </div>
-      <h4 class="mb-2" style="margin-top:14px">سجل الفواتير (${invs.length})</h4>
-      ${invs.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>#</th><th>العميل</th><th>الدراجة</th><th>السعر</th><th>التاريخ</th></tr></thead>
-        <tbody>${invs.map((i) => `<tr>
-          <td>#${esc(i.number)}</td>
-          <td>${esc(i.customer)}</td>
-          <td>${esc(i.bikeName)}</td>
-          <td class="text-red" style="font-weight:700">${money(i.price)}</td>
-          <td>${new Date(i.createdAt).toLocaleDateString('ar-EG')}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>` : `<div class="empty"><p>لا توجد فواتير</p></div>`}
-    `);
-    return;
-  }
-
-  /* Order approval */
-  const apOrder = e.target.closest('[data-approve-order]');
-  if (apOrder) {
-    const orders = get(DB.ORDERS);
-    const o = orders.find((x) => x.id === apOrder.dataset.approveOrder);
-    if (o) { o.status = 'approved'; set(DB.ORDERS, orders); toast('تم القبول', 'success'); render(); }
-    return;
-  }
-  const rjOrder = e.target.closest('[data-reject-order]');
-  if (rjOrder) {
-    const orders = get(DB.ORDERS);
-    const o = orders.find((x) => x.id === rjOrder.dataset.rejectOrder);
-    if (o) { o.status = 'rejected'; set(DB.ORDERS, orders); toast('تم الرفض', 'info'); render(); }
-    return;
-  }
-  const apReq = e.target.closest('[data-approve-req]');
-  if (apReq) {
-    const reqs = get(DB.CUSTOM_REQS);
-    const r = reqs.find((x) => x.id === apReq.dataset.approveReq);
-    if (r) { r.status = 'approved'; set(DB.CUSTOM_REQS, reqs); toast('تم القبول', 'success'); render(); }
-    return;
-  }
-  const rjReq = e.target.closest('[data-reject-req]');
-  if (rjReq) {
-    const reqs = get(DB.CUSTOM_REQS);
-    const r = reqs.find((x) => x.id === rjReq.dataset.rejectReq);
-    if (r) { r.status = 'rejected'; set(DB.CUSTOM_REQS, reqs); toast('تم الرفض', 'info'); render(); }
-    return;
-  }
 });
 
 /* ---------- Event: Submit Delegation ---------- */
@@ -1388,6 +929,9 @@ document.addEventListener('submit', async (e) => {
     const fd = new FormData(form);
     try {
       const u = await login(fd.get('email'), fd.get('password'));
+      if (u.role === 'customer') await loadCustomerData();
+      else { await loadBusinessData(); await loadStaffDirectory(); }
+      await loadMotorcycles();
       toast(`أهلاً ${u.name}`, 'success');
       const route = u.role === 'admin' ? 'dashboard' : u.role === 'staff' ? 'pos' : 'home';
       navigate(route);
@@ -1404,6 +948,8 @@ document.addEventListener('submit', async (e) => {
         toast('افتح رسالة التأكيد في بريدك لإكمال إنشاء الحساب', 'info');
         navigate('login');
       } else {
+        await loadCustomerData();
+        await loadMotorcycles();
         toast('تم إنشاء الحساب بنجاح', 'success');
         navigate('home');
       }
@@ -1424,6 +970,7 @@ document.addEventListener('submit', async (e) => {
       notes: safeName(fd.get('notes')) || null
     });
     if (error) { toast(error.message, 'error'); return; }
+    await loadCustomerData();
     toast('تم إرسال طلبك، سنتواصل معك قريباً', 'success');
     form.reset();
     renderSidebar();
@@ -1446,77 +993,47 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
-  /* POS */
-  if (form.id === 'posForm') {
-    handlePOSSubmit(new FormData(form));
-    form.querySelector('input[name="customer"]').value = '';
-    form.querySelector('input[name="customerEmail"]').value = '';
-    form.querySelector('#posBikeSelect').value = '';
-    form.querySelector('#posPrice').value = '';
-    return;
-  }
-
-  /* Bike form */
+  /* Motorcycle catalogue data and Telegram-backed images are stored through Supabase. */
   if (form.id === 'bikeForm') {
     const fd = new FormData(form);
     const id = form.dataset.id;
-    const images = String(fd.get('images') || '')
-      .split('\n').map((s) => s.trim()).filter(Boolean);
-    const bikes = get(DB.BIKES);
-    if (id) {
-      const b = bikes.find((x) => x.id === id);
-      if (b) {
-        Object.assign(b, {
-          name: safeName(fd.get('name')),
-          model: safeName(fd.get('model')),
-          category: safeName(fd.get('category')),
-          price: Number(fd.get('price')) || 0,
-          stock: Number(fd.get('stock')) || 0,
-          images
-        });
+    const images = String(fd.get('images') || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    const values = {
+      name: safeName(fd.get('name')),
+      model_year: Number(fd.get('model')) || null,
+      category: safeName(fd.get('category')),
+      price: Number(fd.get('price')) || 0,
+      stock: Number(fd.get('stock')) || 0,
+      status: String(fd.get('status') || 'draft'),
+      image_urls: images
+    };
+    const result = id
+      ? await supabase.from('motorcycles').update(values).eq('id', id).select('id').single()
+      : await supabase.from('motorcycles').insert(values).select('id').single();
+    if (result.error) { toast(result.error.message, 'error'); return; }
+
+    const savedId = result.data.id;
+    const photos = fd.getAll('photos').filter((file) => file instanceof File && file.size > 0);
+    let uploadFailure = null;
+    for (const photo of photos) {
+      const body = new FormData();
+      body.append('photo', photo, photo.name);
+      body.append('motorcycle_id', savedId);
+      const { data, error } = await supabase.functions.invoke('telegram-photo-upload', { body });
+      if (error || !data?.photo_asset?.id) {
+        uploadFailure = error?.message || 'تعذر تأكيد حفظ صورة في سجل الصور';
+        break;
       }
-    } else {
-      bikes.push({
-        id: uid(),
-        name: safeName(fd.get('name')),
-        model: safeName(fd.get('model')),
-        category: safeName(fd.get('category')),
-        price: Number(fd.get('price')) || 0,
-        stock: Number(fd.get('stock')) || 0,
-        images
-      });
     }
-    set(DB.BIKES, bikes);
+    await loadMotorcycles();
     closeModal();
-    toast('تم الحفظ', 'success');
     render();
+    if (uploadFailure) toast(`تم حفظ بيانات الدراجة، لكن رفع الصور توقف: ${uploadFailure}`, 'error');
+    else toast(photos.length ? 'تم حفظ الدراجة وربط الصور في Telegram وSupabase' : 'تم حفظ الدراجة في Supabase', 'success');
     return;
   }
 
-  /* Staff form */
-  if (form.id === 'staffForm') {
-    const fd = new FormData(form);
-    const users = get(DB.USERS);
-    const email = String(fd.get('email') || '').trim();
-    if (users.some((u) => String(u.email).toLowerCase() === email.toLowerCase())) {
-      toast('الإيميل مستخدم', 'error');
-      return;
-    }
-    users.push({
-      id: uid(),
-      name: safeName(fd.get('name')),
-      email,
-      password: String(fd.get('password') || ''),
-      role: 'staff',
-      target: Number(fd.get('target')) || 0,
-      createdAt: nowISO()
-    });
-    set(DB.USERS, users);
-    closeModal();
-    toast('تمت إضافة الموظف', 'success');
-    render();
-    return;
-  }
+
 });
 
 /* ---------- Event: Input / Change ---------- */
@@ -1536,13 +1053,6 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.id === 'filterCat') { state.filterCat = e.target.value; render(); }
   if (e.target.id === 'filterPrice') { state.filterPrice = e.target.value; render(); }
-  if (e.target.id === 'posBikeSelect') {
-    const opt = e.target.selectedOptions[0];
-    if (opt && opt.dataset.price) {
-      const priceInput = $('#posPrice');
-      if (priceInput) priceInput.value = opt.dataset.price;
-    }
-  }
 });
 
 /* ---------- Keyboard A11y ---------- */
@@ -1554,38 +1064,75 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ---------- Init ---------- */
+async function loadMotorcycles() {
+  if (!supabase) return;
+  let query = supabase.from('motorcycles')
+    .select('id,name,model_year,category,price,stock,image_urls,status')
+    .order('created_at', { ascending: false });
+  if (!state.user || !['staff', 'admin'].includes(state.user.role)) query = query.eq('status', 'available');
+  const { data, error } = await query;
+  if (error) { console.error('Catalogue load failed', error); return; }
+  state.bikes = (data || []).map((row) => ({
+    id: row.id, name: row.name, model: String(row.model_year || ''), category: row.category,
+    price: Number(row.price), stock: row.stock, images: row.image_urls || [], status: row.status
+  }));
+  set(DB.BIKES, state.bikes);
+}
+
+async function loadCustomerData() {
+  const user = state.user;
+  if (!user || !supabase) return;
+  const [{ data: requests, error: requestError }, { data: favorites, error: favoriteError }] = await Promise.all([
+    supabase.from('customer_requests').select('id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at').eq('client_user_id', user.id).order('created_at', { ascending: false }),
+    supabase.from('favorites').select('motorcycle_id').eq('user_id', user.id)
+  ]);
+  if (requestError) console.error('Customer request load failed', requestError);
+  if (favoriteError) console.error('Favorites load failed', favoriteError);
+  set(DB.CUSTOM_REQS, (requests || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
+  set(DB.ORDERS, []);
+  set(DB.FAVS, { [user.id]: (favorites || []).map((f) => f.motorcycle_id) });
+}
+
+async function loadBusinessData() {
+  if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
+  const { data: requests, error } = await supabase.from('customer_requests').select('id,client_user_id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at').order('created_at', { ascending: false });
+  if (error) { console.error('Business request load failed', error); return; }
+  const ids = [...new Set((requests || []).map((r) => r.client_user_id).filter(Boolean))];
+  const profileResult = ids.length ? await supabase.from('profiles').select('id,full_name,phone').in('id', ids) : {data:[],error:null};
+  if (profileResult.error) console.error('Request profile load failed', profileResult.error);
+  const profiles = new Map((profileResult.data || []).map((p) => [p.id, p]));
+  set(DB.CUSTOM_REQS, (requests || []).map((r) => { const p = profiles.get(r.client_user_id) || {}; return {id:r.id,clientUserId:r.client_user_id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerName:p.full_name || '',customerPhone:p.phone || '',notes:r.notes || ''}; }));
+}
+
+async function loadStaffDirectory() {
+  if (!state.user || state.user.role !== 'admin' || !supabase) return;
+  const { data: roles, error } = await supabase.from('user_roles').select('user_id').eq('role', 'employee');
+  if (error) { console.error('Staff role load failed', error); return; }
+  const ids = [...new Set((roles || []).map((r) => r.user_id).filter(Boolean))];
+  if (!ids.length) { set(DB.USERS, []); return; }
+  const { data: profiles, error: profileError } = await supabase.from('profiles').select('id,full_name,phone').in('id', ids);
+  if (profileError) { console.error('Staff profile load failed', profileError); return; }
+  set(DB.USERS, (profiles || []).map((p) => ({id:p.id,name:p.full_name || '',phone:p.phone || '',role:'staff'})));
+}
+
 async function init() {
-  // Remove only this app's obsolete demo credentials/session written by the earlier static demo.
-  ['ekm_users','ekm_session','ekm_bikes','ekm_orders','ekm_invoices','ekm_favs','ekm_custom_requests','ekm_messages','ekm_seeded_v1'].forEach((key) => localStorage.removeItem(key));
-  if (!supabaseConfigured) toast('إعداد Supabase غير مكتمل', 'error');
+  // Business records come from Supabase. Legacy browser-local keys are left untouched and unused.
+  if (!supabaseConfigured || !supabase) toast('إعداد Supabase غير مكتمل', 'error');
   else {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       try {
         const profile = await getCurrentProfile(session.user.id);
+        if (!profile) throw new Error('Supabase profile is missing for this account.');
         state.user = { ...profile, id: session.user.id, email: session.user.email };
-        const [{ data: requests }, { data: favorites }] = await Promise.all([
-          supabase.from('customer_requests').select('id,requested_name,requested_model_year,budget,status,created_at').eq('client_user_id', session.user.id).order('created_at', { ascending: false }),
-          supabase.from('favorites').select('motorcycle_id').eq('user_id', session.user.id)
-        ]);
-        set(DB.CUSTOM_REQS, (requests || []).map((r) => ({ id:r.id, bikeName:r.requested_name, model:r.requested_model_year, budget:r.budget, status:r.status, createdAt:r.created_at, customerEmail:session.user.email })));
-        set(DB.ORDERS, (requests || []).map((r) => ({ id:r.id, bikeName:r.requested_name, price:r.budget, status:r.status, createdAt:r.created_at, customerEmail:session.user.email })));
-        set(DB.FAVS, { [session.user.id]: (favorites || []).map((f) => f.motorcycle_id) });
+        if (state.user.role === 'customer') await loadCustomerData();
+        else { await loadBusinessData(); await loadStaffDirectory(); }
       } catch (error) { console.error('Profile load failed', error); }
     }
     supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) { state.user = null; render(); }
+      if (!session) { state.user = null; set(DB.ORDERS, []); set(DB.CUSTOM_REQS, []); set(DB.FAVS, {}); render(); }
     });
-    const { data, error } = await supabase.from('motorcycles')
-      .select('id,name,model_year,category,price,stock,image_urls,status')
-      .eq('status', 'available').order('created_at', { ascending: false });
-    if (!error) {
-      state.bikes = (data || []).map((row) => ({
-        id: row.id, name: row.name, model: String(row.model_year || ''), category: row.category,
-        price: Number(row.price), stock: row.stock, images: row.image_urls || []
-      }));
-      set(DB.BIKES, state.bikes);
-    } else console.error('Catalogue load failed', error);
+    await loadMotorcycles();
   }
   render();
 }
