@@ -40,6 +40,7 @@ const state = {
   sales: [],
   saleReturns: [],
   saleReturnItems: [],
+  customerCredits: [],
   suppliers: [],
   purchaseOrders: [],
   supplierBills: [],
@@ -615,14 +616,17 @@ function pagePOS() {
           <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
           <td>${Number(sale.total) - Number(sale.amount_paid) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد فواتير مسجلة بعد.</p></div>`}
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-wallet"></i> أرصدة العملاء الدائنة</div>
+      <p class="hint">الرصيد هنا ناتج عن مرتجعات البيع بعد خصم أي مبالغ تم ردّها بالفعل.</p>
+      ${state.customerCredits.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>العميل</th><th>الهاتف</th><th>الرصيد المتاح</th><th>إجراء</th></tr></thead>
+        <tbody>${state.customerCredits.map(c=>`<tr>
+          <td>${esc(c.name)}</td><td>${esc(c.phone || '—')}</td><td><b>${money(c.balance)}</b></td>
+          <td><button class="btn btn-outline btn-sm" data-refund-credit="${esc(c.customerId)}">رد مبلغ</button></td>
+        </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-wallet"></i><p>لا توجد أرصدة دائنة مستحقة للعملاء حاليًا.</p></div>`}
     </div>`;
-}
-
-
-/* =========================================================
-   SECTION 5 — ADMIN & STAFF MONITORING
-   ========================================================= */
-
 function pageSuppliers() {
   if (!currentUser() || currentUser().role !== 'admin') return pageNoPermission();
   const bikes = state.bikes.filter(b=>b.status!=='archived');
@@ -1178,6 +1182,24 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const refundCredit = e.target.closest('[data-refund-credit]');
+  if (refundCredit) {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية رد أموال العملاء','error'); return; }
+    const customer = state.customerCredits.find(c=>c.customerId===refundCredit.dataset.refundCredit);
+    if (!customer || customer.balance <= 0) return;
+    openModal(`<div class="modal-header"><h3>رد رصيد العميل</h3><button class="modal-close" data-close-modal aria-label="إغلاق">×</button></div>
+      <p>العميل: <b>${esc(customer.name)}</b> — الرصيد المتاح: <b>${money(customer.balance)}</b></p>
+      <form id="customerCreditRefundForm" class="form-grid" data-customer-id="${esc(customer.customerId)}" data-balance="${customer.balance}">
+        <div class="field"><label>مبلغ الرد (ج.م)</label><input name="amount" type="number" min="0.01" max="${customer.balance}" step="0.01" required></div>
+        <div class="field"><label>طريقة الصرف</label><select name="method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div>
+        <div class="field"><label>مرجع الصرف (اختياري)</label><input name="reference" maxlength="120"></div>
+        <div class="field"><label>ملاحظات</label><textarea name="notes" maxlength="1000"></textarea></div>
+        <small class="hint">سجّل العملية بعد تنفيذ الصرف الفعلي. هذا الإجراء لا يحوّل الأموال تلقائيًا.</small>
+        <button class="btn btn-primary" type="submit">تأكيد تسجيل الصرف</button>
+      </form>`);
+    return;
+  }
+
   const collectPayment = e.target.closest('[data-collect-payment]');
   if (collectPayment) {
     const sale = state.sales.find((item) => item.id === collectPayment.dataset.collectPayment);
@@ -1430,6 +1452,25 @@ document.addEventListener('submit', async (e) => {
     await loadBusinessData();
     render();
     toast('تم حفظ سجل التواصل', 'success');
+    return;
+  }
+
+  if (form.id === 'customerCreditRefundForm') {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية رد أموال العملاء','error'); return; }
+    const fd = new FormData(form), amount = Number(fd.get('amount'));
+    const balance = Number(form.dataset.balance);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > balance) { toast('مبلغ الرد غير صحيح أو يتجاوز الرصيد','error'); return; }
+    const submit = form.querySelector('button[type="submit"]'); if (submit) submit.disabled = true;
+    const { data, error } = await supabase.rpc('record_customer_credit_refund', {
+      p_customer_id:form.dataset.customerId,p_amount:amount,p_method:String(fd.get('method')),
+      p_reference:safeName(fd.get('reference'))||null,p_notes:safeName(fd.get('notes'))||null
+    });
+    if (submit) submit.disabled = false;
+    if (error) { toast(error.message || 'تعذر تسجيل رد المبلغ','error'); return; }
+    closeModal();
+    await loadSalesData();
+    render();
+    toast('تم تسجيل رد '+money(data.refunded_amount)+'؛ الرصيد المتبقي '+money(data.remaining_credit),'success');
     return;
   }
 
@@ -1763,6 +1804,25 @@ async function loadSalesData() {
     : { data: [], error: null };
   if (itemsResult.error) { console.error('Sale return items load failed', itemsResult.error); toast('تعذر تحميل تفاصيل المرتجعات', 'error'); return; }
   state.saleReturnItems = itemsResult.data || [];
+  const creditResult = await supabase.from('customer_credit_transactions')
+    .select('id,customer_id,transaction_type,amount,method,reference,notes,created_at')
+    .order('created_at', { ascending: false }).limit(1000);
+  if (creditResult.error) { console.error('Customer credit ledger load failed', creditResult.error); toast('تعذر تحميل أرصدة العملاء', 'error'); return; }
+  const credits = creditResult.data || [];
+  const customerIds = [...new Set(credits.map(x => x.customer_id))];
+  const customerResult = customerIds.length
+    ? await supabase.from('clients').select('id,display_name,phone').in('id', customerIds)
+    : { data: [], error: null };
+  if (customerResult.error) { console.error('Customer credit contacts load failed', customerResult.error); toast('تعذر تحميل بيانات أصحاب الأرصدة', 'error'); return; }
+  const customerMap = new Map((customerResult.data || []).map(c => [c.id,c]));
+  const creditGroups = new Map();
+  for (const tx of credits) {
+    const current = creditGroups.get(tx.customer_id) || { customerId:tx.customer_id, name:customerMap.get(tx.customer_id)?.display_name || 'عميل', phone:customerMap.get(tx.customer_id)?.phone || '', balance:0, transactions:[] };
+    current.balance += Number(tx.amount || 0);
+    current.transactions.push(tx);
+    creditGroups.set(tx.customer_id,current);
+  }
+  state.customerCredits = [...creditGroups.values()].filter(c => c.balance > 0.009).sort((a,b)=>b.balance-a.balance);
   state.sales = state.sales.map(s => ({...s,
     returnedAmount: state.saleReturns.filter(r => r.sale_id === s.id).reduce((n,r)=>n+Number(r.total_amount||0),0),
     returnItems: state.saleReturnItems.filter(i => state.saleReturns.some(r => r.id===i.sale_return_id && r.sale_id===s.id))
