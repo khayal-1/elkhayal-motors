@@ -297,7 +297,7 @@ function pageHome() {
   const cats = Array.from(new Set(state.bikes.map((b) => b.category).filter(Boolean)));
   return `
     <section class="hero">
-      <h1>افضل تجربة <span>وافضل اختيار </span> يناسب احتياجاتك وميزانيتك </h1>
+      <h1>El  <span>khayal </span> motor's </h1>
       <p>أفضل الدراجات النارية الرياضية بأعلى جودة وأفضل الأسعار. اختر دراجتك الآن من El Khayal Motors.</p>
       <button class="btn btn-primary" data-nav="request">
         <i class="fa-solid fa-motorcycle"></i> اطلب موتسيكلك الخاص
