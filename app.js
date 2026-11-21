@@ -627,6 +627,8 @@ function pagePOS() {
           <td><button class="btn btn-outline btn-sm" data-refund-credit="${esc(c.customerId)}">رد مبلغ</button></td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-wallet"></i><p>لا توجد أرصدة دائنة مستحقة للعملاء حاليًا.</p></div>`}
     </div>`;
+}
+
 function pageSuppliers() {
   if (!currentUser() || currentUser().role !== 'admin') return pageNoPermission();
   const bikes = state.bikes.filter(b=>b.status!=='archived');
