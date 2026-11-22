@@ -47,3 +47,8 @@ These additions are implemented against the existing Supabase project and main b
 ## Sales and receivables workflows
 
 Sales staff can create quotations with item-level pricing, mark a quotation as sent or accepted, and convert an accepted, unexpired quotation into a sales invoice. Quotation creation does not reserve or reduce stock; stock is affected only when the quotation is converted. Custom installment schedules can be attached to an invoice; their amounts must equal the outstanding balance, and installment collections post through the existing sale-payment flow. No interest or financing fees are added automatically.
+
+
+## Operational modules
+
+The staff workspace includes financial statements and ledger tools, supplier advances, fixed assets and depreciation, bank reconciliation, cheques, recurring journals, cash sessions and handovers, petty cash, budgets, accruals, tax setup, HR/payroll, customer relations, quotations/installments, VIN tracking, stocktakes, reorder alerts, warranties, service orders, and printable sale-delivery receipts. These tools are role-protected by Supabase RLS and RPC permission checks. External payment gateways, WhatsApp/SMS/email delivery, and Egyptian ETA e-invoicing require provider credentials and onboarding before production activation.
