@@ -1206,7 +1206,7 @@ function navigate(route) {
   render();
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
   if (route === 'pos') loadSalesData().then(render);
-  if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles()]).then(render);
+  if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
   if ((route === 'expenses' || route === 'finance-tools') && state.user && (hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view') || hasPermission('finance_manage'))) {
     const load = route === 'finance-tools' && hasRole('admin') ? loadPurchasingData() : Promise.resolve();
