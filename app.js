@@ -2009,6 +2009,11 @@ document.addEventListener('submit', async (e) => {
     if(error){toast(error.message||'تعذر صرف الرواتب','error');return;} await Promise.all([loadHRData(),loadFinanceData()]);render();toast('تم تسجيل صرف الرواتب وترحيل القيد','success');return;
   }
 
+  if (form.id === 'financialStatementsForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('accounting_view')) { toast('ليس لديك صلاحية عرض القوائم المالية','error'); return; }
+    const fd=new FormData(form);const {data,error}=await supabase.rpc('get_financial_statements',{p_start_date:fd.get('start_date'),p_end_date:fd.get('end_date'),p_as_of_date:fd.get('as_of_date')});
+    if(error){toast(error.message||'تعذر إنشاء القوائم المالية','error');return;}state.financialStatements=data;render();toast('تم إنشاء القوائم المالية','success');return;
+  }
   if (form.id === 'allocateSalePaymentForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسوية المقبوضات','error'); return; }
     const fd=new FormData(form);const {error}=await supabase.rpc('allocate_sale_payment_to_cash_account',{p_payment_id:form.dataset.paymentId,p_cash_account_id:fd.get('cash_account_id')});
