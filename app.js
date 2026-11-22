@@ -31,6 +31,7 @@ const authRedirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin
 
 const state = {
   user: null,
+  pendingAuthAction: null,
   route: 'home',
   search: '',
   filterCat: 'all',
@@ -358,7 +359,7 @@ function productCard(b) {
       <div class="slider-wrap" data-slider data-idx="0">
         ${first ? `<img src="${esc(first)}" alt="${esc(b.name)}" data-slide-img loading="lazy">` : `<div class="bike-image-placeholder" aria-hidden="true"><i class="fa-solid fa-motorcycle"></i></div>`}
         <span class="stock-tag ${stockClass}"><i class="fa-solid fa-circle"></i> ${stockText}</span>
-        ${isCustomer ? `<button class="fav-btn ${isFav ? 'active' : ''}" data-fav="${esc(b.id)}" aria-label="إضافة للمفضلة"><i class="fa-${isFav ? 'solid' : 'regular'} fa-heart"></i></button>` : ''}
+        ${isCustomer || isGuest ? `<button class="fav-btn ${isFav ? 'active' : ''}" data-fav="${esc(b.id)}" aria-label="${isGuest ? 'سجل الدخول لإضافة للمفضلة' : 'إضافة للمفضلة'}"><i class="fa-${isFav ? 'solid' : 'regular'} fa-heart"></i></button>` : ''}
         <button class="slider-btn prev" data-slide="prev" aria-label="السابق"><i class="fa-solid fa-chevron-right"></i></button>
         <button class="slider-btn next" data-slide="next" aria-label="التالي"><i class="fa-solid fa-chevron-left"></i></button>
         <div class="slider-dots" data-dots>${dots}</div>
@@ -369,7 +370,7 @@ function productCard(b) {
         <div class="product-model">موديل ${esc(b.model)}</div>
         <div class="product-price">${money(b.price)}</div>
         <div class="product-actions">
-          ${isCustomer ? `<button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> شراء</button>` : isGuest ? `<button class="btn btn-primary btn-sm" data-login-action="buy"><i class="fa-solid fa-right-to-bracket"></i> سجل الدخول للشراء</button>` : ''}
+          ${isCustomer ? `<button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> طلب شراء</button>` : isGuest ? `<button class="btn btn-primary btn-sm" data-login-action="buy" data-bike-id="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> تسجيل الدخول للشراء</button>` : ''}
           <button class="btn btn-outline btn-sm" data-details="${esc(b.id)}">
             <i class="fa-solid fa-eye"></i> تفاصيل
           </button>
@@ -1137,9 +1138,39 @@ function navigate(route) {
 }
 
 /* ---------- Buy Flow ---------- */
+function requireCustomerLogin(action, bikeId = null) {
+  state.pendingAuthAction = { action, bikeId };
+  toast('سجّل الدخول أو أنشئ حسابًا للمتابعة؛ سنعيدك إلى الإجراء الذي اخترته', 'info');
+  navigate('login');
+}
+
+async function toggleFavorite(bikeId) {
+  const u = currentUser();
+  if (!u) { requireCustomerLogin('favorite', bikeId); return; }
+  if (u.role !== 'customer') { toast('المفضلة متاحة لحسابات العملاء فقط', 'error'); return; }
+  if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
+  const { data: existing, error: readError } = await supabase.from('favorites')
+    .select('motorcycle_id').eq('user_id', u.id).eq('motorcycle_id', bikeId).maybeSingle();
+  if (readError) { toast(readError.message, 'error'); return; }
+  const result = existing
+    ? await supabase.from('favorites').delete().eq('user_id', u.id).eq('motorcycle_id', bikeId)
+    : await supabase.from('favorites').insert({ user_id: u.id, motorcycle_id: bikeId });
+  if (result.error) { toast(result.error.message, 'error'); return; }
+  toast(existing ? 'أزيلت من المفضلة' : 'أضيفت للمفضلة', 'success');
+  render();
+}
+
+async function resumePendingAuthAction() {
+  const pending = state.pendingAuthAction;
+  state.pendingAuthAction = null;
+  if (!pending || currentUser()?.role !== 'customer') return;
+  if (pending.action === 'favorite' && pending.bikeId) await toggleFavorite(pending.bikeId);
+  if (pending.action === 'buy' && pending.bikeId) handleBuy(pending.bikeId);
+}
+
 function handleBuy(bikeId) {
   const u = currentUser();
-  if (!u) { toast('سجل الدخول بحساب عميل أولاً لإرسال طلب الشراء', 'info'); navigate('login'); return; }
+  if (!u) { requireCustomerLogin('buy', bikeId); return; }
   if (u.role !== 'customer') { toast('الشراء وطلبات العملاء متاحة لحسابات العملاء فقط', 'error'); return; }
   const bike = state.bikes.find((b) => b.id === bikeId);
   if (!bike) return toast('الدراجة غير موجودة', 'error');
@@ -1401,24 +1432,9 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  /* Favorites */
+  /* Favorites: guests are redirected to sign-in and returned to the selected bike action. */
   const favBtn = e.target.closest('[data-fav]');
-  if (favBtn) {
-    const u = currentUser();
-    if (!u) { toast('سجل الدخول بحساب عميل أولاً', 'error'); navigate('login'); return; }
-    if (u.role !== 'customer') { toast('المفضلة متاحة لحسابات العملاء فقط', 'error'); return; }
-    const bikeId = favBtn.dataset.fav;
-    const { data: existing, error: readError } = await supabase.from('favorites')
-      .select('motorcycle_id').eq('user_id', u.id).eq('motorcycle_id', bikeId).maybeSingle();
-    if (readError) { toast(readError.message, 'error'); return; }
-    const result = existing
-      ? await supabase.from('favorites').delete().eq('user_id', u.id).eq('motorcycle_id', bikeId)
-      : await supabase.from('favorites').insert({ user_id: u.id, motorcycle_id: bikeId });
-    if (result.error) { toast(result.error.message, 'error'); return; }
-    toast(existing ? 'أزيلت من المفضلة' : 'أضيفت للمفضلة', 'success');
-    render();
-    return;
-  }
+  if (favBtn) { await toggleFavorite(favBtn.dataset.fav); return; }
 
   /* Buy */
   const buyBtn = e.target.closest('[data-buy]');
@@ -1426,7 +1442,7 @@ document.addEventListener('click', async (e) => {
   const confirmBtn = e.target.closest('[data-confirm-buy]');
   if (confirmBtn) { confirmBuy(confirmBtn.dataset.confirmBuy); return; }
   const loginAction = e.target.closest('[data-login-action]');
-  if (loginAction) { toast('سجل الدخول بحساب عميل أولاً لإتمام الإجراء', 'info'); navigate('login'); return; }
+  if (loginAction) { requireCustomerLogin(loginAction.dataset.loginAction, loginAction.dataset.bikeId || null); return; }
 
   /* Details */
   const detailsBtn = e.target.closest('[data-details]');
@@ -1835,6 +1851,7 @@ document.addEventListener('submit', async (e) => {
         ? (hasRequestAccess() ? 'staff-orders' : hasAnyPermission('catalog_view', 'catalog_manage') ? 'inventory' : 'home')
         : 'home';
       navigate(route);
+      await resumePendingAuthAction();
     } catch (error) { toast(error.message || 'تعذر تسجيل الدخول', 'error'); }
     return;
   }
@@ -1852,6 +1869,7 @@ document.addEventListener('submit', async (e) => {
         await loadMotorcycles();
         toast('تم إنشاء الحساب بنجاح', 'success');
         navigate('home');
+        await resumePendingAuthAction();
       }
     } catch (error) { toast(error.message || 'تعذر إنشاء الحساب', 'error'); }
     return;
