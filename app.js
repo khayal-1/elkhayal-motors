@@ -1813,6 +1813,35 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
+  if (form.id === 'customerProfileMetaForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('customer_data_manage')) { toast('ليس لديك صلاحية تعديل ملف العميل','error'); return; }
+    const fd=new FormData(form);const {error}=await supabase.rpc('set_customer_profile_meta',{p_customer_id:form.dataset.customerId,p_credit_limit:fd.get('credit_limit')?Number(fd.get('credit_limit')):null,p_segment:fd.get('customer_segment'),p_lead_source:safeName(fd.get('lead_source'))||null,p_marketing_consent:fd.get('marketing_consent')==='on'});
+    if(error){toast(error.message||'تعذر تحديث ملف العميل','error');return;}await loadCRMData();render();toast('تم تحديث ملف العميل والحد الائتماني','success');return;
+  }
+  if (form.id === 'customerInteractionForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('customer_data_manage')) { toast('ليس لديك صلاحية تسجيل التفاعل','error'); return; }
+    const fd=new FormData(form);const {error}=await supabase.rpc('create_customer_interaction',{p_customer_id:fd.get('customer_id'),p_type:fd.get('interaction_type'),p_subject:safeName(fd.get('subject')),p_notes:safeName(fd.get('notes'))||null,p_follow_up:fd.get('next_follow_up')?new Date(fd.get('next_follow_up')).toISOString():null});
+    if(error){toast(error.message||'تعذر تسجيل التفاعل','error');return;}await loadCRMData();render();toast('تم تسجيل تفاعل العميل','success');return;
+  }
+  if (form.id === 'customerComplaintForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('customer_data_manage')) { toast('ليس لديك صلاحية تسجيل الشكوى','error'); return; }
+    const fd=new FormData(form);const {error}=await supabase.rpc('create_customer_complaint',{p_customer_id:fd.get('customer_id')||null,p_name:safeName(fd.get('customer_name')),p_phone:safeName(fd.get('customer_phone'))||null,p_subject:safeName(fd.get('subject')),p_description:safeName(fd.get('description')),p_priority:fd.get('priority'),p_assigned_to:null});
+    if(error){toast(error.message||'تعذر تسجيل الشكوى','error');return;}await loadCRMData();render();toast('تم تسجيل الشكوى','success');return;
+  }
+  if (form.id === 'customerComplaintUpdateForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('customer_data_manage')) { toast('ليس لديك صلاحية تحديث الشكوى','error'); return; }
+    const fd=new FormData(form);const {error}=await supabase.rpc('update_customer_complaint',{p_id:form.dataset.complaintId,p_status:fd.get('status'),p_resolution:safeName(fd.get('resolution'))||null,p_assigned_to:null});
+    if(error){toast(error.message||'تعذر تحديث الشكوى','error');return;}await loadCRMData();render();toast('تم تحديث حالة الشكوى','success');return;
+  }
+  if (form.id === 'internalNotificationForm') {
+    const fd=new FormData(form);const {error}=await supabase.rpc('create_internal_notification',{p_user_id:fd.get('user_id'),p_title:safeName(fd.get('title')),p_body:safeName(fd.get('body'))||null,p_category:fd.get('category')});
+    if(error){toast(error.message||'تعذر إرسال الإشعار','error');return;}await loadCRMData();render();toast('تم إرسال الإشعار الداخلي','success');return;
+  }
+  if (form.id === 'markNotificationReadForm') {
+    const {error}=await supabase.rpc('mark_internal_notification_read',{p_id:form.dataset.notificationId});
+    if(error){toast(error.message||'تعذر تحديث الإشعار','error');return;}await loadCRMData();render();toast('تم تحديد الإشعار كمقروء','success');return;
+  }
+
   if (form.id === 'inventoryCostForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية تعديل تكلفة المخزون','error'); return; }
     const fd=new FormData(form); const {error}=await supabase.rpc('set_motorcycle_inventory_controls',{p_motorcycle_id:form.dataset.bikeId,p_unit_cost:Number(fd.get('unit_cost')),p_reorder_level:Number(fd.get('reorder_level'))});
