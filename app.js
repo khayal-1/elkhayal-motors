@@ -487,7 +487,7 @@ function pageHome() {
     <div class="products-grid" id="productsGrid">
       ${bikes.length
         ? bikes.map(productCard).join('')
-        : `<div class="empty" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>لا توجد دراجات مطابقة للبحث</p></div>`}
+        : `<div class="empty" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>لا توجد وحدات دراجات متاحة للبيع حالياً</p></div>`}
     </div>`;
 }
 
@@ -3479,7 +3479,7 @@ async function init() {
         if (!profile) throw new Error('Supabase profile is missing for this account.');
         state.user = { ...profile, id: session.user.id, email: session.user.email };
         if (state.user.role === 'customer') await loadCustomerData();
-        else { await loadBusinessData(); await loadStaffDirectory(); }
+        else { await loadBusinessData(); }
       } catch (error) { console.error('Profile load failed', error); }
     }
     supabase.auth.onAuthStateChange((_event, session) => {
