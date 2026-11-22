@@ -1364,3 +1364,30 @@ td .mini-img {
   .unit-admin-main { align-items: flex-start; }
   .bike-folder-body { padding: 10px; }
 }
+
+/* Compact collapsible navigation */
+.sidebar-group {
+  margin: 3px 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.sidebar-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 14px;
+  color: var(--gray-500);
+  font-size: .76rem;
+  font-weight: 900;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius);
+}
+.sidebar-group > summary::-webkit-details-marker { display: none; }
+.sidebar-group > summary i { font-size: .68rem; transition: transform var(--t-fast); }
+.sidebar-group[open] > summary i { transform: rotate(180deg); }
+.sidebar-group > summary:hover { background: var(--gray-100); color: var(--black); }
+.sidebar-group-links { display: grid; gap: 2px; padding: 2px 0 8px; }
+.sidebar-group .sidebar-link { margin: 0 2px; }
