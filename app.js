@@ -2054,6 +2054,18 @@ document.addEventListener('click', async (e) => {
     if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
     openModal(bikeFormHTML(null)); return;
   }
+  const addUnitButton = e.target.closest('[data-add-unit-for]');
+  if (addUnitButton) {
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إضافة وحدات', 'error'); return; }
+    openModal(unitRegistrationFormHTML(addUnitButton.dataset.addUnitFor)); return;
+  }
+  const editUnitButton = e.target.closest('[data-edit-unit]');
+  if (editUnitButton) {
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تعديل الوحدة', 'error'); return; }
+    const unit = (state.motorcycleUnits || []).find((item)=>item.id===editUnitButton.dataset.editUnit);
+    if (unit) openModal(unitEditFormHTML(unit));
+    return;
+  }
   const deleteBike = e.target.closest('[data-delete-bike]');
   if (deleteBike) {
     if ((!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) || !supabase) { toast('ليس لديك صلاحية حذف الدراجات', 'error'); return; }
@@ -2253,7 +2265,26 @@ document.addEventListener('submit', async (e) => {
   if (form.id === 'motorcycleUnitForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية تسجيل أرقام الهياكل','error'); return; }
     const fd=new FormData(form); const {error}=await supabase.rpc('register_motorcycle_unit_with_engine_number',{p_motorcycle_id:fd.get('motorcycle_id'),p_vin:safeName(fd.get('vin')),p_engine_number:safeName(fd.get('engine_number')),p_barcode:safeName(fd.get('barcode'))||null,p_warranty_start:fd.get('warranty_start')||null,p_warranty_end:fd.get('warranty_end')||null,p_notes:safeName(fd.get('notes'))||null});
-    if(error){toast(error.message||'تعذر تسجيل رقم الهيكل','error');return;} const unitResult=await supabase.from('motorcycle_units').update({odometer_reading:Number(fd.get('odometer_reading')||0),unit_condition:String(fd.get('unit_condition')||'new')}).eq('vin',safeName(fd.get('vin'))); if(unitResult.error){toast('تم تسجيل الوحدة لكن تعذر حفظ العداد والحالة: '+unitResult.error.message,'error');return;} await loadInventoryData();render();toast('تم تسجيل الشاسيه والموتور والعداد وحالة الدراجة','success');return;
+    if(error){toast(error.message||'تعذر تسجيل رقم الهيكل','error');return;} const unitResult=await supabase.from('motorcycle_units').update({odometer_reading:Number(fd.get('odometer_reading')||0),unit_condition:String(fd.get('unit_condition')||'new')}).eq('vin',safeName(fd.get('vin'))); if(unitResult.error){toast('تم تسجيل الوحدة لكن تعذر حفظ العداد والحالة: '+unitResult.error.message,'error');return;} await Promise.all([loadInventoryData(),loadStoreUnits()]);closeModal();render();toast('تم تسجيل الوحدة وربطها بهذا النوع','success');return;
+  }
+  if (form.id === 'motorcycleUnitEditForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تعديل الوحدة','error'); return; }
+    const fd=new FormData(form);
+    const {error}=await supabase.rpc('update_motorcycle_unit_details',{
+      p_unit_id:form.dataset.unitId,
+      p_vin:safeName(fd.get('vin')),
+      p_engine_number:safeName(fd.get('engine_number')),
+      p_barcode:safeName(fd.get('barcode')),
+      p_unit_status:String(fd.get('unit_status')),
+      p_odometer_reading:Number(fd.get('odometer_reading')||0),
+      p_unit_condition:String(fd.get('unit_condition')),
+      p_warranty_start:fd.get('warranty_start')||null,
+      p_warranty_end:fd.get('warranty_end')||null,
+      p_notes:safeName(fd.get('notes'))||null
+    });
+    if(error){toast(error.message||'تعذر تحديث الوحدة','error');return;}
+    await Promise.all([loadInventoryData(),loadStoreUnits(),loadMotorcycles()]);
+    closeModal();render();toast('تم تحديث بيانات الوحدة وحالتها','success');return;
   }
   if (form.id === 'stocktakeForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('الجرد المالي يحتاج صلاحية الإدارة المالية','error'); return; }
