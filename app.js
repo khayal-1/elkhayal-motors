@@ -1630,7 +1630,8 @@ function navigate(route) {
   closeSidebar();
   render();
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
-  if (route === 'manage-bikes' && state.user) Promise.all([loadMotorcycles(),loadInventoryData()]).then(render);
+  if (route === 'manage-bikes' && state.user) Promise.all([loadMotorcycles(),loadMotorcycleUnits()]).then(render);
+  if (route === 'staff' && state.user?.role === 'admin') loadStaffDirectory().then(render);
   if (route === 'pos') loadSalesData().then(render);
   if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData()]).then(render);
   if (route === 'home') Promise.all([loadMotorcycles(),loadStoreUnits()]).then(render);
@@ -2265,7 +2266,7 @@ document.addEventListener('submit', async (e) => {
   if (form.id === 'motorcycleUnitForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية تسجيل أرقام الهياكل','error'); return; }
     const fd=new FormData(form); const {error}=await supabase.rpc('register_motorcycle_unit_with_engine_number',{p_motorcycle_id:fd.get('motorcycle_id'),p_vin:safeName(fd.get('vin')),p_engine_number:safeName(fd.get('engine_number')),p_barcode:safeName(fd.get('barcode'))||null,p_warranty_start:fd.get('warranty_start')||null,p_warranty_end:fd.get('warranty_end')||null,p_notes:safeName(fd.get('notes'))||null});
-    if(error){toast(error.message||'تعذر تسجيل رقم الهيكل','error');return;} const unitResult=await supabase.from('motorcycle_units').update({odometer_reading:Number(fd.get('odometer_reading')||0),unit_condition:String(fd.get('unit_condition')||'new')}).eq('vin',safeName(fd.get('vin'))); if(unitResult.error){toast('تم تسجيل الوحدة لكن تعذر حفظ العداد والحالة: '+unitResult.error.message,'error');return;} await Promise.all([loadInventoryData(),loadStoreUnits()]);closeModal();render();toast('تم تسجيل الوحدة وربطها بهذا النوع','success');return;
+    if(error){toast(error.message||'تعذر تسجيل رقم الهيكل','error');return;} const unitResult=await supabase.from('motorcycle_units').update({odometer_reading:Number(fd.get('odometer_reading')||0),unit_condition:String(fd.get('unit_condition')||'new')}).eq('vin',safeName(fd.get('vin'))); if(unitResult.error){toast('تم تسجيل الوحدة لكن تعذر حفظ العداد والحالة: '+unitResult.error.message,'error');return;} await Promise.all([loadMotorcycleUnits(),loadStoreUnits()]);closeModal();render();toast('تم تسجيل الوحدة وربطها بهذا النوع','success');return;
   }
   if (form.id === 'motorcycleUnitEditForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تعديل الوحدة','error'); return; }
@@ -2283,7 +2284,7 @@ document.addEventListener('submit', async (e) => {
       p_notes:safeName(fd.get('notes'))||null
     });
     if(error){toast(error.message||'تعذر تحديث الوحدة','error');return;}
-    await Promise.all([loadInventoryData(),loadStoreUnits(),loadMotorcycles()]);
+    await Promise.all([loadMotorcycleUnits(),loadStoreUnits(),loadMotorcycles()]);
     closeModal();render();toast('تم تحديث بيانات الوحدة وحالتها','success');return;
   }
   if (form.id === 'stocktakeForm') {
@@ -3098,6 +3099,15 @@ async function loadStoreUnits() {
   state.storeUnits = (data || []).map((row) => ({ unit_id: row.unit_id, motorcycle_id: row.motorcycle_id, unit_condition: row.unit_condition }));
 }
 
+async function loadMotorcycleUnits() {
+  if (!supabase || !state.user || !(hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage'))) return;
+  const { data, error } = await supabase.from('motorcycle_units')
+    .select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)')
+    .order('registered_at',{ascending:false}).limit(500);
+  if (error) { console.error('Motorcycle units load failed',error); toast('تعذر تحميل وحدات الدراجات','error'); return; }
+  state.motorcycleUnits = data || [];
+}
+
 async function loadMotorcycles() {
   if (!supabase) return;
   let query = supabase.from('motorcycles')
@@ -3472,7 +3482,7 @@ async function init() {
       if (!session) { state.user = null; set(DB.ORDERS, []); set(DB.CUSTOM_REQS, []); set(DB.FAVS, {}); state.contactMessages = []; state.requestReplies = []; state.contactReplies = []; state.sales = []; render(); }
     });
     await Promise.all([loadMotorcycles(), loadStoreUnits()]);
-    if (state.user?.role === 'admin') { await loadSalesData(); await loadPurchasingData(); }
+    // Heavy sales and purchasing datasets are loaded only when their pages are opened.
   }
   render();
   if (state.user?.role === 'customer') await resumePendingAuthAction();
