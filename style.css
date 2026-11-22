@@ -1280,3 +1280,87 @@ td .mini-img {
 /* Demo motorcycle records */
 .demo-data-label{display:inline-flex;align-items:center;margin-inline-start:8px;padding:2px 7px;border-radius:999px;background:rgba(59,130,246,.12);color:#2563eb;font-size:11px;font-weight:700;white-space:nowrap}
 .demo-unit-row{background:rgba(59,130,246,.035)}
+
+
+/* Motorcycle inventory folders */
+.bike-folder {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  margin: 12px 0;
+  overflow: hidden;
+}
+.bike-folder > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 900;
+  background: var(--gray-50);
+  min-height: 58px;
+}
+.bike-folder > summary::-webkit-details-marker { display: none; }
+.bike-folder > summary::after {
+  content: '+';
+  color: var(--red);
+  font-size: 1.25rem;
+  margin-inline-start: 8px;
+}
+.bike-folder[open] > summary::after { content: '−'; }
+.bike-folder-name { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.bike-folder-name > i { color: var(--red); }
+.bike-folder-name small { color: var(--gray-500); font-weight: 600; }
+.bike-folder-count { color: var(--gray-600); font-size: .78rem; white-space: nowrap; }
+.bike-folder-body { padding: 14px; }
+.bike-folder-summary, .bike-folder-toolbar, .bike-folder-actions, .unit-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.bike-folder-summary {
+  padding: 10px 12px;
+  background: var(--gray-50);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  font-size: .78rem;
+}
+.bike-folder-summary span { margin-inline-end: 8px; }
+.bike-folder-toolbar { margin-bottom: 14px; }
+.bike-folder-actions { margin: 10px 0 14px; }
+.unit-admin-card {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 10px 0;
+  background: var(--white);
+}
+.unit-admin-main, .unit-admin-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.unit-admin-main small { display: block; margin-top: 5px; color: var(--gray-500); }
+.unit-admin-meta { margin-top: 10px; color: var(--gray-600); font-size: .76rem; }
+.unit-admin-actions { margin-top: 12px; }
+.unit-condition-tag {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--gray-100);
+  color: var(--gray-700);
+  font-size: .72rem;
+  font-weight: 800;
+}
+@media (max-width: 640px) {
+  .bike-folder > summary { align-items: flex-start; flex-direction: column; }
+  .bike-folder-count { white-space: normal; }
+  .unit-admin-main { align-items: flex-start; }
+  .bike-folder-body { padding: 10px; }
+}
