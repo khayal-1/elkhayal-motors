@@ -97,6 +97,7 @@ const state = {
   payrollPayments: [],
   inventoryCosts: [],
   motorcycleUnits: [],
+  storeUnits: [],
   stocktakeBatches: [],
   stocktakeLines: [],
   warranties: [],
@@ -390,7 +391,10 @@ function renderAccountArea() {
    ========================================================= */
 
 function filteredBikes() {
-  let bikes = state.bikes;
+  let bikes = (state.storeUnits || []).map((unit, index) => {
+    const bike = (state.bikes || []).find((item) => item.id === unit.motorcycle_id);
+    return bike ? { ...bike, unit_id: unit.unit_id, unit_condition: unit.unit_condition, unit_number: index + 1, stock: 1 } : null;
+  }).filter(Boolean);
   const q = state.search.trim().toLowerCase();
   if (q) {
     bikes = bikes.filter((b) =>
@@ -419,11 +423,11 @@ function productCard(b) {
   const first = imgs[0];
   const dots = imgs.map((_, i) => `<span class="${i === 0 ? 'active' : ''}"></span>`).join('');
 
-  const stockClass = b.stock <= 0 ? 'out' : b.stock <= 2 ? 'low' : 'in';
-  const stockText = b.stock <= 0 ? 'غير متوفر' : b.stock <= 2 ? `آخر ${b.stock} قطع` : 'متوفر';
+  const stockClass = 'in';
+  const stockText = 'متاحة الآن';
 
   return `
-    <article class="product-card" data-bike-id="${esc(b.id)}">
+    <article class="product-card" data-bike-id="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}">
       <div class="slider-wrap" data-slider data-idx="0">
         ${first ? `<img src="${esc(first)}" alt="${esc(b.name)}" data-slide-img loading="lazy">` : `<div class="bike-image-placeholder" aria-hidden="true"><i class="fa-solid fa-motorcycle"></i></div>`}
         <span class="stock-tag ${stockClass}"><i class="fa-solid fa-circle"></i> ${stockText}</span>
@@ -435,11 +439,12 @@ function productCard(b) {
       <div class="product-body">
         <span class="product-cat">${esc(b.category || 'عام')}</span>
         <h3 class="product-name">${esc(b.name)}</h3>
-        <div class="product-model">موديل ${esc(b.model)}</div>
+        <div class="product-model">موديل ${esc(b.model)} · الوحدة ${Number(b.unit_number || 1)}</div>
+        <div class="unit-condition-tag">${b.unit_condition === 'used' ? 'مستعملة' : 'جديدة'}</div>
         <div class="product-price">${money(b.price)}</div>
         <div class="product-actions">
           ${isCustomer ? `<button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> طلب شراء</button>` : isGuest ? `<button class="btn btn-primary btn-sm" data-login-action="buy" data-bike-id="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> تسجيل الدخول للشراء</button>` : ''}
-          <button class="btn btn-outline btn-sm" data-details="${esc(b.id)}">
+          <button class="btn btn-outline btn-sm" data-details="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}">
             <i class="fa-solid fa-eye"></i> تفاصيل
           </button>
         </div>
@@ -1625,8 +1630,10 @@ function navigate(route) {
   closeSidebar();
   render();
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
+  if (route === 'manage-bikes' && state.user) Promise.all([loadMotorcycles(),loadInventoryData()]).then(render);
   if (route === 'pos') loadSalesData().then(render);
   if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData()]).then(render);
+  if (route === 'home') Promise.all([loadMotorcycles(),loadStoreUnits()]).then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
   if (route === 'hr' && state.user && (hasRole('admin','manager','owner') || hasPermission('finance_manage'))) Promise.all([loadHRData(),loadFinanceData(),loadSalesData()]).then(render);
@@ -2025,6 +2032,7 @@ document.addEventListener('click', async (e) => {
   if (detailsBtn) {
     const bike = get(DB.BIKES).find((b) => b.id === detailsBtn.dataset.details);
     if (!bike) return;
+    const storeUnit = (state.storeUnits || []).find((unit)=>unit.unit_id===detailsBtn.dataset.unitId);
     const img = (bike.images && bike.images[0]) || '';
     openModal(`
       <div class="modal-header">
@@ -2035,7 +2043,8 @@ document.addEventListener('click', async (e) => {
       <p class="mb-1"><b>الموديل:</b> ${esc(bike.model)}</p>
       <p class="mb-1"><b>الفئة:</b> ${esc(bike.category)}</p>
       <p class="mb-1"><b>السعر:</b> <span class="text-red" style="font-weight:900">${money(bike.price)}</span></p>
-      <p><b>المخزون:</b> ${bike.stock} قطعة</p>
+      <p><b>الوحدة:</b> دراجة واحدة متاحة حالياً</p>
+      <p><b>الحالة:</b> ${storeUnit?.unit_condition === 'used' ? 'مستعملة' : 'جديدة'}</p>
     `);
     return;
   }
@@ -3051,6 +3060,13 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ---------- Init ---------- */
+async function loadStoreUnits() {
+  if (!supabase) { state.storeUnits = []; return; }
+  const { data, error } = await supabase.rpc('get_store_motorcycle_units');
+  if (error) { console.error('Store units load failed', error); state.storeUnits = []; return; }
+  state.storeUnits = (data || []).map((row) => ({ unit_id: row.unit_id, motorcycle_id: row.motorcycle_id, unit_condition: row.unit_condition }));
+}
+
 async function loadMotorcycles() {
   if (!supabase) return;
   let query = supabase.from('motorcycles')
@@ -3424,7 +3440,7 @@ async function init() {
     supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) { state.user = null; set(DB.ORDERS, []); set(DB.CUSTOM_REQS, []); set(DB.FAVS, {}); state.contactMessages = []; state.requestReplies = []; state.contactReplies = []; state.sales = []; render(); }
     });
-    await loadMotorcycles();
+    await Promise.all([loadMotorcycles(), loadStoreUnits()]);
     if (state.user?.role === 'admin') { await loadSalesData(); await loadPurchasingData(); }
   }
   render();
