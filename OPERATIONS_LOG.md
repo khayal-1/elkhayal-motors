@@ -269,3 +269,28 @@ curl -fsSL 'https://khayal-1.github.io/elkhayal-motors/?smoke=<cache-buster>'
 - Build validation and publishing the clearer UI error to `main`, followed by Pages verification, are in progress.
 - اكتمل التحديث: الالتزام `36e2492ec12b3c467dfc75ff3edf4bb1b86af1fb` على `main`؛ نجح بناء ونشر GitHub Pages في التشغيل `44902269545`. أعاد HTML وملفا JS/CSS من Pages HTTP 200، واحتوى ملف JS الحي على رسالة الخطأ العربية الجديدة. لم يُجر اختبار إنشاء مستخدم أو تحويل حساب قائم.
 - Release complete: commit `36e2492ec12b3c467dfc75ff3edf4bb1b86af1fb` is on `main`; GitHub Pages build/deployment run `44902269545` succeeded. Live Pages HTML and JS/CSS assets returned HTTP 200, and the live JS bundle contains the new Arabic conflict message. No user creation or existing-account conversion was tested.
+
+
+## الأدوات المالية المتقدمة / Advanced finance suite
+
+**22 Nov 2026 / 22 نوفمبر 2026**
+
+- أضيفت إلى مشروع Supabase الإنتاجي ztkiavqmbswyxkmddtno جداول وأدوات الفترات المحاسبية، الأرصدة الافتتاحية، مراكز التكلفة، سلف الموردين وتسويتها على الفواتير، الأصول الثابتة والإهلاك، تسويات البنوك وحركات المطابقة، سجل الشيكات، القيود المتكررة، وإعدادات نسب الضرائب ومعرفات التسجيل الضريبي للعملاء والموردين.
+- تمت إضافة دوال RPC محمية بصلاحية الإدارة المالية، مع دوال واجهة عامة من نوع SECURITY INVOKER، وتحديث سياسات القراءة حتى يستطيع الموظف الذي يحمل finance_manage أو accounting_view قراءة الأدوات المصرح بها. الكتابة تمر عبر الدوال المحمية ولا تُمنح مباشرة للجداول الجديدة.
+- تمنع الفترات المغلقة إنشاء القيود أو تغيير تاريخها داخل نطاقها. ترحيل الأرصدة الافتتاحية والقيود المتكررة وإهلاك الأصول ينشئ قيودًا مزدوجة ويعتمد على فحص توازن القيد الحالي.
+- أُضيف قيد تكلفة اختياري إلى أسطر القيود. أُضيفت صلاحية finance_manage إلى قائمة صلاحيات الموظفين.
+- عُدّل سداد فاتورة المورد ليشترط اختيار الخزينة/البنك، ويُنشئ قيد سداد، ويخصم التسويات السابقة لسلف الموردين من الرصيد المستحق. واجهة الموردين تحمّل الحسابات المالية قبل فتح نموذج السداد.
+- أضيفت صفحة «الأدوات المالية المتقدمة» إلى app.js مع نماذج الفترات والأرصدة الافتتاحية ومراكز التكلفة والسلف والأصول والإهلاك والتسويات البنكية والشيكات والقيود المتكررة وإعدادات الضرائب.
+- ملفات الترحيل المصدرية محفوظة في supabase/migrations/ تحت الإصدارات 20261122201758 إلى 20261122202221.
+- لا توجد نسب ضريبية افتراضية، ولا أرصدة افتتاحية أو أصول أو شيكات أو قيود متكررة تجريبية. لم تُنشأ سجلات مالية تشغيلية. إعداد نسب الضريبة لا يعني بعد تطبيقها آليًا على فواتير البيع والشراء أو تقديم إقرار ضريبي، وتكامل ETA لم يُفعّل.
+- لا يزال يلزم اختبار المسارات من حساب إدارة حقيقي دون إدخال بيانات وهمية، وربط التكلفة ومراكز التكلفة بكل العمليات التشغيلية، واستكمال دورة المحاسبة للمبيعات والمشتريات والمرتجعات، واختبار تسوية البنك مقابل كشف فعلي. لا يُعلن اكتمال المحاسبة الكاملة قبل هذه الاختبارات.
+
+- The production Supabase project ztkiavqmbswyxkmddtno now has finance modules for fiscal periods, opening balances, cost centres, supplier advances and allocations, fixed assets and depreciation, bank reconciliations and statement matching, cheque tracking, recurring journals, and tax-rate configuration plus tax IDs on customers and suppliers.
+- Guarded finance RPCs were added. Public wrappers use SECURITY INVOKER; writes to the new tables are not granted directly. Read policies now include finance_manage and accounting_view.
+- Closed periods reject new journals and journal-date changes within their date range. Opening balances, recurring journals and depreciation create balanced double-entry journals using the existing deferred balance check.
+- Journal lines now support an optional cost-centre reference. finance_manage was added to the staff permission catalogue.
+- Supplier bill payments now require a selected cash/bank account, create a journal entry, and account for previously allocated supplier advances when checking the remaining bill balance. The supplier page loads financial accounts before opening the payment form.
+- Added the «الأدوات المالية المتقدمة» route and its operational forms in app.js.
+- Source migrations are tracked under supabase/migrations/ versions 20261122201758 through 20261122202221.
+- No default tax rates, opening balances, assets, cheques, or recurring test journals were seeded; no operational finance records were created. Tax-rate configuration is not yet applied automatically to sales/purchase invoices and is not an ETA filing integration.
+- Real admin-account testing, full posting integration for sales/purchases/returns, cost-centre assignment across operational workflows, and reconciliation against a real bank statement remain. The accounting system must not be described as fully complete until those checks pass.
