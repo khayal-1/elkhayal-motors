@@ -1541,12 +1541,14 @@ document.addEventListener('click', async (e) => {
   }
   const sendInvoiceButton = e.target.closest('#sendInvoiceWhatsAppBtn');
   if (sendInvoiceButton) {
-    const phone = String(sendInvoiceButton.dataset.phone || '').replace(/[^0-9]/g, '');
+    let phone = String(sendInvoiceButton.dataset.phone || '').replace(/[^0-9]/g, '');
     if (!phone) { toast('أضف رقم هاتف العميل في بيانات البيع لإرسال الفاتورة عبر واتساب', 'error'); return; }
+    if (phone.startsWith('0')) phone = '20' + phone.slice(1);
     const message = [
       'الخيال موتورز — فاتورة بيع',
       'رقم الفاتورة: ' + sendInvoiceButton.dataset.invoice,
       'العميل: ' + sendInvoiceButton.dataset.customer,
+      'الأصناف: ' + (sendInvoiceButton.dataset.items || '—'),
       'الإجمالي: ' + sendInvoiceButton.dataset.total + ' ج.م',
       'المدفوع: ' + sendInvoiceButton.dataset.paid + ' ج.م',
       'المتبقي: ' + sendInvoiceButton.dataset.due + ' ج.م',
@@ -2497,7 +2499,7 @@ document.addEventListener('submit', async (e) => {
         <p><b>المتبقي:</b> ${money(data.balance_due)}</p><p><b>حالة الدفع:</b> ${data.payment_status === 'paid' ? 'مدفوعة' : data.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</p>
         <p class="text-center">شكرًا لثقتكم في El Khayal Motors</p>
       </div>
-      <div class="contact-actions no-print invoice-actions"><button class="btn btn-primary" id="printInvoiceBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" id="sendInvoiceWhatsAppBtn" type="button" data-phone="${esc(fd.get('customer_phone') || '')}" data-invoice="${esc(data.invoice_number)}" data-customer="${esc(customerName)}" data-total="${esc(data.total)}" data-paid="${esc(data.amount_paid)}" data-due="${esc(data.balance_due)}"><i class="fa-brands fa-whatsapp"></i> إرسال للعميل عبر واتساب</button><button class="btn btn-outline" id="shareInvoiceBtn" type="button"><i class="fa-solid fa-share-nodes"></i> مشاركة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
+      <div class="contact-actions no-print invoice-actions"><button class="btn btn-primary" id="printInvoiceBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" id="sendInvoiceWhatsAppBtn" type="button" data-phone="${esc(fd.get('customer_phone') || '')}" data-invoice="${esc(data.invoice_number)}" data-customer="${esc(customerName)}" data-total="${esc(data.total)}" data-paid="${esc(data.amount_paid)}" data-due="${esc(data.balance_due)}" data-items="${esc(items.map(({bike,quantity}) => bike.name + ' ' + bike.model + ' × ' + quantity + ' = ' + money(bike.price * quantity)).join(' | '))}"><i class="fa-brands fa-whatsapp"></i> إرسال الفاتورة عبر واتساب</button><button class="btn btn-outline" id="shareInvoiceBtn" type="button"><i class="fa-solid fa-share-nodes"></i> مشاركة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
     openModal(invoice);
     render();
     toast('تم تسجيل البيع وتحديث المخزون وإصدار الفاتورة', 'success');
