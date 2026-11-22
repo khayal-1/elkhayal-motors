@@ -24,3 +24,10 @@ New accounts receive the `customer` role from an Auth trigger. Elevated roles ar
 ## Deploy
 
 Vercel imports the repository and builds with `npm run build`. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Development, Preview, and Production. Supabase Auth's Site URL and allowed redirect URLs must include the deployed Vercel domain before password recovery/email confirmations are used.
+
+
+## الأدوات المالية المتقدمة
+
+تتضمن واجهة الإدارة صفحة «الأدوات المالية المتقدمة» لإدارة الفترات المحاسبية وإقفالها، الأرصدة الافتتاحية المتوازنة، مراكز التكلفة، سلف الموردين وتسويتها على فواتيرهم، الأصول الثابتة والإهلاك الشهري، تسويات البنوك، الشيكات، القيود المتكررة، وإعداد نسب الضرائب ومعرفات التسجيل الضريبي. صلاحية finance_manage تتيح إدارة هذه الأدوات، بينما accounting_view تتيح القراءة وفق سياسات RLS.
+
+**ملاحظة محاسبية:** إعداد نسب الضرائب لا يفعّل احتسابها آليًا على فواتير البيع والشراء ولا يرسل مستندات إلى ETA. كما أن اكتمال التقارير المالية يتطلب ربط كل المبيعات والمشتريات والدفعات والمرتجعات بقيودها واختبارها على بيانات المعرض المعتمدة.
