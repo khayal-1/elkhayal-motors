@@ -298,6 +298,7 @@ function sidebarItems() {
     if (hasAnyPermission('catalog_view', 'catalog_manage')) items.push({ route: 'inventory', label: 'المخزن والأسعار', icon: 'fa-boxes-stacked' });
     if (hasPermission('catalog_manage')) items.push({ route: 'manage-bikes', label: 'إدارة الدراجات', icon: 'fa-motorcycle' });
     if (hasRequestAccess()) items.push({ route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null });
+    if (hasPermission('sales_manage')) items.push({ route: 'vin-scanner', label: 'ماسح الشاسيه والموتور', icon: 'fa-barcode' });
     if (hasPermission('expenses_manage') || hasPermission('accounting_view')) items.push({ route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' });
     if (hasPermission('finance_manage') || hasPermission('accounting_view')) items.push({ route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' });
     if (hasPermission('finance_manage')) items.push({ route: 'hr', label: 'الموارد البشرية والرواتب', icon: 'fa-users-gear' });
@@ -314,6 +315,7 @@ function sidebarItems() {
     { route: 'dashboard', label: 'لوحة الإحصائيات', icon: 'fa-chart-line' },
     { section: 'البيع' },
     { route: 'pos', label: 'نقطة البيع POS', icon: 'fa-cash-register' },
+    { route: 'vin-scanner', label: 'ماسح الشاسيه والموتور', icon: 'fa-barcode' },
     { route: 'suppliers', label: 'الموردون والتوريد', icon: 'fa-truck-ramp-box' },
     { route: 'inventory', label: 'المخزن والأسعار', icon: 'fa-boxes-stacked' },
     { section: 'الإدارة' },
@@ -686,9 +688,204 @@ function pageCustomerInvoices() {
   `;
 }
 
+
+/* ---------- VIN / Engine-number camera scanner ---------- */
+let vinScannerStream = null;
+let vinScanTimer = null;
+let vinOcrWorker = null;
+let vinScanBusy = false;
+let vinBarcodeDetector = null;
+let lastScannedUnit = null;
+
+function normalizeUnitCode(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function stopVinScanner() {
+  if (vinScanTimer) clearInterval(vinScanTimer);
+  vinScanTimer = null;
+  if (vinScannerStream) vinScannerStream.getTracks().forEach(track => track.stop());
+  vinScannerStream = null;
+  const video = $('#vinScannerVideo');
+  if (video) video.srcObject = null;
+  const start = $('#startVinScanner'), stop = $('#stopVinScanner'), placeholder = $('#vinCameraPlaceholder');
+  if (start) start.disabled = false;
+  if (stop) stop.disabled = true;
+  if (placeholder) placeholder.classList.remove('hidden');
+}
+
+async function loadTesseractLibrary() {
+  if (window.Tesseract) return window.Tesseract;
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('تعذر تحميل محرك قراءة النصوص'));
+    document.head.appendChild(script);
+  });
+  return window.Tesseract;
+}
+
+async function getVinOcrWorker() {
+  if (vinOcrWorker) return vinOcrWorker;
+  const tesseract = await loadTesseractLibrary();
+  vinOcrWorker = await tesseract.createWorker('eng');
+  return vinOcrWorker;
+}
+
+async function lookupUnitByCode(rawCode) {
+  const code = normalizeUnitCode(rawCode);
+  if (code.length < 5) throw new Error('الرقم قصير جدًا؛ تحقق من وضوح الصورة أو أدخل الرقم كاملًا');
+  if (!supabase || !currentUser() || !canUseVinScanner()) throw new Error('يلزم تسجيل الدخول بصلاحية المبيعات للبحث');
+  const columns = ['vin','engine_number','barcode'];
+  for (const column of columns) {
+    const { data, error } = await supabase.from('motorcycle_units')
+      .select('id,motorcycle_id,vin,engine_number,barcode,unit_status,sale_item_id,warranty_start,warranty_end,notes,registered_at,motorcycles(id,name,model_year,category,price,stock,image_urls,description)')
+      .ilike(column, code)
+      .limit(2);
+    if (error) throw error;
+    if (data?.length > 1) throw new Error('الرقم يطابق أكثر من وحدة؛ راجع تسجيل أرقام الوحدات في المخزن');
+    if (data?.length === 1) return data[0];
+  }
+  return null;
+}
+
+function showVinScanStatus(message, isError = false) {
+  const el = $('#vinScanStatus');
+  if (el) { el.textContent = message; el.classList.toggle('text-red', !!isError); }
+}
+
+function renderVinUnitMatch(unit) {
+  lastScannedUnit = unit;
+  const target = $('#vinScanResult');
+  if (!target) return;
+  if (!unit) {
+    target.innerHTML = '<div class="empty"><i class="fa-solid fa-circle-question"></i><p>لم يتم العثور على وحدة مسجلة بهذا الرقم.</p><small>تأكد من إدخال رقم الهيكل أو الموتور كما هو مسجل في المخزن.</small></div>';
+    return;
+  }
+  const bike = unit.motorcycles || {};
+  const available = unit.unit_status === 'available' && Number(bike.stock || 0) > 0;
+  const image = bike.image_urls?.[0] ? '<img class="vin-unit-image" src="'+esc(bike.image_urls[0])+'" alt="'+esc(bike.name)+'">' : '<div class="vin-unit-image vin-unit-placeholder"><i class="fa-solid fa-motorcycle"></i></div>';
+  target.innerHTML = '<div class="vin-unit-card">'+image+'<div class="vin-unit-details"><div class="contact-actions"><span class="status-badge '+(available?'success':'danger')+'">'+(available?'متاحة للبيع':'غير متاحة للبيع')+'</span><b>'+esc(bike.name||'طراز غير معروف')+'</b></div>'+
+    '<div class="vin-unit-grid"><div><small>الموديل</small><b>'+esc(bike.model_year||'—')+'</b></div><div><small>الفئة</small><b>'+esc(bike.category||'—')+'</b></div><div><small>السعر</small><b>'+money(bike.price)+'</b></div><div><small>المخزون العام</small><b>'+Number(bike.stock||0)+'</b></div><div><small>رقم الشاسيه VIN</small><b>'+esc(unit.vin||'—')+'</b></div><div><small>رقم الموتور</small><b>'+esc(unit.engine_number||'—')+'</b></div><div><small>الباركود</small><b>'+esc(unit.barcode||'—')+'</b></div><div><small>حالة الوحدة</small><b>'+esc(unit.unit_status)+'</b></div><div><small>الضمان</small><b>'+esc(unit.warranty_start||'—')+' – '+esc(unit.warranty_end||'—')+'</b></div></div>'+
+    (bike.description?'<p>'+esc(bike.description)+'</p>':'')+'</div></div>'+
+    (available?'<form id="vinScannerSaleForm" class="vin-sale-form form-grid" data-unit-id="'+esc(unit.id)+'"><h3><i class="fa-solid fa-cash-register"></i> بيع هذه الوحدة</h3>'+
+      '<div class="form-row"><div class="field"><label>حساب العميل (اختياري)</label><select name="customer_user_id"><option value="">عميل نقدي / بدون ربط</option>'+((state.registeredCustomers||[]).map(c=>'<option value="'+esc(c.user_id)+'">'+esc(c.display_name)+' — '+esc(c.phone||'بدون هاتف')+'</option>').join(''))+'</select></div><div class="field"><label>اسم العميل</label><input name="customer_name" maxlength="120" placeholder="عميل نقدي"></div><div class="field"><label>هاتف العميل</label><input name="customer_phone" type="tel" maxlength="32"></div></div>'+
+      '<div class="form-row"><div class="field"><label>المبلغ المدفوع الآن (ج.م)</label><input name="payment_amount" type="number" min="0" max="'+Number(bike.price||0)+'" step="0.01" value="'+Number(bike.price||0)+'" required></div><div class="field"><label>طريقة الدفع</label><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div></div>'+
+      '<div class="field"><label>مرجع الدفع (اختياري)</label><input name="payment_reference" maxlength="120"></div><div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="500"></textarea></div>'+
+      '<button class="btn btn-primary btn-block" type="submit"><i class="fa-solid fa-file-invoice"></i> تأكيد البيع وإصدار الفاتورة</button></form>':'<div class="hint">لا يمكن بيع الوحدة من هنا لأنها مباعة أو محجوزة أو غير متاحة أو أن مخزون الطراز غير كافٍ.</div>');
+}
+
+async function processVinScan(rawCode) {
+  const input = $('#vinScanInput');
+  if (input) input.value = rawCode;
+  showVinScanStatus('تم التقاط الرقم؛ جارٍ البحث في قاعدة البيانات...');
+  try {
+    const unit = await lookupUnitByCode(rawCode);
+    renderVinUnitMatch(unit);
+    showVinScanStatus(unit ? 'تم العثور على الوحدة وربط الرقم ببياناتها.' : 'لم يتم العثور على وحدة مطابقة.', !unit);
+    if (unit) stopVinScanner();
+  } catch (error) {
+    showVinScanStatus(error.message || 'تعذر البحث عن الوحدة', true);
+  }
+}
+
+async function startVinScanner() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast('الكاميرا تحتاج متصفحًا يدعمها واتصال HTTPS', 'error'); return;
+  }
+  try {
+    vinScannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    const video = $('#vinScannerVideo');
+    if (!video) { stopVinScanner(); return; }
+    video.srcObject = vinScannerStream;
+    await video.play();
+    $('#vinCameraPlaceholder')?.classList.add('hidden');
+    $('#startVinScanner').disabled = true;
+    $('#stopVinScanner').disabled = false;
+    if ('BarcodeDetector' in window) {
+      try {
+        const supported = await window.BarcodeDetector.getSupportedFormats();
+        const wanted = ['code_128','code_39','qr_code','ean_13','ean_8','upc_a','upc_e','itf','codabar','data_matrix','pdf417'];
+        vinBarcodeDetector = new window.BarcodeDetector({ formats: wanted.filter(x => supported.includes(x)) });
+      } catch { vinBarcodeDetector = null; }
+    }
+    let lastOcrAt = 0;
+    vinScanTimer = setInterval(async () => {
+      if (vinScanBusy || !vinScannerStream || video.readyState < 2) return;
+      vinScanBusy = true;
+      try {
+        if (vinBarcodeDetector) {
+          const codes = await vinBarcodeDetector.detect(video);
+          const value = codes.find(x => normalizeUnitCode(x.rawValue).length >= 5)?.rawValue;
+          if (value) { await processVinScan(value); return; }
+        }
+        if (Date.now() - lastOcrAt > 2600) {
+          lastOcrAt = Date.now();
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.min(video.videoWidth, 1500);
+          canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const worker = await getVinOcrWorker();
+          const result = await worker.recognize(canvas);
+          const textValue = String(result?.data?.text || '').toUpperCase();
+          const candidates = [...new Set([
+            ...(textValue.match(/[A-HJ-NPR-Z0-9]{17}/g) || []),
+            ...(textValue.match(/[A-Z0-9]{7,20}/g) || [])
+          ])].sort((a,b)=>b.length-a.length);
+          for (const candidate of candidates.slice(0,5)) {
+            const unit = await lookupUnitByCode(candidate).catch(()=>null);
+            if (unit) { await processVinScan(candidate); return; }
+          }
+        }
+      } catch (error) {
+        console.debug('Camera scan iteration:', error);
+      } finally { vinScanBusy = false; }
+    }, 650);
+    toast('الكاميرا تعمل؛ ثبّت الرقم داخل الإطار', 'success');
+  } catch (error) {
+    stopVinScanner();
+    toast(error.name === 'NotAllowedError' ? 'لم يتم السماح باستخدام الكاميرا' : 'تعذر تشغيل الكاميرا: '+(error.message||''), 'error');
+  }
+}
+
 /* =========================================================
    SECTION 4 — POS & INVOICES
    ========================================================= */
+
+function canUseVinScanner() {
+  return !!currentUser() && (hasRole('admin','manager','owner') || hasPermission('sales_manage'));
+}
+
+function pageVinScanner() {
+  if (!canUseVinScanner()) return pageNoPermission();
+  return `
+    <h2 class="page-title"><i class="fa-solid fa-barcode"></i> ماسح رقم الشاسيه والموتور</h2>
+    <p class="page-sub">افتح الكاميرا لقراءة رقم الهيكل أو رقم الموتور تلقائيًا، أو أدخل الرقم يدويًا. سيبحث النظام في الوحدات المسجلة ويعرض بيانات الطراز والسعر والتوفر.</p>
+    <div class="panel vin-scanner-panel">
+      <div class="panel-title"><i class="fa-solid fa-camera"></i> مسح بالكاميرا</div>
+      <div class="vin-camera-frame">
+        <video id="vinScannerVideo" autoplay muted playsinline></video>
+        <div class="vin-camera-guide"><span>وجّه الرقم داخل الإطار</span></div>
+        <div class="vin-camera-placeholder" id="vinCameraPlaceholder"><i class="fa-solid fa-camera"></i><b>الكاميرا متوقفة</b><small>استخدم الكاميرا الخلفية مع إضاءة جيدة</small></div>
+      </div>
+      <div class="contact-actions vin-camera-actions">
+        <button class="btn btn-primary" type="button" id="startVinScanner"><i class="fa-solid fa-camera"></i> تشغيل الكاميرا والمسح التلقائي</button>
+        <button class="btn btn-outline" type="button" id="stopVinScanner" disabled><i class="fa-solid fa-camera-rotate"></i> إيقاف الكاميرا</button>
+      </div>
+      <small class="hint">يدعم قراءة الباركود تلقائيًا، والتعرف على النص المطبوع/المحفور باستخدام OCR عند توفر مكتبة التعرف. يتطلب السماح بالكاميرا واتصال HTTPS.</small>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><i class="fa-solid fa-magnifying-glass"></i> البحث المباشر</div>
+      <form id="vinLookupForm" class="form-row vin-lookup-form">
+        <div class="field"><label for="vinScanInput">رقم الشاسيه VIN أو رقم الموتور أو الباركود</label><input id="vinScanInput" name="code" maxlength="80" autocomplete="off" autocapitalize="characters" placeholder="اكتب الرقم أو امسحه بالكاميرا" required></div>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-search"></i> بحث عن الوحدة</button>
+      </form>
+      <div id="vinScanStatus" class="hint" aria-live="polite">لم يتم إجراء بحث بعد.</div>
+      <div id="vinScanResult" class="vin-scan-result"></div>
+    </div>`;
+}
 
 function pagePOS() {
   const u = currentUser();
@@ -810,7 +1007,7 @@ function pageInventoryTools() {
  const employeeOpts=(state.employees||[]).filter(x=>x.employment_status==='active').map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+'</option>').join('');
  const saleOpts=(state.sales||[]).map(x=>'<option value="'+esc(x.id)+'">فاتورة '+esc(x.invoice_number)+' — '+esc(x.customer_name)+'</option>').join('');
  const costRows=bikes.map(b=>{const x=costMap.get(b.id)||{};return '<tr><td>'+esc(b.name)+'</td><td>'+b.stock+'</td><td>'+money(x.unit_cost)+'</td><td>'+Number(x.reorder_level||0)+'</td><td>'+(canFinance||hasPermission('catalog_manage')?'<form id="inventoryCostForm" class="inline-form" data-bike-id="'+esc(b.id)+'"><input type="number" name="unit_cost" min="0" step="0.01" value="'+(x.unit_cost??'')+'" placeholder="تكلفة الوحدة" required><input type="number" name="reorder_level" min="0" step="1" value="'+Number(x.reorder_level||0)+'" required><button class="btn btn-outline btn-sm" type="submit">حفظ</button></form>':'—')+'</td></tr>';}).join('');
- const unitRows=(state.motorcycleUnits||[]).map(x=>'<tr><td>'+esc(x.vin)+'</td><td>'+esc(x.barcode||'—')+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.unit_status)+'</td><td>'+esc(x.warranty_start||'—')+' – '+esc(x.warranty_end||'—')+'</td></tr>').join('');
+ const unitRows=(state.motorcycleUnits||[]).map(x=>'<tr><td>'+esc(x.vin)+'</td><td>'+esc(x.engine_number||'—')+'</td><td>'+esc(x.barcode||'—')+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.unit_status)+'</td><td>'+esc(x.warranty_start||'—')+' – '+esc(x.warranty_end||'—')+'</td></tr>').join('');
  const batchRows=(state.stocktakeBatches||[]).map(x=>'<tr><td>#'+x.stocktake_number+'</td><td>'+esc(x.stocktake_date)+'</td><td>'+esc(x.notes||'—')+'</td><td>'+money(x.total_increase)+'</td><td>'+money(x.total_decrease)+'</td><td>'+esc(x.journal_entry_id||'بدون فرق مالي')+'</td></tr>').join('');
  const warrantyRows=(state.warranties||[]).map(x=>'<tr><td>#'+x.warranty_number+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc(x.customer_phone)+'</td><td>'+esc(x.start_date)+' – '+esc(x.end_date)+'</td><td>'+esc(x.status)+'</td></tr>').join('');
  const serviceRows=(state.serviceOrders||[]).map(x=>'<tr><td>#'+x.service_number+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc(x.customer_phone)+'</td><td>'+esc(x.issue_description)+'</td><td>'+money(x.estimated_cost)+'</td><td>'+esc(x.status)+'</td><td>'+(canCatalog&&!['completed','cancelled'].includes(x.status)?'<form id="serviceStatusForm" class="inline-form" data-order-id="'+esc(x.id)+'"><select name="status"><option value="in_progress">قيد العمل</option><option value="waiting_parts">بانتظار قطع غيار</option><option value="completed">مكتمل</option><option value="cancelled">ملغي</option></select><input name="actual_cost" type="number" min="0" step="0.01" placeholder="التكلفة الفعلية"><input name="diagnosis" placeholder="التشخيص"><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':'—')+'</td></tr>').join('');
@@ -818,7 +1015,7 @@ function pageInventoryTools() {
  return '<h2 class="page-title"><i class="fa-solid fa-warehouse"></i> إدارة المخزون والجرد والضمان والصيانة</h2><p class="page-sub">تسجيل تكلفة المخزون الفعلية، حدود إعادة الطلب، أرقام الهياكل والباركود، الجرد الدوري مع قيد فروق المخزون، الضمان وأوامر الصيانة.</p>'+
  '<div class="stats-grid"><div class="stat-card"><div class="stat-label">طرازات المخزون</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">أرقام هياكل مسجلة</div><div class="stat-value">'+(state.motorcycleUnits||[]).length+'</div></div><div class="stat-card"><div class="stat-label">تنبيهات إعادة الطلب</div><div class="stat-value">'+(state.reorderAlerts||[]).length+'</div></div><div class="stat-card"><div class="stat-label">أوامر صيانة مفتوحة</div><div class="stat-value">'+(state.serviceOrders||[]).filter(x=>!['completed','cancelled'].includes(x.status)).length+'</div></div></div>'+
  '<div class="panel"><div class="panel-title">تكلفة المخزون وحد إعادة الطلب</div><p class="hint">يُحدّث النظام متوسط تكلفة الوحدة المرجح تلقائيًا من استلامات الشراء بعد خصم مرتجعات المورد. يمكن للمحاسب تعديل التكلفة يدويًا عند وجود تسوية موثقة.</p><div class="table-wrap"><table><thead><tr><th>الدراجة</th><th>المخزون</th><th>متوسط التكلفة المرجح</th><th>حد الطلب</th><th>تحديث التكلفة / الحد</th></tr></thead><tbody>'+(costRows||'<tr><td colspan="5">لا توجد دراجات</td></tr>')+'</tbody></table></div></div>'+
- '<div class="panel"><div class="panel-title">تسجيل رقم الهيكل VIN والباركود</div><form id="motorcycleUnitForm" class="form-grid"><div class="form-row"><div class="field"><label>الدراجة</label><select name="motorcycle_id" required><option value="">اختر الدراجة</option>'+bikeOpts+'</select></div><div class="field"><label>رقم الهيكل VIN</label><input name="vin" required maxlength="80"></div><div class="field"><label>الباركود (اختياري)</label><input name="barcode" maxlength="80"></div></div><div class="form-row"><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date"></div></div><div class="field"><label>ملاحظات</label><input name="notes" maxlength="180"></div><button class="btn btn-primary" type="submit">تسجيل الوحدة</button></form><div class="table-wrap mt-2"><table><thead><tr><th>VIN</th><th>الباركود</th><th>الدراجة</th><th>الحالة</th><th>الضمان</th></tr></thead><tbody>'+(unitRows||'<tr><td colspan="5">لم تسجل أرقام هياكل بعد</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="panel"><div class="panel-title">تسجيل رقم الهيكل VIN ورقم الموتور والباركود</div><form id="motorcycleUnitForm" class="form-grid"><div class="form-row"><div class="field"><label>الدراجة</label><select name="motorcycle_id" required><option value="">اختر الدراجة</option>'+bikeOpts+'</select></div><div class="field"><label>رقم الهيكل VIN</label><input name="vin" required maxlength="80"></div><div class="field"><label>رقم الموتور</label><input name="engine_number" required maxlength="80"></div><div class="field"><label>الباركود (اختياري)</label><input name="barcode" maxlength="80"></div></div><div class="form-row"><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date"></div></div><div class="field"><label>ملاحظات</label><input name="notes" maxlength="180"></div><button class="btn btn-primary" type="submit">تسجيل الوحدة</button></form><div class="table-wrap mt-2"><table><thead><tr><th>VIN</th><th>رقم الموتور</th><th>الباركود</th><th>الدراجة</th><th>الحالة</th><th>الضمان</th></tr></thead><tbody>'+(unitRows||'<tr><td colspan="5">لم تسجل أرقام هياكل بعد</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">الجرد الفعلي وتسوية فروق المخزون</div><p class="hint">أدخل العدد المعدود لكل طراز. تُسجل فروق الكمية في حركات المخزون، وتُرحّل القيمة إلى حساب المخزون وفروق الجرد باستخدام تكلفة الوحدة المسجلة. لا تُنشأ قيود إذا لم يوجد فرق.</p><form id="stocktakeForm" class="form-grid"><div class="form-row"><div class="field"><label>تاريخ الجرد</label><input name="stocktake_date" type="date" required></div><div class="field"><label>ملاحظات</label><input name="notes" maxlength="180"></div></div>'+bikes.map(b=>'<div class="form-row" data-stocktake-line="'+esc(b.id)+'"><div class="field"><label>'+esc(b.name)+' — الدفتري '+b.stock+'</label><input type="number" name="counted_quantity" min="0" step="1" value="'+b.stock+'" required></div><div class="field"><label>تكلفة الوحدة</label><input disabled value="'+(costMap.get(b.id)?.unit_cost??'غير محددة')+'"></div></div>').join('')+'<button class="btn btn-primary" type="submit" '+(!bikes.length?'disabled':'')+'>ترحيل الجرد الفعلي</button></form><div class="table-wrap mt-2"><table><thead><tr><th>الجرد</th><th>التاريخ</th><th>ملاحظات</th><th>زيادة</th><th>عجز</th><th>قيد اليومية</th></tr></thead><tbody>'+(batchRows||'<tr><td colspan="6">لا توجد عمليات جرد</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">تنبيهات إعادة الطلب</div><div class="table-wrap"><table><thead><tr><th>الدراجة</th><th>المخزون الحالي</th><th>حد الطلب</th><th>تكلفة الوحدة</th><th>قيمة المخزون</th></tr></thead><tbody>'+(reorderRows||'<tr><td colspan="5">لا توجد تنبيهات. عيّن حد إعادة الطلب لكل طراز.</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">إدارة الضمان</div><form id="warrantyForm" class="form-grid"><div class="form-row"><div class="field"><label>الدراجة</label><select name="motorcycle_id" required><option value="">اختر الدراجة</option>'+bikeOpts+'</select></div><div class="field"><label>فاتورة البيع (اختياري)</label><select name="sale_id"><option value="">بدون ربط فاتورة</option>'+saleOpts+'</select></div></div><div class="form-row"><div class="field"><label>اسم العميل</label><input name="customer_name" required maxlength="120"></div><div class="field"><label>الهاتف</label><input name="customer_phone" required maxlength="30"></div></div><div class="form-row"><div class="field"><label>بداية الضمان</label><input name="start_date" type="date" required></div><div class="field"><label>نهاية الضمان</label><input name="end_date" type="date" required></div></div><div class="field"><label>الشروط</label><textarea name="terms" rows="2"></textarea></div><button class="btn btn-outline" type="submit">تسجيل ضمان</button></form><div class="table-wrap mt-2"><table><thead><tr><th>الضمان</th><th>الدراجة</th><th>العميل</th><th>الهاتف</th><th>الفترة</th><th>الحالة</th></tr></thead><tbody>'+(warrantyRows||'<tr><td colspan="6">لا توجد ضمانات</td></tr>')+'</tbody></table></div></div>'+
@@ -1346,6 +1543,7 @@ const ROUTES = {
   orders: pageOrders,
   invoices: pageCustomerInvoices,
   pos: pagePOS,
+  'vin-scanner': pageVinScanner,
   suppliers: pageSuppliers,
   target: pageTarget,
   inventory: pageInventory,
@@ -1387,6 +1585,7 @@ function render() {
 
 function navigate(route) {
   if (!ROUTES[route]) route = 'home';
+  if (state.route === 'vin-scanner' && route !== 'vin-scanner') stopVinScanner();
   if (state.route === 'staff' && route !== 'staff') state.staffProvisionResult = null;
   state.route = route;
   state.search = '';
@@ -1397,6 +1596,7 @@ function navigate(route) {
   render();
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
   if (route === 'pos') loadSalesData().then(render);
+  if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData()]).then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
   if (route === 'hr' && state.user && (hasRole('admin','manager','owner') || hasPermission('finance_manage'))) Promise.all([loadHRData(),loadFinanceData(),loadSalesData()]).then(render);
@@ -1509,6 +1709,8 @@ document.addEventListener('click', async (e) => {
   }
 
   /* Sidebar toggle / overlay / logout */
+  if (e.target.closest('#startVinScanner')) { await startVinScanner(); return; }
+  if (e.target.closest('#stopVinScanner')) { stopVinScanner(); return; }
   if (e.target.closest('#menuToggle')) { toggleSidebar(); return; }
   if (e.target.closest('#sidebarOverlay')) { closeSidebar(); return; }
   if (e.target.closest('#logoutBtn')) { logout(); return; }
@@ -1998,7 +2200,7 @@ document.addEventListener('submit', async (e) => {
   }
   if (form.id === 'motorcycleUnitForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية تسجيل أرقام الهياكل','error'); return; }
-    const fd=new FormData(form); const {error}=await supabase.rpc('register_motorcycle_unit',{p_motorcycle_id:fd.get('motorcycle_id'),p_vin:safeName(fd.get('vin')),p_barcode:safeName(fd.get('barcode'))||null,p_warranty_start:fd.get('warranty_start')||null,p_warranty_end:fd.get('warranty_end')||null,p_notes:safeName(fd.get('notes'))||null});
+    const fd=new FormData(form); const {error}=await supabase.rpc('register_motorcycle_unit_with_engine_number',{p_motorcycle_id:fd.get('motorcycle_id'),p_vin:safeName(fd.get('vin')),p_engine_number:safeName(fd.get('engine_number')),p_barcode:safeName(fd.get('barcode'))||null,p_warranty_start:fd.get('warranty_start')||null,p_warranty_end:fd.get('warranty_end')||null,p_notes:safeName(fd.get('notes'))||null});
     if(error){toast(error.message||'تعذر تسجيل رقم الهيكل','error');return;} await loadInventoryData();render();toast('تم تسجيل رقم الهيكل والباركود','success');return;
   }
   if (form.id === 'stocktakeForm') {
@@ -2466,6 +2668,56 @@ document.addEventListener('submit', async (e) => {
   }
 
   /* Showroom POS: one atomic database RPC creates a multi-item invoice, payment and stock movements. */
+  if (form.id === 'vinLookupForm') {
+    const code = safeName(new FormData(form).get('code'));
+    if (!code) return;
+    showVinScanStatus('جارٍ البحث عن الرقم...');
+    try {
+      const unit = await lookupUnitByCode(code);
+      renderVinUnitMatch(unit);
+      showVinScanStatus(unit ? 'تم العثور على الوحدة.' : 'لا توجد وحدة مسجلة بهذا الرقم.', !unit);
+    } catch (error) { showVinScanStatus(error.message || 'تعذر البحث', true); }
+    return;
+  }
+
+  if (form.id === 'vinScannerSaleForm') {
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية تسجيل المبيعات', 'error'); return; }
+    const fd = new FormData(form);
+    const amount = Number(fd.get('payment_amount'));
+    const bike = lastScannedUnit?.motorcycles;
+    if (!lastScannedUnit || lastScannedUnit.id !== form.dataset.unitId || !bike || !Number.isFinite(amount) || amount < 0 || amount > Number(bike.price)) {
+      toast('بيانات الوحدة أو الدفعة غير صحيحة؛ أعد البحث عن الوحدة', 'error'); return;
+    }
+    const submit = form.querySelector('[type="submit"]');
+    if (submit) submit.disabled = true;
+    const { data, error } = await supabase.rpc('create_showroom_sale_for_unit', {
+      p_unit_id: lastScannedUnit.id,
+      p_customer_user_id: String(fd.get('customer_user_id') || '') || null,
+      p_customer_name: safeName(fd.get('customer_name')) || null,
+      p_customer_phone: safeName(fd.get('customer_phone')) || null,
+      p_payment_amount: amount,
+      p_payment_method: amount > 0 ? String(fd.get('payment_method')) : null,
+      p_payment_reference: safeName(fd.get('payment_reference')) || null,
+      p_notes: safeName(fd.get('notes')) || null
+    });
+    if (submit) submit.disabled = false;
+    if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد العملية', 'error'); return; }
+    const customerName = safeName(fd.get('customer_name')) || 'عميل نقدي';
+    const due = Number(data.balance_due || 0);
+    const invoice = '<div class="invoice"><div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع وحدة محددة</p></div><div class="invoice-meta"><b>'+esc(data.invoice_number)+'</b><br><span>'+new Date().toLocaleString('ar-EG')+'</span></div></div><hr>'+
+      '<p><b>العميل:</b> '+esc(customerName)+'</p><p><b>الهاتف:</b> '+esc(fd.get('customer_phone') || '—')+'</p>'+
+      '<div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>VIN</th><th>رقم الموتور</th><th>السعر</th></tr></thead><tbody><tr><td>'+esc(data.motorcycle_name)+'</td><td>'+esc(data.model_year||'—')+'</td><td>'+esc(data.vin||'—')+'</td><td>'+esc(data.engine_number||'—')+'</td><td>'+money(data.unit_price)+'</td></tr></tbody></table></div>'+
+      '<p><b>الإجمالي:</b> '+money(data.total)+'</p><p><b>المدفوع:</b> '+money(data.amount_paid)+'</p><p><b>المتبقي:</b> '+money(due)+'</p><p><b>حالة الدفع:</b> '+(data.payment_status==='paid'?'مدفوعة':data.payment_status==='partial'?'مدفوعة جزئيًا':'غير مدفوعة')+'</p>'+
+      '<p>رقم الشاسيه ورقم الموتور مرتبطان بهذه الفاتورة في سجل الوحدة.</p><p class="text-center">شكرًا لثقتكم في El Khayal Motors</p></div>'+
+      '<div class="contact-actions no-print"><button class="btn btn-primary" id="printInvoiceBtn"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" id="sendInvoiceWhatsAppBtn" data-phone="'+esc(fd.get('customer_phone')||'')+'" data-invoice="'+esc(data.invoice_number)+'" data-customer="'+esc(customerName)+'" data-items="'+esc(data.motorcycle_name+' — VIN '+data.vin+' — موتور '+(data.engine_number||'—'))+'" data-total="'+Number(data.total||0)+'" data-paid="'+Number(data.amount_paid||0)+'" data-due="'+due+'"><i class="fa-brands fa-whatsapp"></i> إرسال عبر واتساب</button><button class="btn btn-outline" id="shareInvoiceBtn"><i class="fa-solid fa-share-nodes"></i> مشاركة الفاتورة</button></div>';
+    await Promise.all([loadMotorcycles(),loadSalesData()]);
+    render();
+    openModal(invoice);
+    lastScannedUnit = null;
+    toast('تم البيع وربط رقم الوحدة بالفاتورة وتحديث المخزون', 'success');
+    return;
+  }
+
   if (form.id === 'posSaleForm') {
     if (!hasRole('admin') || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
     const fd = new FormData(form);
@@ -2888,7 +3140,7 @@ async function loadInventoryData() {
  const u=currentUser();if(!u||!supabase||!(hasRole('admin','manager','owner')||hasPermission('catalog_manage')||hasPermission('finance_manage')))return;
  const [costs,units,batches,lines,warranties,orders,alerts]=await Promise.all([
   supabase.from('motorcycle_inventory_costs').select('*'),
-  supabase.from('motorcycle_units').select('*,motorcycles(name,category,model_year)').order('registered_at',{ascending:false}).limit(500),
+  supabase.from('motorcycle_units').select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)').order('registered_at',{ascending:false}).limit(500),
   supabase.from('stocktake_batches').select('*').order('stocktake_date',{ascending:false}).limit(100),
   supabase.from('stocktake_lines').select('*,motorcycles(name)').limit(1000),
   supabase.from('warranties').select('*,motorcycles(name)').order('created_at',{ascending:false}).limit(300),
