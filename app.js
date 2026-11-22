@@ -338,23 +338,19 @@ function renderSidebar() {
   const nav = $('#sidebarNav');
   if (!nav) return;
   const active = state.route;
-  const items = sidebarItems();
-  let html = '';
-  for (const it of items) {
-    if (it.section) {
-      html += `<div class="sidebar-section-title">${esc(it.section)}</div>`;
-      continue;
-    }
-    const isActive = active === it.route ? 'active' : '';
-    const badge = it.badge ? `<span class="badge">${it.badge}</span>` : '';
-    html += `
-      <a class="sidebar-link ${isActive}" data-nav="${esc(it.route)}" role="button" tabindex="0">
-        <i class="fa-solid ${esc(it.icon)}"></i>
-        <span>${esc(it.label)}</span>
-        ${badge}
-      </a>`;
+  const groups = [];
+  for (const item of sidebarItems()) {
+    if (item.section) groups.push({ title: item.section, items: [] });
+    else if (groups.length) groups[groups.length - 1].items.push(item);
   }
-  nav.innerHTML = html;
+  nav.innerHTML = groups.map((group) => {
+    const isActive = group.items.some((item) => item.route === active);
+    const links = group.items.map((item) => {
+      const badge = item.badge ? '<span class="badge">'+item.badge+'</span>' : '';
+      return '<a class="sidebar-link '+(active===item.route?'active':'')+'" data-nav="'+esc(item.route)+'" role="button" tabindex="0"><i class="fa-solid '+esc(item.icon)+'"></i><span>'+esc(item.label)+'</span>'+badge+'</a>';
+    }).join('');
+    return '<details class="sidebar-group" '+(isActive?'open':'')+'><summary>'+esc(group.title)+'<i class="fa-solid fa-chevron-down"></i></summary><div class="sidebar-group-links">'+links+'</div></details>';
+  }).join('');
 }
 
 function renderAccountArea() {
