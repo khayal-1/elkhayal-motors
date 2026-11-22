@@ -1378,6 +1378,7 @@ document.addEventListener('click', async (e) => {
       <form id="supplierPaymentForm" class="form-grid" data-bill-id="${esc(bill.id)}">
         <div class="field"><label>قيمة الدفعة (ج.م)</label><input name="amount" type="number" min="0.01" max="${bill.balanceDue}" step="0.01" required></div>
         <div class="field"><label>طريقة الدفع</label><select name="method" required><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="instapay">إنستاباي</option><option value="cheque">شيك</option><option value="other">أخرى</option></select></div>
+        <div class="field"><label>الخزينة / البنك</label><select name="cash_account_id" required><option value="">اختر الحساب المالي</option>\${(state.cashAccounts||[]).map(a=>\`<option value="\${esc(a.id)}">\${esc(a.name)}</option>\`).join('')}</select></div>
         <div class="field"><label>رقم مرجعي (اختياري)</label><input name="reference" maxlength="120"></div>
         <div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
         <button class="btn btn-primary" type="submit">تأكيد تسجيل الدفعة</button>
@@ -1664,6 +1665,99 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
+  if (form.id === 'fiscalPeriodForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة الفترات','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_fiscal_period',{p_period_code:safeName(fd.get('period_code')),p_period_name:safeName(fd.get('period_name')),p_start_date:fd.get('start_date'),p_end_date:fd.get('end_date')});
+    if(error){toast(error.message||'تعذر إنشاء الفترة','error');return;} await loadFinanceData();render();toast('تم إنشاء الفترة المحاسبية','success');return;
+  }
+  if (form.id === 'closePeriodForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إقفال الفترة','error'); return; }
+    const {error}=await supabase.rpc('close_fiscal_period',{p_period_id:form.dataset.periodId});
+    if(error){toast(error.message||'تعذر إقفال الفترة','error');return;} await loadFinanceData();render();toast('تم إقفال الفترة ومنع القيود الجديدة داخلها','success');return;
+  }
+  if (form.id === 'openingBalanceForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية ترحيل الأرصدة الافتتاحية','error'); return; }
+    const fd=new FormData(form),lines=[];
+    for(const row of form.querySelectorAll('[data-opening-row]')){const account_id=row.querySelector('[name="account_id"]').value;const debit=Number(row.querySelector('[name="debit"]').value||0);const credit=Number(row.querySelector('[name="credit"]').value||0);if(account_id&&(debit>0||credit>0))lines.push({account_id,debit,credit});else if(account_id||debit>0||credit>0){toast('أكمل الحساب وقيمة المدين أو الدائن لكل سطر','error');return;}}
+    if(lines.length<2){toast('أدخل سطرين على الأقل للأرصدة الافتتاحية','error');return;} const debit=lines.reduce((n,x)=>n+x.debit,0),credit=lines.reduce((n,x)=>n+x.credit,0);
+    if(Math.abs(debit-credit)>0.005){toast('الأرصدة غير متوازنة؛ يجب تساوي المدين والدائن','error');return;}
+    const {data,error}=await supabase.rpc('post_opening_balance',{p_date:fd.get('effective_date'),p_description:safeName(fd.get('description')),p_lines:lines});
+    if(error){toast(error.message||'تعذر ترحيل الأرصدة','error');return;} await loadFinanceData();render();toast('تم ترحيل الأرصدة الافتتاحية بنجاح','success');return;
+  }
+  if (form.id === 'costCenterForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة مراكز التكلفة','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_cost_center',{p_code:safeName(fd.get('code')),p_name:safeName(fd.get('name')),p_description:safeName(fd.get('description'))||null});
+    if(error){toast(error.message||'تعذر إنشاء مركز التكلفة','error');return;} await loadFinanceData();render();toast('تمت إضافة مركز التكلفة','success');return;
+  }
+  if (form.id === 'supplierAdvanceForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسجيل سلف الموردين','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('record_supplier_advance',{p_supplier_id:fd.get('supplier_id'),p_date:fd.get('advance_date'),p_amount:Number(fd.get('amount')),p_cash_account_id:fd.get('cash_account_id'),p_method:fd.get('method'),p_reference:safeName(fd.get('reference'))||null,p_notes:null});
+    if(error){toast(error.message||'تعذر تسجيل سلفة المورد','error');return;} await Promise.all([loadFinanceData(),loadPurchasingData()]);render();toast('تم تسجيل سلفة المورد وترحيل القيد المحاسبي','success');return;
+  }
+  if (form.id === 'supplierAdvanceAllocationForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسوية سلف الموردين','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('allocate_supplier_advance',{p_advance_id:fd.get('advance_id'),p_bill_id:fd.get('bill_id'),p_amount:Number(fd.get('amount'))});
+    if(error){toast(error.message||'تعذر تسوية السلفة','error');return;} await Promise.all([loadFinanceData(),loadPurchasingData()]);render();toast('تمت تسوية السلفة على فاتورة المورد','success');return;
+  }
+  if (form.id === 'fixedAssetForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة الأصول','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_fixed_asset',{p_name:safeName(fd.get('asset_name')),p_description:safeName(fd.get('description'))||null,p_asset_account_id:fd.get('asset_account_id'),p_accum_account_id:fd.get('accum_account_id'),p_expense_account_id:fd.get('expense_account_id'),p_acquisition_date:fd.get('acquisition_date'),p_depreciation_start:fd.get('depreciation_start_date'),p_cost:Number(fd.get('cost')),p_salvage:Number(fd.get('salvage_value')||0),p_life_months:Number(fd.get('useful_life_months')),p_cash_account_id:fd.get('cash_account_id')});
+    if(error){toast(error.message||'تعذر تسجيل الأصل الثابت','error');return;} await loadFinanceData();render();toast('تم تسجيل الأصل وترحيل قيد الاقتناء','success');return;
+  }
+  if (form.id === 'depreciationForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية ترحيل الإهلاك','error'); return; }
+    const fd=new FormData(form); const {data,error}=await supabase.rpc('run_fixed_asset_depreciation',{p_period_date:fd.get('period_date')});
+    if(error){toast(error.message||'تعذر ترحيل الإهلاك','error');return;} await loadFinanceData();render();toast('تم ترحيل إهلاك '+(data?.assets_count||0)+' أصل بإجمالي '+money(data?.total_depreciation||0),'success');return;
+  }
+  if (form.id === 'bankReconciliationForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسوية البنك','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_bank_reconciliation',{p_cash_account_id:fd.get('cash_account_id'),p_start:fd.get('period_start'),p_end:fd.get('period_end'),p_statement_balance:Number(fd.get('statement_ending_balance')),p_notes:safeName(fd.get('notes'))||null});
+    if(error){toast(error.message||'تعذر إنشاء التسوية البنكية','error');return;} await loadFinanceData();render();toast('تم إنشاء التسوية البنكية؛ أضف حركات كشف البنك ثم طابقها','success');return;
+  }
+  if (form.id === 'bankStatementLineForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إضافة حركات كشف البنك','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('add_bank_statement_line',{p_reconciliation_id:form.dataset.reconciliationId,p_date:fd.get('statement_date'),p_description:safeName(fd.get('description')),p_amount:Number(fd.get('amount')),p_reference:safeName(fd.get('reference_number'))||null});
+    if(error){toast(error.message||'تعذر إضافة حركة كشف البنك','error');return;} await loadFinanceData();render();toast('تمت إضافة حركة كشف البنك','success');return;
+  }
+  if (form.id === 'bankMatchForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية مطابقة الحركات','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('match_bank_statement_line',{p_line_id:form.dataset.lineId,p_journal_line_id:fd.get('journal_line_id')});
+    if(error){toast(error.message||'تعذرت مطابقة الحركة','error');return;} await loadFinanceData();render();toast('تمت مطابقة حركة كشف البنك','success');return;
+  }
+  if (form.id === 'completeBankReconciliationForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إقفال التسوية','error'); return; }
+    const {error}=await supabase.rpc('complete_bank_reconciliation',{p_reconciliation_id:form.dataset.reconciliationId});
+    if(error){toast(error.message||'لم تكتمل التسوية البنكية','error');return;} await loadFinanceData();render();toast('اكتملت التسوية البنكية','success');return;
+  }
+  if (form.id === 'chequeForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة الشيكات','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_cheque',{p_type:fd.get('cheque_type'),p_reference:safeName(fd.get('cheque_reference')),p_party:safeName(fd.get('party_name')),p_cash_account_id:fd.get('cash_account_id'),p_amount:Number(fd.get('amount')),p_issue:fd.get('issue_date'),p_due:fd.get('due_date'),p_bank:safeName(fd.get('bank_name'))||null,p_notes:safeName(fd.get('notes'))||null});
+    if(error){toast(error.message||'تعذر تسجيل الشيك','error');return;} await loadFinanceData();render();toast('تم تسجيل الشيك','success');return;
+  }
+  if (form.id === 'chequeStatusForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تحديث حالة الشيك','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('update_cheque_status',{p_cheque_id:form.dataset.chequeId,p_status:fd.get('status')});
+    if(error){toast(error.message||'تعذر تحديث حالة الشيك','error');return;} await loadFinanceData();render();toast('تم تحديث حالة الشيك','success');return;
+  }
+  if (form.id === 'recurringJournalForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة القيود المتكررة','error'); return; }
+    const fd=new FormData(form),lines=[];
+    for(const row of form.querySelectorAll('[data-recurring-line]')){const account_id=row.querySelector('[name="account_id"]').value;const debit=Number(row.querySelector('[name="debit"]').value||0),credit=Number(row.querySelector('[name="credit"]').value||0);if(account_id&&(debit>0||credit>0))lines.push({account_id,debit,credit});else if(account_id||debit>0||credit>0){toast('أكمل الحساب والمدين أو الدائن لكل سطر','error');return;}}
+    const debit=lines.reduce((n,x)=>n+x.debit,0),credit=lines.reduce((n,x)=>n+x.credit,0);if(lines.length<2||Math.abs(debit-credit)>0.005){toast('القيد المتكرر يحتاج سطرين متوازنين على الأقل','error');return;}
+    const {error}=await supabase.rpc('save_recurring_journal_template',{p_name:safeName(fd.get('template_name')),p_description:safeName(fd.get('description'))||null,p_frequency:fd.get('frequency'),p_start:fd.get('start_date'),p_end:fd.get('end_date')||null,p_lines:lines});
+    if(error){toast(error.message||'تعذر حفظ القيد المتكرر','error');return;} await loadFinanceData();render();toast('تم حفظ قالب القيد المتكرر','success');return;
+  }
+  if (form.id === 'recurringRunForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية ترحيل القيد المتكرر','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('generate_recurring_journal',{p_template_id:form.dataset.templateId,p_run_date:fd.get('run_date')});
+    if(error){toast(error.message||'تعذر ترحيل القيد المتكرر','error');return;} await loadFinanceData();render();toast('تم ترحيل القيد المتكرر بنجاح','success');return;
+  }
+  if (form.id === 'taxRateForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إعداد الضرائب','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_tax_rate',{p_code:safeName(fd.get('tax_code')),p_name:safeName(fd.get('tax_name')),p_rate:Number(fd.get('rate')),p_account_id:fd.get('tax_account_id')||null,p_from:fd.get('effective_from'),p_to:fd.get('effective_to')||null});
+    if(error){toast(error.message||'تعذر حفظ إعداد الضريبة','error');return;} await loadFinanceData();render();toast('تم حفظ إعداد الضريبة؛ لم تُطبق النسبة تلقائيًا على الفواتير بعد','success');return;
+  }
+
   if (form.id === 'expenseForm') {
     if (!(hasRole('admin','manager','owner') || hasPermission('expenses_manage')) || !supabase) { toast('ليس لديك صلاحية تسجيل المصروفات','error'); return; }
     const fd = new FormData(form), amount = Number(fd.get('amount') || 0), paid = Number(fd.get('paid_amount') || 0);
@@ -1741,7 +1835,7 @@ document.addEventListener('submit', async (e) => {
     const fd=new FormData(form),amount=Number(fd.get('amount'));
     if(!Number.isFinite(amount)||amount<=0){toast('أدخل قيمة دفعة صحيحة','error');return;}
     const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
-    const {data,error}=await supabase.rpc('record_supplier_payment',{p_supplier_bill_id:form.dataset.billId,p_amount:amount,p_method:String(fd.get('method')),p_reference:safeName(fd.get('reference'))||null,p_notes:safeName(fd.get('notes'))||null});
+    const {data,error}=await supabase.rpc('record_supplier_payment',{p_supplier_bill_id:form.dataset.billId,p_amount:amount,p_method:String(fd.get('method')),p_reference:safeName(fd.get('reference'))||null,p_notes:safeName(fd.get('notes'))||null,p_cash_account_id:fd.get('cash_account_id')});
     if(submit)submit.disabled=false;
     if(error){toast(error.message||'تعذر تسجيل دفعة المورد','error');return;}
     closeModal();await loadPurchasingData();render();toast('تم تسجيل دفعة المورد رقم '+data.payment_number+' والمتبقي '+money(data.balance_due),'success');return;
