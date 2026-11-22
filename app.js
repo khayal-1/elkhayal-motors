@@ -2437,19 +2437,21 @@ async function loadPurchasingData() {
   if (!state.user || state.user.role !== 'admin' || !supabase) {
     state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[]; return;
   }
-  const [supplierResult,orderResult,billResult,paymentResult,returnResult]=await Promise.all([
-    supabase.from('suppliers').select('id,name,phone,email,address,is_active').order('name'),
+  const [supplierResult,orderResult,billResult,paymentResult,returnResult,advanceAllocationResult]=await Promise.all([
+    supabase.from('suppliers').select('id,name,phone,email,address,tax_id,is_active').order('name'),
     supabase.from('purchase_orders').select('id,order_number,supplier_id,status,notes,created_at').order('created_at',{ascending:false}).limit(100),
     supabase.from('supplier_bills').select('id,bill_number,supplier_id,purchase_order_id,bill_date,due_date,total_amount,notes,created_at').order('bill_date',{ascending:false}).limit(200),
-    supabase.from('supplier_payments').select('id,payment_number,supplier_bill_id,supplier_id,amount,method,reference,notes,paid_at').order('paid_at',{ascending:false}).limit(500),
-    supabase.from('supplier_returns').select('id,return_number,supplier_id,purchase_order_id,supplier_bill_id,notes,created_by,created_at').order('created_at',{ascending:false}).limit(500)
+    supabase.from('supplier_payments').select('id,payment_number,supplier_bill_id,supplier_id,amount,method,reference,notes,paid_at,journal_entry_id').order('paid_at',{ascending:false}).limit(500),
+    supabase.from('supplier_returns').select('id,return_number,supplier_id,purchase_order_id,supplier_bill_id,notes,created_by,created_at').order('created_at',{ascending:false}).limit(500),
+    supabase.from('supplier_advance_allocations').select('id,advance_id,supplier_bill_id,amount,created_at').order('created_at',{ascending:false}).limit(500)
   ]);
-  for (const [result,label] of [[supplierResult,'الموردين'],[orderResult,'أوامر التوريد'],[billResult,'فواتير الموردين'],[paymentResult,'مدفوعات الموردين'],[returnResult,'مرتجعات الموردين']]) {
+  for (const [result,label] of [[supplierResult,'الموردين'],[orderResult,'أوامر التوريد'],[billResult,'فواتير الموردين'],[paymentResult,'مدفوعات الموردين'],[returnResult,'مرتجعات الموردين'],[advanceAllocationResult,'تسويات سلف الموردين']]) {
     if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
   }
   state.suppliers=supplierResult.data||[];
   state.supplierPayments=paymentResult.data||[];
   state.supplierReturns=returnResult.data||[];
+  state.supplierAdvanceAllocations=advanceAllocationResult.data||[];
   const returnIds=state.supplierReturns.map(r=>r.id);
   const returnItemsResult=returnIds.length
     ?await supabase.from('supplier_return_items').select('id,supplier_return_id,purchase_receipt_item_id,motorcycle_id,quantity,unit_cost,line_total').in('supplier_return_id',returnIds)
@@ -2461,7 +2463,8 @@ async function loadPurchasingData() {
     const paid=payments.reduce((n,p)=>n+Number(p.amount||0),0);
     const credits=state.supplierReturns.filter(r=>r.supplier_bill_id===b.id).reduce((n,r)=>
       n+state.supplierReturnItems.filter(i=>i.supplier_return_id===r.id).reduce((sum,i)=>sum+Number(i.line_total||Number(i.quantity)*Number(i.unit_cost)),0),0);
-    return {...b,supplierName:state.suppliers.find(s=>s.id===b.supplier_id)?.name||'—',payments,amountPaid:paid,creditAmount:credits,balanceDue:Math.max(0,Number(b.total_amount)-paid-credits)};
+    const advanceAllocated=state.supplierAdvanceAllocations.filter(a=>a.supplier_bill_id===b.id).reduce((n,a)=>n+Number(a.amount||0),0);
+    return {...b,supplierName:state.suppliers.find(s=>s.id===b.supplier_id)?.name||'—',payments,amountPaid:paid,creditAmount:credits,advanceAllocated,balanceDue:Math.max(0,Number(b.total_amount)-paid-credits-advanceAllocated)};
   });
   const orderIds=(orderResult.data||[]).map(o=>o.id);
   const [itemsResult,receiptResult]=await Promise.all([
