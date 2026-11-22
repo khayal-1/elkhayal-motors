@@ -1114,30 +1114,26 @@ td .mini-img {
   body.print-invoice .btn,
   body.print-invoice .modal-header { display: none !important; }
 
-  body.print-page * { visibility: hidden !important; }
-  body.print-page #mainContent,
-  body.print-page #mainContent * { visibility: visible !important; }
-  body.print-page #mainContent {
-    position: absolute; inset: 0; width: 100%; max-width: none; margin: 0; padding: 0;
-    background: #fff !important; animation: none !important;
+  body.print-section * { visibility: hidden !important; }
+  body.print-section .print-target,
+  body.print-section .print-target * { visibility: visible !important; }
+  body.print-section .print-target {
+    position: absolute; inset: 0; width: 100%; max-width: none; margin: 0; padding: 14px;
+    background: #fff !important; color: #111 !important; box-shadow: none !important;
+    border: 0 !important; border-radius: 0 !important; animation: none !important;
   }
-  body.print-page .no-print,
-  body.print-page .btn,
-  body.print-page button,
-  body.print-page form,
-  body.print-page input,
-  body.print-page select,
-  body.print-page textarea { display: none !important; }
-  body.print-page .panel,
-  body.print-page .stat-card {
-    break-inside: avoid; box-shadow: none !important; border: 1px solid #bbb !important;
-    background: #fff !important; color: #111 !important;
-  }
-  body.print-page .table-wrap { overflow: visible !important; border: 0 !important; }
-  body.print-page table { width: 100% !important; min-width: 0 !important; font-size: 9pt !important; }
-  body.print-page th, body.print-page td { padding: 5px !important; color: #111 !important; border: 1px solid #bbb !important; }
-  body.print-page thead { background: #eee !important; color: #111 !important; print-color-adjust: exact; }
-  body.print-page .page-title { margin-bottom: 4px; }
+  body.print-section .print-target .no-print,
+  body.print-section .print-target button,
+  body.print-section .print-target form,
+  body.print-section .print-target input,
+  body.print-section .print-target select,
+  body.print-section .print-target textarea { display: none !important; }
+  body.print-section .print-target .table-wrap { overflow: visible !important; border: 0 !important; }
+  body.print-section .print-target table { width: 100% !important; min-width: 0 !important; font-size: 9pt !important; }
+  body.print-section .print-target th,
+  body.print-section .print-target td { padding: 5px !important; color: #111 !important; border: 1px solid #bbb !important; }
+  body.print-section .print-target thead { background: #eee !important; color: #111 !important; print-color-adjust: exact; }
+  .section-print-action { display: flex; justify-content: flex-end; margin: 0 0 10px; }
   .modal-overlay { position: static; background: none; backdrop-filter: none; }
   .modal { position: static; max-width: 100%; max-height: none; box-shadow: none; padding: 0; }
 }
