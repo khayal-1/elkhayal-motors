@@ -1779,6 +1779,39 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
+  if (form.id === 'inventoryCostForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية تعديل تكلفة المخزون','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('set_motorcycle_inventory_controls',{p_motorcycle_id:form.dataset.bikeId,p_unit_cost:Number(fd.get('unit_cost')),p_reorder_level:Number(fd.get('reorder_level'))});
+    if(error){toast(error.message||'تعذر حفظ تكلفة المخزون','error');return;} await loadInventoryData();render();toast('تم حفظ تكلفة الوحدة وحد إعادة الطلب','success');return;
+  }
+  if (form.id === 'motorcycleUnitForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية تسجيل أرقام الهياكل','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('register_motorcycle_unit',{p_motorcycle_id:fd.get('motorcycle_id'),p_vin:safeName(fd.get('vin')),p_barcode:safeName(fd.get('barcode'))||null,p_warranty_start:fd.get('warranty_start')||null,p_warranty_end:fd.get('warranty_end')||null,p_notes:safeName(fd.get('notes'))||null});
+    if(error){toast(error.message||'تعذر تسجيل رقم الهيكل','error');return;} await loadInventoryData();render();toast('تم تسجيل رقم الهيكل والباركود','success');return;
+  }
+  if (form.id === 'stocktakeForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('الجرد المالي يحتاج صلاحية الإدارة المالية','error'); return; }
+    const fd=new FormData(form),lines=[];
+    for(const row of form.querySelectorAll('[data-stocktake-line]'))lines.push({motorcycle_id:row.dataset.stocktakeLine,counted_quantity:Number(row.querySelector('[name="counted_quantity"]').value)});
+    const {data,error}=await supabase.rpc('create_stocktake',{p_date:fd.get('stocktake_date'),p_notes:safeName(fd.get('notes'))||null,p_lines:lines});
+    if(error){toast(error.message||'تعذر ترحيل الجرد','error');return;} await Promise.all([loadInventoryData(),loadMotorcycles(),loadFinanceData()]);render();toast('تم ترحيل الجرد. الزيادة '+money(data?.increase_value||0)+' والعجز '+money(data?.decrease_value||0),'success');return;
+  }
+  if (form.id === 'warrantyForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة الضمان','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_warranty',{p_motorcycle_id:fd.get('motorcycle_id'),p_sale_id:fd.get('sale_id')||null,p_customer_id:null,p_customer_name:safeName(fd.get('customer_name')),p_phone:safeName(fd.get('customer_phone')),p_start:fd.get('start_date'),p_end:fd.get('end_date'),p_terms:safeName(fd.get('terms'))||null});
+    if(error){toast(error.message||'تعذر تسجيل الضمان','error');return;} await loadInventoryData();render();toast('تم تسجيل الضمان','success');return;
+  }
+  if (form.id === 'serviceOrderForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية فتح أوامر الصيانة','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_service_order',{p_motorcycle_id:fd.get('motorcycle_id'),p_unit_id:fd.get('unit_id')||null,p_warranty_id:fd.get('warranty_id')||null,p_customer_id:null,p_customer_name:safeName(fd.get('customer_name')),p_phone:safeName(fd.get('customer_phone')),p_employee_id:fd.get('employee_id')||null,p_issue:safeName(fd.get('issue_description')),p_estimated:Number(fd.get('estimated_cost')),p_notes:safeName(fd.get('notes'))||null});
+    if(error){toast(error.message||'تعذر فتح أمر الصيانة','error');return;} await loadInventoryData();render();toast('تم فتح أمر الصيانة','success');return;
+  }
+  if (form.id === 'serviceStatusForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تحديث أمر الصيانة','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('update_service_order',{p_order_id:form.dataset.orderId,p_status:fd.get('status'),p_diagnosis:safeName(fd.get('diagnosis'))||null,p_actual_cost:fd.get('actual_cost')?Number(fd.get('actual_cost')):null});
+    if(error){toast(error.message||'تعذر تحديث أمر الصيانة','error');return;} await loadInventoryData();render();toast('تم تحديث أمر الصيانة','success');return;
+  }
+
   if (form.id === 'employeeForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة الموظفين','error'); return; }
     const fd=new FormData(form); const {error}=await supabase.rpc('create_employee',{p_code:safeName(fd.get('employee_code')),p_user_id:fd.get('auth_user_id')||null,p_name:safeName(fd.get('full_name')),p_phone:safeName(fd.get('phone'))||null,p_email:safeName(fd.get('email'))||null,p_job:safeName(fd.get('job_title'))||null,p_hire_date:fd.get('hire_date'),p_salary:Number(fd.get('base_salary')),p_notes:safeName(fd.get('notes'))||null});
