@@ -2710,8 +2710,9 @@ async function loadMotorcycles() {
 }
 
 async function loadSalesData() {
-  if (!state.user || state.user.role !== 'admin' || !supabase) {
+  if (!state.user || !(hasRole('admin','manager','owner') || hasPermission('sales_manage') || hasPermission('finance_manage')) || !supabase) {
     state.sales = [];
+    state.saleDeliveries = [];
     return;
   }
   const { data, error } = await supabase.from('sales')
