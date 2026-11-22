@@ -1742,6 +1742,73 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
+  if (form.id === 'employeeForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة الموظفين','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_employee',{p_code:safeName(fd.get('employee_code')),p_user_id:null,p_name:safeName(fd.get('full_name')),p_phone:safeName(fd.get('phone'))||null,p_email:safeName(fd.get('email'))||null,p_job:safeName(fd.get('job_title'))||null,p_hire_date:fd.get('hire_date'),p_salary:Number(fd.get('base_salary')),p_notes:safeName(fd.get('notes'))||null});
+    if(error){toast(error.message||'تعذر إنشاء ملف الموظف','error');return;} await loadHRData();render();toast('تم إنشاء ملف الموظف','success');return;
+  }
+  if (form.id === 'attendanceForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسجيل الحضور','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('record_attendance',{p_employee_id:fd.get('employee_id'),p_date:fd.get('attendance_date'),p_status:fd.get('attendance_status'),p_check_in:fd.get('check_in')?new Date(fd.get('check_in')).toISOString():null,p_check_out:fd.get('check_out')?new Date(fd.get('check_out')).toISOString():null,p_notes:null});
+    if(error){toast(error.message||'تعذر تسجيل الحضور','error');return;} await loadHRData();render();toast('تم حفظ سجل الحضور','success');return;
+  }
+  if (form.id === 'employeeLeaveForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسجيل الإجازات','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_employee_leave',{p_employee_id:fd.get('employee_id'),p_type:fd.get('leave_type'),p_start:fd.get('start_date'),p_end:fd.get('end_date'),p_days:Number(fd.get('days')),p_reason:safeName(fd.get('reason'))||null});
+    if(error){toast(error.message||'تعذر تسجيل الإجازة','error');return;} await loadHRData();render();toast('تم تسجيل طلب الإجازة','success');return;
+  }
+  if (form.id === 'reviewLeaveForm') {
+    const status=String(e.submitter?.value||'');
+    const {error}=await supabase.rpc('review_employee_leave',{p_leave_id:form.dataset.leaveId,p_status:status});
+    if(error){toast(error.message||'تعذر مراجعة طلب الإجازة','error');return;} await loadHRData();render();toast('تم تحديث حالة طلب الإجازة','success');return;
+  }
+  if (form.id === 'custodyForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة العهد','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_employee_custody',{p_employee_id:fd.get('employee_id'),p_item:safeName(fd.get('item_name')),p_description:safeName(fd.get('description'))||null,p_date:fd.get('assigned_date'),p_value:fd.get('estimated_value')?Number(fd.get('estimated_value')):null});
+    if(error){toast(error.message||'تعذر تسجيل العهدة','error');return;} await loadHRData();render();toast('تم تسجيل العهدة','success');return;
+  }
+  if (form.id === 'returnCustodyForm') {
+    const {error}=await supabase.rpc('return_employee_custody',{p_custody_id:form.dataset.custodyId,p_notes:null});
+    if(error){toast(error.message||'تعذر إثبات رد العهدة','error');return;} await loadHRData();render();toast('تم إثبات رد العهدة','success');return;
+  }
+  if (form.id === 'terminateEmployeeForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إنهاء ملف الموظف','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('terminate_employee',{p_employee_id:form.dataset.employeeId,p_date:fd.get('termination_date')});
+    if(error){toast(error.message||'تعذر إنهاء ملف الموظف','error');return;} await loadHRData();render();toast('تم إنهاء ملف الموظف بعد التحقق من العهد والسلف','success');return;
+  }
+  if (form.id === 'employeeAdvanceForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسجيل سلف الموظفين','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('record_employee_advance',{p_employee_id:fd.get('employee_id'),p_date:fd.get('advance_date'),p_amount:Number(fd.get('amount')),p_cash_account_id:fd.get('cash_account_id'),p_notes:null});
+    if(error){toast(error.message||'تعذر تسجيل سلفة الموظف','error');return;} await Promise.all([loadHRData(),loadFinanceData()]);render();toast('تم تسجيل سلفة الموظف وترحيل القيد','success');return;
+  }
+  if (form.id === 'salesCommissionForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسجيل العمولات','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_sales_commission',{p_employee_id:fd.get('employee_id'),p_sale_id:fd.get('sale_id'),p_amount:Number(fd.get('amount')),p_notes:null});
+    if(error){toast(error.message||'تعذر تسجيل العمولة','error');return;} await loadHRData();render();toast('تم تسجيل العمولة وستظهر في كشف الرواتب التالي','success');return;
+  }
+  if (form.id === 'payrollRunForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إعداد الرواتب','error'); return; }
+    const fd=new FormData(form),items=[];
+    for(const row of form.querySelectorAll('[data-payroll-employee]')){
+      const item={employee_id:row.dataset.payrollEmployee};
+      for(const key of ['base_salary','allowances','employee_insurance','tax_deduction','other_deductions','advance_deduction','employer_insurance']) item[key]=Number(row.querySelector('[name="'+key+'"]').value||0);
+      items.push(item);
+    }
+    if(!items.length){toast('لا يوجد موظفون نشطون لإعداد الرواتب','error');return;}
+    const {error}=await supabase.rpc('create_payroll_run',{p_period_id:fd.get('period_id'),p_name:safeName(fd.get('payroll_name')),p_date:fd.get('payroll_date'),p_items:items});
+    if(error){toast(error.message||'تعذر إنشاء كشف الرواتب','error');return;} await loadHRData();render();toast('تم إنشاء كشف الرواتب كمسودة؛ راجعه قبل الترحيل','success');return;
+  }
+  if (form.id === 'postPayrollForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية ترحيل الرواتب','error'); return; }
+    const {error}=await supabase.rpc('post_payroll_run',{p_run_id:form.dataset.runId});
+    if(error){toast(error.message||'تعذر ترحيل كشف الرواتب','error');return;} await Promise.all([loadHRData(),loadFinanceData()]);render();toast('تم ترحيل كشف الرواتب إلى دفتر الأستاذ','success');return;
+  }
+  if (form.id === 'payrollPaymentForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية صرف الرواتب','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('record_payroll_payment',{p_run_id:form.dataset.runId,p_amount:Number(fd.get('amount')),p_cash_account_id:fd.get('cash_account_id'),p_date:fd.get('payment_date'),p_reference:null});
+    if(error){toast(error.message||'تعذر صرف الرواتب','error');return;} await Promise.all([loadHRData(),loadFinanceData()]);render();toast('تم تسجيل صرف الرواتب وترحيل القيد','success');return;
+  }
+
   if (form.id === 'cashSessionOpenForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية فتح جلسة الخزينة','error'); return; }
     const fd=new FormData(form); const {error}=await supabase.rpc('open_cash_session',{p_cash_account_id:fd.get('cash_account_id'),p_opening_balance:Number(fd.get('opening_balance')),p_note:safeName(fd.get('note'))||null});
