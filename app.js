@@ -1275,7 +1275,7 @@ function pageTarget() {
 
 function pageInventory() {
   const u = currentUser();
-  if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
+  if (!u || !['staff', 'admin', 'manager', 'owner'].includes(u.role)) return pageLogin();
   if (u.role === 'staff' && !hasAnyPermission('catalog_view', 'catalog_manage')) return pageNoPermission();
   const bikes = get(DB.BIKES);
   const isAdmin = u.role === 'admin';
@@ -2012,12 +2012,12 @@ document.addEventListener('click', async (e) => {
 
   /* Manager or explicitly authorized staff — catalog */
   if (e.target.closest('#addBikeBtn')) {
-    if (!hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
     openModal(bikeFormHTML(null)); return;
   }
   const deleteBike = e.target.closest('[data-delete-bike]');
   if (deleteBike) {
-    if (!hasPermission('catalog_manage') || !supabase) { toast('ليس لديك صلاحية حذف الدراجات', 'error'); return; }
+    if ((!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) || !supabase) { toast('ليس لديك صلاحية حذف الدراجات', 'error'); return; }
     const bikeName = deleteBike.dataset.bikeName || 'هذه الدراجة';
     if (!confirm('هل تريد حذف الدراجة التجريبية «' + bikeName + '»؟ سيتم حذف وحداتها التجريبية فقط. إذا كانت مرتبطة بمشتريات أو حركات مخزون فلن يسمح النظام بحذفها حفاظًا على السجلات.')) return;
     deleteBike.disabled = true;
