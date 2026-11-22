@@ -1378,7 +1378,7 @@ document.addEventListener('click', async (e) => {
       <form id="supplierPaymentForm" class="form-grid" data-bill-id="${esc(bill.id)}">
         <div class="field"><label>قيمة الدفعة (ج.م)</label><input name="amount" type="number" min="0.01" max="${bill.balanceDue}" step="0.01" required></div>
         <div class="field"><label>طريقة الدفع</label><select name="method" required><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="instapay">إنستاباي</option><option value="cheque">شيك</option><option value="other">أخرى</option></select></div>
-        <div class="field"><label>الخزينة / البنك</label><select name="cash_account_id" required><option value="">اختر الحساب المالي</option>\${(state.cashAccounts||[]).map(a=>\`<option value="\${esc(a.id)}">\${esc(a.name)}</option>\`).join('')}</select></div>
+        <div class="field"><label>الخزينة / البنك</label><select name="cash_account_id" required><option value="">اختر الحساب المالي</option>\${(state.cashAccounts||[]).map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>').join('')}</select></div>
         <div class="field"><label>رقم مرجعي (اختياري)</label><input name="reference" maxlength="120"></div>
         <div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
         <button class="btn btn-primary" type="submit">تأكيد تسجيل الدفعة</button>
