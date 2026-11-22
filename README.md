@@ -31,3 +31,14 @@ Vercel imports the repository and builds with `npm run build`. Set `NEXT_PUBLIC_
 تتضمن واجهة الإدارة صفحة «الأدوات المالية المتقدمة» لإدارة الفترات المحاسبية وإقفالها، الأرصدة الافتتاحية المتوازنة، مراكز التكلفة، سلف الموردين وتسويتها على فواتيرهم، الأصول الثابتة والإهلاك الشهري، تسويات البنوك، الشيكات، القيود المتكررة، وإعداد نسب الضرائب ومعرفات التسجيل الضريبي. صلاحية finance_manage تتيح إدارة هذه الأدوات، بينما accounting_view تتيح القراءة وفق سياسات RLS.
 
 **ملاحظة محاسبية:** إعداد نسب الضرائب لا يفعّل احتسابها آليًا على فواتير البيع والشراء ولا يرسل مستندات إلى ETA. كما أن اكتمال التقارير المالية يتطلب ربط كل المبيعات والمشتريات والدفعات والمرتجعات بقيودها واختبارها على بيانات المعرض المعتمدة.
+
+
+## Additional finance, HR and inventory operations
+
+The finance workspace now includes fiscal periods, opening balances, fixed assets and depreciation, bank reconciliations, cheques, recurring journals, tax-rate setup, cash sessions and handovers, petty cash, journal reversals, budgets versus actuals, accrual schedules, aging reports, cash book, and allocation of sale receipts/customer refunds that were initially posted to the unallocated-cash clearing account. New operational journal posting covers sales invoices, sale-item COGS where a reliable unit cost exists, sale payments, purchase receipts, supplier bills, supplier returns, sale returns, returned-stock COGS, and customer-credit transactions. Historical source records were backfilled idempotently; no test sales, receipts, employees, or other fake business records were created.
+
+The HR workspace includes employee files, optional links to existing staff login accounts, attendance, leave requests and review, custody assignment/return, employee advances, sales commissions, payroll drafts, payroll posting, partial payroll payments, employee payslips, and draft cancellation. Statutory tax/insurance amounts are entered by an authorized accountant; no legal rates are assumed.
+
+Inventory tools include actual unit-cost capture from recorded purchase receipts, reorder thresholds and alerts, VIN/barcode unit registration, stocktakes with inventory-adjustment journals, warranty records, and service orders. CRM tools include customer credit limits, credit-limit enforcement on new sales, customer statements, interaction history, complaints, customer classification/lead source/marketing consent, and internal notifications.
+
+These additions are implemented against the existing Supabase project and main branch. A successful frontend build/deploy and live UI smoke test are required before treating the release as complete.
