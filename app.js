@@ -1350,7 +1350,7 @@ function pageManageBikes() {
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> إدارة الدراجات</h2>
     <p class="page-sub">إدارة جميع الدراجات التجريبية — يمكنك تعديل بيانات أي دراجة أو حذفها عند عدم ارتباطها بسجلات مالية أو حركات مخزون.</p>
     <div class="panel">
-      ${(u.role === 'admin' || hasPermission('catalog_manage')) ? `<div class="contact-actions mb-2"><button class="btn btn-primary" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة دراجة جديدة</button><button class="btn btn-outline" id="syncTelegramPhotosBtn"><i class="fa-solid fa-rotate"></i> مزامنة الصور القديمة</button></div>` : ''}
+      ${(hasRole('admin','manager','owner') || hasPermission('catalog_manage')) ? `<div class="contact-actions mb-2"><button class="btn btn-primary" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة دراجة جديدة</button><button class="btn btn-outline" id="syncTelegramPhotosBtn"><i class="fa-solid fa-rotate"></i> مزامنة الصور القديمة</button></div>` : ''}
       <div class="table-wrap"><table>
         <thead><tr><th>الصورة</th><th>الاسم</th><th>الموديل</th><th>الفئة</th><th>السعر</th><th>المخزون</th><th>إجراءات</th></tr></thead>
         <tbody>${bikes.map((b) => `
@@ -2030,7 +2030,7 @@ document.addEventListener('click', async (e) => {
   }
   const editBike = e.target.closest('[data-edit-bike]');
   if (editBike) {
-    if (!hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
     const bike = get(DB.BIKES).find((b) => b.id === editBike.dataset.editBike);
     if (bike) openModal(bikeFormHTML(bike));
     return;
@@ -2935,7 +2935,7 @@ document.addEventListener('submit', async (e) => {
 
   /* Motorcycle catalogue data and Telegram-backed images are stored through Supabase. */
   if (form.id === 'bikeForm') {
-    if (!hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
+    if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
     const fd = new FormData(form);
     const id = form.dataset.id;
     const images = String(fd.get('images') || '').split('\n').map((s) => s.trim()).filter(Boolean);
