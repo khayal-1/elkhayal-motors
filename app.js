@@ -82,6 +82,15 @@ const state = {
   agingReport: [],
   cashBook: [],
   financeJournalEntries: [],
+  employees: [],
+  attendanceRecords: [],
+  employeeLeaveRequests: [],
+  employeeCustody: [],
+  employeeAdvances: [],
+  salesCommissions: [],
+  payrollRuns: [],
+  payrollItems: [],
+  payrollPayments: [],
   contactMessages: [],
   requestReplies: [],
   contactReplies: [],
@@ -272,6 +281,7 @@ function sidebarItems() {
     if (hasRequestAccess()) items.push({ route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null });
     if (hasPermission('expenses_manage') || hasPermission('accounting_view')) items.push({ route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' });
     if (hasPermission('finance_manage') || hasPermission('accounting_view')) items.push({ route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' });
+    if (hasPermission('finance_manage')) items.push({ route: 'hr', label: 'الموارد البشرية والرواتب', icon: 'fa-users-gear' });
     items.push({ section: 'المتجر' }, { route: 'home', label: 'عرض المتجر', icon: 'fa-store' });
     return items;
   }
@@ -289,6 +299,7 @@ function sidebarItems() {
     { route: 'staff', label: 'الموظفين والأداء', icon: 'fa-users-gear' },
     { route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' },
     { route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' },
+    { route: 'hr', label: 'الموارد البشرية والرواتب', icon: 'fa-users-gear' },
     { route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null },
     { section: 'المتجر' },
     { route: 'home', label: 'عرض المتجر', icon: 'fa-store' }
@@ -1209,7 +1220,8 @@ const ROUTES = {
   staff: pageStaff,
   'staff-orders': pageStaffOrders,
   expenses: pageExpenses,
-  'finance-tools': pageFinanceTools
+  'finance-tools': pageFinanceTools,
+  hr: pageHR
 };
 
 function render() {
@@ -1242,6 +1254,7 @@ function navigate(route) {
   if (route === 'pos') loadSalesData().then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
+  if (route === 'hr' && state.user && (hasRole('admin','manager','owner') || hasPermission('finance_manage'))) Promise.all([loadHRData(),loadFinanceData(),loadSalesData()]).then(render);
   if ((route === 'expenses' || route === 'finance-tools') && state.user && (hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view') || hasPermission('finance_manage'))) {
     const load = route === 'finance-tools' && hasRole('admin') ? loadPurchasingData() : Promise.resolve();
     Promise.all([load,loadFinanceData()]).then(render);
@@ -2435,6 +2448,28 @@ async function loadCustomerData() {
   set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
   set(DB.ORDERS, []);
   set(DB.FAVS, { [user.id]: (favoritesResult.data || []).map((f) => f.motorcycle_id) });
+}
+
+async function loadHRData() {
+  const u=currentUser();
+  if(!u||!supabase||!(hasRole('admin','manager','owner')||hasPermission('finance_manage')))return;
+  const [employees,attendance,leaves,custody,advances,commissions,runs,items,payments]=await Promise.all([
+    supabase.from('employees').select('*').order('full_name'),
+    supabase.from('attendance_records').select('*,employees(full_name,employee_code)').order('attendance_date',{ascending:false}).limit(300),
+    supabase.from('employee_leave_requests').select('*,employees(full_name,employee_code)').order('created_at',{ascending:false}).limit(200),
+    supabase.from('employee_custody').select('*,employees(full_name,employee_code)').order('created_at',{ascending:false}).limit(200),
+    supabase.from('employee_advances').select('*,employees(full_name,employee_code)').order('advance_date',{ascending:false}).limit(200),
+    supabase.from('sales_commissions').select('*,employees(full_name,employee_code),sales(invoice_number)').order('created_at',{ascending:false}).limit(300),
+    supabase.from('payroll_runs').select('*').order('payroll_date',{ascending:false}).limit(100),
+    supabase.from('payroll_items').select('*,employees(full_name,employee_code)').limit(1000),
+    supabase.from('payroll_payments').select('*').order('payment_date',{ascending:false}).limit(300)
+  ]);
+  const results=[employees,attendance,leaves,custody,advances,commissions,runs,items,payments];
+  const failed=results.find(x=>x.error);
+  if(failed){console.error('HR load failed',failed.error);toast('تعذر تحميل بيانات الموارد البشرية: '+failed.error.message,'error');return;}
+  state.employees=employees.data||[];state.attendanceRecords=attendance.data||[];state.employeeLeaveRequests=leaves.data||[];
+  state.employeeCustody=custody.data||[];state.employeeAdvances=advances.data||[];state.salesCommissions=commissions.data||[];
+  state.payrollRuns=runs.data||[];state.payrollItems=items.data||[];state.payrollPayments=payments.data||[];
 }
 
 async function loadFinanceData() {
