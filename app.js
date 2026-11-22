@@ -1371,9 +1371,14 @@ function render() {
 
   const fn = ROUTES[state.route] || pageHome;
   main.innerHTML = fn();
-  if (state.route !== 'home' && state.route !== 'login' && state.route !== 'signup') {
-    main.insertAdjacentHTML('afterbegin', '<div class="page-tools no-print"><button class="btn btn-outline btn-sm" id="printPageBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الصفحة / التقرير</button></div>');
-  }
+  // Add an independent print action to every content panel/section.
+  $('.panel', main).forEach((panel, index) => {
+    if (panel.querySelector(':scope > .section-print-action')) return;
+    const action = document.createElement('div');
+    action.className = 'section-print-action no-print';
+    action.innerHTML = '<button class="btn btn-outline btn-sm" type="button" data-print-section><i class="fa-solid fa-print"></i> طباعة هذا القسم</button>';
+    panel.insertBefore(action, panel.firstChild);
+  });
   applyLanguage(document);
 
 
@@ -1533,10 +1538,21 @@ document.addEventListener('click', async (e) => {
     document.body.classList.remove('print-invoice');
     return;
   }
-  if (e.target.closest('#printPageBtn')) {
-    document.body.classList.add('print-page');
+  const printSectionButton = e.target.closest('[data-print-section]');
+  if (printSectionButton) {
+    const section = printSectionButton.closest('.panel');
+    if (!section) return;
+    document.querySelectorAll('.print-target').forEach((node) => node.classList.remove('print-target'));
+    section.classList.add('print-target');
+    document.body.classList.add('print-section');
+    const cleanup = () => {
+      document.body.classList.remove('print-section');
+      section.classList.remove('print-target');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup, { once: true });
     window.print();
-    document.body.classList.remove('print-page');
+    setTimeout(cleanup, 1200);
     return;
   }
   const sendInvoiceButton = e.target.closest('#sendInvoiceWhatsAppBtn');
