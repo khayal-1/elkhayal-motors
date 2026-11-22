@@ -39,6 +39,7 @@ const state = {
   sidebarOpen: false,
   bikes: [],
   sales: [],
+  saleDeliveries: [],
   customerInvoices: [],
   registeredCustomers: [],
   saleReturns: [],
@@ -765,12 +766,18 @@ function pageSalesTools() {
   const items=(state.salesQuotationItems||[]).filter(i=>i.quotation_id===q.id);
   return '<tr><td>#'+q.quotation_number+'</td><td>'+esc(q.customer_name)+'</td><td>'+esc(q.customer_phone)+'</td><td>'+money(q.total_amount)+'</td><td>'+esc(q.valid_until)+'</td><td>'+esc(q.status)+'</td><td>'+(q.status==='draft'||q.status==='sent'?'<form id="quotationStatusForm" class="inline-form" data-quote-id="'+esc(q.id)+'"><select name="status"><option value="sent">إرسال</option><option value="accepted">اعتماد العميل</option><option value="cancelled">إلغاء</option></select><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':q.status==='accepted'?'<form id="convertQuotationForm" class="form-grid" data-quote-id="'+esc(q.id)+'"><input type="number" name="payment_amount" min="0" step="0.01" value="0" placeholder="دفعة مقدمة إن وجدت"><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select><button class="btn btn-primary btn-sm" type="submit">تحويل إلى فاتورة</button></form>':q.status==='converted'?'<a href="#" data-route="sales">فاتورة '+esc(q.sale_id||'')+'</a>':'—')+'</td></tr><tr><td colspan="7"><small>'+items.map(i=>esc(i.motorcycles?.name||'')+' × '+i.quantity+' = '+money(i.line_total)).join(' | ')+'</small></td></tr>';
  }).join('');
+ const deliveredIds=new Set((state.saleDeliveries||[]).map(d=>d.sale_id));
+ const deliverySales=sales.filter(s=>s.status==='posted'&&!deliveredIds.has(s.id));
+ const deliverySaleOpts=deliverySales.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.invoice_number)+' — '+esc(s.customer_name)+' — '+money(s.total)+'</option>').join('');
+ const deliveryRows=(state.saleDeliveries||[]).map(d=>'<tr><td>#'+d.delivery_number+'</td><td>'+esc(d.sales?.invoice_number||'—')+'</td><td>'+esc(d.recipient_name)+'</td><td>'+esc(d.recipient_phone||'—')+'</td><td>'+new Date(d.delivered_at).toLocaleString('ar-EG')+'</td><td>'+esc(d.odometer_reading??'—')+'</td><td><button class="btn btn-outline btn-sm" type="button" data-print-delivery="'+esc(d.id)+'">طباعة محضر التسليم</button></td></tr>').join('');
+
  const dueSales=sales.filter(s=>s.status==='posted'&&Number(s.total)-Number(s.amount_paid||0)-Number(s.credit_applied||0)>0);
  const saleOpts=dueSales.map(s=>'<option value="'+esc(s.id)+'">فاتورة '+esc(s.invoice_number)+' — '+esc(s.customer_name)+' — متبقي '+money(Number(s.total)-Number(s.amount_paid||0)-Number(s.credit_applied||0))+'</option>').join('');
  const installmentRows=(state.saleInstallments||[]).map(x=>'<tr><td>'+esc(x.sales?.invoice_number||'—')+'</td><td>#'+x.installment_number+'</td><td>'+esc(x.due_date)+'</td><td>'+money(x.amount)+'</td><td>'+money(x.paid_amount)+'</td><td>'+money(Number(x.amount)-Number(x.paid_amount))+'</td><td>'+esc(x.status)+'</td><td>'+(x.status!=='paid'&&x.status!=='cancelled'?'<form id="installmentPaymentForm" class="inline-form" data-installment-id="'+esc(x.id)+'"><input type="number" name="amount" min="0.01" max="'+(Number(x.amount)-Number(x.paid_amount))+'" step="0.01" placeholder="المبلغ" required><select name="method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل</option><option value="card">بطاقة</option><option value="other">أخرى</option></select><button class="btn btn-outline btn-sm" type="submit">تحصيل</button></form>':'—')+'</td></tr>').join('');
  return '<h2 class="page-title"><i class="fa-solid fa-file-invoice-dollar"></i> عروض الأسعار والتقسيط</h2><p class="page-sub">إعداد عروض أسعار للعميل، اعتمادها ثم تحويلها إلى فاتورة بيع، وإنشاء جداول أقساط مخصصة مرتبطة برصيد الفاتورة وتسجيل التحصيلات.</p>'+
  '<div class="panel"><div class="panel-title">إنشاء عرض سعر</div><form id="salesQuotationForm" class="form-grid"><div class="form-row"><div class="field"><label>عميل مسجل (اختياري)</label><select name="customer_id"><option value="">عميل غير مسجل</option>'+clientOpts+'</select></div><div class="field"><label>اسم العميل</label><input name="customer_name" required maxlength="120"></div><div class="field"><label>الهاتف</label><input name="customer_phone" required maxlength="30"></div></div><div class="form-row"><div class="field"><label>صالح حتى</label><input type="date" name="valid_until" required></div><div class="field"><label>ملاحظات</label><input name="notes" maxlength="180"></div></div><h4>الأصناف</h4>'+bikeLines+'<button class="btn btn-primary" type="submit" '+(!bikes.length?'disabled':'')+'>إنشاء عرض السعر</button></form><div class="table-wrap mt-2"><table><thead><tr><th>رقم</th><th>العميل</th><th>الهاتف</th><th>الإجمالي</th><th>الصلاحية</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody>'+(quoteRows||'<tr><td colspan="7">لا توجد عروض أسعار</td></tr>')+'</tbody></table></div></div>'+
- '<div class="panel"><div class="panel-title">جدولة أقساط فاتورة</div><p class="hint">أدخل جدول الأقساط بصيغة JSON، ويجب أن يساوي مجموع المبالغ الرصيد المستحق الحالي بالضبط. لا تُضاف فوائد أو رسوم تلقائيًا. مثال: [{"due_date":"2026-12-01","amount":5000},{"due_date":"2027-01-01","amount":5000}]</p><form id="installmentScheduleForm" class="form-grid"><div class="field"><label>الفاتورة</label><select name="sale_id" required><option value="">اختر الفاتورة</option>'+saleOpts+'</select></div><div class="field"><label>جدول الأقساط JSON</label><textarea name="schedule_json" rows="4" placeholder="[{&quot;due_date&quot;:&quot;2026-12-01&quot;,&quot;amount&quot;:5000}]" required></textarea></div><button class="btn btn-primary" type="submit">إنشاء جدول الأقساط</button></form><div class="table-wrap mt-2"><table><thead><tr><th>الفاتورة</th><th>القسط</th><th>الاستحقاق</th><th>المبلغ</th><th>المسدد</th><th>المتبقي</th><th>الحالة</th><th>التحصيل</th></tr></thead><tbody>'+(installmentRows||'<tr><td colspan="8">لا توجد أقساط مجدولة</td></tr>')+'</tbody></table></div></div>';
+ '<div class="panel"><div class="panel-title">جدولة أقساط فاتورة</div><p class="hint">أدخل جدول الأقساط بصيغة JSON، ويجب أن يساوي مجموع المبالغ الرصيد المستحق الحالي بالضبط. لا تُضاف فوائد أو رسوم تلقائيًا. مثال: [{"due_date":"2026-12-01","amount":5000},{"due_date":"2027-01-01","amount":5000}]</p><form id="installmentScheduleForm" class="form-grid"><div class="field"><label>الفاتورة</label><select name="sale_id" required><option value="">اختر الفاتورة</option>'+saleOpts+'</select></div><div class="field"><label>جدول الأقساط JSON</label><textarea name="schedule_json" rows="4" placeholder="[{&quot;due_date&quot;:&quot;2026-12-01&quot;,&quot;amount&quot;:5000}]" required></textarea></div><button class="btn btn-primary" type="submit">إنشاء جدول الأقساط</button></form><div class="table-wrap mt-2"><table><thead><tr><th>الفاتورة</th><th>القسط</th><th>الاستحقاق</th><th>المبلغ</th><th>المسدد</th><th>المتبقي</th><th>الحالة</th><th>التحصيل</th></tr></thead><tbody>'+(installmentRows||'<tr><td colspan="8">لا توجد أقساط مجدولة</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="panel"><div class="panel-title"><i class="fa-solid fa-motorcycle"></i> محاضر تسليم الدراجات</div><p class="hint">سجل استلام العميل للدراجة بعد ترحيل فاتورة البيع. يسجل النظام وقت التسليم تلقائيًا، ويمكن طباعة محضر استلام.</p><form id="saleDeliveryForm" class="form-grid"><div class="form-row"><div class="field"><label>فاتورة البيع</label><select name="sale_id" required><option value="">اختر فاتورة لم يتم تسليمها</option>'+deliverySaleOpts+'</select></div><div class="field"><label>اسم المستلم</label><input name="recipient_name" required maxlength="120"></div><div class="field"><label>هاتف المستلم</label><input name="recipient_phone" maxlength="32"></div></div><div class="form-row"><div class="field"><label>قراءة العداد كم (اختياري)</label><input name="odometer_reading" type="number" min="0" step="1"></div><div class="field"><label>الملحقات المسلمة</label><input name="accessories" maxlength="300" placeholder="المفاتيح، الكتيب، أدوات الصيانة..."></div></div><div class="field"><label>حالة الدراجة عند التسليم</label><textarea name="condition_notes" rows="2" maxlength="1000"></textarea></div><div class="field"><label>ملاحظات</label><input name="notes" maxlength="300"></div><button class="btn btn-primary" type="submit" '+(!deliverySales.length?'disabled':'')+'>حفظ محضر التسليم</button></form><div class="table-wrap mt-2"><table><thead><tr><th>المحضر</th><th>الفاتورة</th><th>المستلم</th><th>الهاتف</th><th>وقت التسليم</th><th>العداد</th><th>الطباعة</th></tr></thead><tbody>'+(deliveryRows||'<tr><td colspan="7">لا توجد محاضر تسليم بعد</td></tr>')+'</tbody></table></div></div>';
 }
 
 function pageCustomerRelations() {
@@ -1503,6 +1510,18 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const printDeliveryButton=e.target.closest('[data-print-delivery]');
+  if(printDeliveryButton){
+    const d=(state.saleDeliveries||[]).find(x=>x.id===printDeliveryButton.dataset.printDelivery);
+    if(!d){toast('محضر التسليم غير موجود','error');return;}
+    const w=window.open('','_blank','width=900,height=700');
+    if(!w){toast('اسمح بفتح النوافذ المنبثقة لطباعة المحضر','error');return;}
+    w.onload=()=>{w.focus();w.print();};
+    w.document.open();
+    w.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>محضر تسليم #'+esc(d.delivery_number)+'</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#111}h1{text-align:center;font-size:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:24px 0}.cell{border:1px solid #bbb;padding:12px;border-radius:6px}.wide{grid-column:1/-1}.sign{display:flex;justify-content:space-between;margin-top:70px}.muted{color:#555} @media print{button{display:none}}</style></head><body><h1>الخيال موتورز — محضر تسليم دراجة</h1><p class="muted">رقم المحضر: #'+esc(d.delivery_number)+' | فاتورة البيع: '+esc(d.sales?.invoice_number||'—')+'</p><div class="meta"><div class="cell"><b>اسم المستلم</b><br>'+esc(d.recipient_name)+'</div><div class="cell"><b>هاتف المستلم</b><br>'+esc(d.recipient_phone||'—')+'</div><div class="cell"><b>وقت التسليم</b><br>'+new Date(d.delivered_at).toLocaleString('ar-EG')+'</div><div class="cell"><b>قراءة العداد</b><br>'+esc(d.odometer_reading??'—')+' كم</div><div class="cell wide"><b>الملحقات المسلمة</b><br>'+esc(d.accessories||'—')+'</div><div class="cell wide"><b>حالة الدراجة عند التسليم</b><br>'+esc(d.condition_notes||'—')+'</div><div class="cell wide"><b>ملاحظات</b><br>'+esc(d.notes||'—')+'</div></div><div class="sign"><span>توقيع المستلم: __________________</span><span>توقيع مسؤول التسليم: __________________</span></div></body></html>');
+    w.document.close();return;
+  }
+
   /* Print invoice */
   if (e.target.closest('#printInvoiceBtn')) { window.print(); return; }
 
@@ -1842,6 +1861,14 @@ document.addEventListener('submit', async (e) => {
     await loadFinanceData(); render();
     toast('تمت إضافة '+(kind==='bank'?'الحساب البنكي':'الخزينة')+' برقم حساب '+(data?.account_code || ''),'success');
     return;
+  }
+
+  if (form.id === 'saleDeliveryForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('sales_manage')) { toast('ليس لديك صلاحية تسجيل محضر التسليم','error'); return; }
+    const fd=new FormData(form);
+    const {error}=await supabase.rpc('create_sale_delivery',{p_sale_id:fd.get('sale_id'),p_delivered_at:null,p_recipient_name:safeName(fd.get('recipient_name')),p_recipient_phone:safeName(fd.get('recipient_phone'))||null,p_odometer_reading:fd.get('odometer_reading')?Number(fd.get('odometer_reading')):null,p_accessories:safeName(fd.get('accessories'))||null,p_condition_notes:safeName(fd.get('condition_notes'))||null,p_notes:safeName(fd.get('notes'))||null});
+    if(error){toast(error.message||'تعذر حفظ محضر التسليم','error');return;}
+    await loadSalesData();render();toast('تم حفظ محضر التسليم ويمكن طباعته من الجدول','success');return;
   }
 
   if (form.id === 'salesQuotationForm') {
@@ -2688,7 +2715,7 @@ async function loadSalesData() {
     return;
   }
   const { data, error } = await supabase.from('sales')
-    .select('id,invoice_number,customer_id,customer_name,customer_phone,total,amount_paid,credit_applied,payment_status,created_at')
+    .select('id,invoice_number,customer_id,customer_name,customer_phone,total,amount_paid,credit_applied,payment_status,status,created_at')
     .eq('channel', 'showroom')
     .order('created_at', { ascending: false })
     .limit(100);
@@ -2698,6 +2725,11 @@ async function loadSalesData() {
     return;
   }
   state.sales = data || [];
+  const deliveryResult = state.sales.length
+    ? await supabase.from('sale_deliveries').select('id,delivery_number,sale_id,delivered_at,recipient_name,recipient_phone,odometer_reading,accessories,condition_notes,notes,sales(invoice_number,customer_name)').in('sale_id',state.sales.map(s=>s.id)).order('delivered_at',{ascending:false})
+    : {data:[],error:null};
+  if(deliveryResult.error){console.error('Sale delivery load failed',deliveryResult.error);toast('تعذر تحميل محاضر التسليم','error');state.saleDeliveries=[];}
+  else state.saleDeliveries=deliveryResult.data||[];
   const customersResult = await supabase.from('clients')
     .select('user_id,display_name,phone').not('user_id','is',null).order('display_name');
   if (customersResult.error) {
