@@ -100,6 +100,11 @@ const state = {
   warranties: [],
   serviceOrders: [],
   reorderAlerts: [],
+  crmClients: [],
+  customerInteractions: [],
+  customerComplaints: [],
+  internalNotifications: [],
+  customerStatementRows: [],
   contactMessages: [],
   requestReplies: [],
   contactReplies: [],
@@ -292,6 +297,7 @@ function sidebarItems() {
     if (hasPermission('finance_manage') || hasPermission('accounting_view')) items.push({ route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' });
     if (hasPermission('finance_manage')) items.push({ route: 'hr', label: 'الموارد البشرية والرواتب', icon: 'fa-users-gear' });
     if (hasPermission('catalog_manage') || hasPermission('finance_manage')) items.push({ route: 'inventory-tools', label: 'الجرد والضمان والصيانة', icon: 'fa-warehouse' });
+    if (hasPermission('customer_data_view') || hasPermission('customer_data_manage')) items.push({ route: 'customer-relations', label: 'إدارة العملاء والعلاقات', icon: 'fa-address-book' });
     items.push({ section: 'المتجر' }, { route: 'home', label: 'عرض المتجر', icon: 'fa-store' });
     return items;
   }
@@ -311,6 +317,7 @@ function sidebarItems() {
     { route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' },
     { route: 'hr', label: 'الموارد البشرية والرواتب', icon: 'fa-users-gear' },
     { route: 'inventory-tools', label: 'الجرد والضمان والصيانة', icon: 'fa-warehouse' },
+    { route: 'customer-relations', label: 'إدارة العملاء والعلاقات', icon: 'fa-address-book' },
     { route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null },
     { section: 'المتجر' },
     { route: 'home', label: 'عرض المتجر', icon: 'fa-store' }
@@ -1293,7 +1300,8 @@ const ROUTES = {
   expenses: pageExpenses,
   'finance-tools': pageFinanceTools,
   hr: pageHR,
-  'inventory-tools': pageInventoryTools
+  'inventory-tools': pageInventoryTools,
+  'customer-relations': pageCustomerRelations
 };
 
 function render() {
@@ -1328,6 +1336,7 @@ function navigate(route) {
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
   if (route === 'hr' && state.user && (hasRole('admin','manager','owner') || hasPermission('finance_manage'))) Promise.all([loadHRData(),loadFinanceData(),loadSalesData()]).then(render);
   if (route === 'inventory-tools' && state.user && (hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage'))) Promise.all([loadMotorcycles(),loadInventoryData(),loadHRData(),loadSalesData()]).then(render);
+  if (route === 'customer-relations' && state.user && (hasRole('admin','manager','owner') || hasPermission('customer_data_view') || hasPermission('customer_data_manage'))) Promise.all([loadCRMData(),loadSalesData()]).then(render);
   if ((route === 'expenses' || route === 'finance-tools') && state.user && (hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view') || hasPermission('finance_manage'))) {
     const load = route === 'finance-tools' && hasRole('admin') ? loadPurchasingData() : Promise.resolve();
     Promise.all([load,loadFinanceData()]).then(render);
@@ -2636,6 +2645,23 @@ async function loadCustomerData() {
   set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
   set(DB.ORDERS, []);
   set(DB.FAVS, { [user.id]: (favoritesResult.data || []).map((f) => f.motorcycle_id) });
+}
+
+async function loadCRMData() {
+ const u=currentUser();if(!u||!supabase||!(hasRole('admin','manager','owner')||hasPermission('customer_data_view')||hasPermission('customer_data_manage')))return;
+ const [clients,interactions,complaints,notifications]=await Promise.all([
+  supabase.from('clients').select('id,display_name,phone,email,user_id,credit_limit,customer_segment,lead_source,marketing_consent').order('display_name').limit(1000),
+  supabase.from('customer_interactions').select('*,clients(display_name,phone)').order('interaction_at',{ascending:false}).limit(500),
+  supabase.from('customer_complaints').select('*').order('created_at',{ascending:false}).limit(300),
+  supabase.from('internal_notifications').select('*').order('created_at',{ascending:false}).limit(100)
+ ]);
+ const failed=[clients,interactions,complaints,notifications].find(x=>x.error);
+ if(failed){console.error('CRM load failed',failed.error);toast('تعذر تحميل بيانات إدارة العملاء: '+failed.error.message,'error');return;}
+ state.crmClients=clients.data||[];state.customerInteractions=interactions.data||[];state.customerComplaints=complaints.data||[];state.internalNotifications=notifications.data||[];
+ if(hasRole('admin','manager','owner')||hasPermission('sales_manage')){
+  const stmt=await supabase.from('customer_statement').select('*').order('entry_date',{ascending:false}).limit(1000);
+  if(!stmt.error)state.customerStatementRows=stmt.data||[];
+ }
 }
 
 async function loadInventoryData() {
