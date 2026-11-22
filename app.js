@@ -1139,7 +1139,9 @@ function navigate(route) {
 
 /* ---------- Buy Flow ---------- */
 function requireCustomerLogin(action, bikeId = null) {
-  state.pendingAuthAction = { action, bikeId };
+  const pending = { action, bikeId };
+  state.pendingAuthAction = pending;
+  try { sessionStorage.setItem('ekm_pending_auth_action', JSON.stringify(pending)); } catch { /* Session storage may be unavailable. */ }
   toast('سجّل الدخول أو أنشئ حسابًا للمتابعة؛ سنعيدك إلى الإجراء الذي اخترته', 'info');
   navigate('login');
 }
@@ -1161,11 +1163,17 @@ async function toggleFavorite(bikeId) {
 }
 
 async function resumePendingAuthAction() {
-  const pending = state.pendingAuthAction;
+  let pending = state.pendingAuthAction;
+  if (!pending) {
+    try { pending = JSON.parse(sessionStorage.getItem('ekm_pending_auth_action') || 'null'); } catch { pending = null; }
+  }
   state.pendingAuthAction = null;
+  try { sessionStorage.removeItem('ekm_pending_auth_action'); } catch { /* Session storage may be unavailable. */ }
   if (!pending || currentUser()?.role !== 'customer') return;
-  if (pending.action === 'favorite' && pending.bikeId) await toggleFavorite(pending.bikeId);
-  if (pending.action === 'buy' && pending.bikeId) handleBuy(pending.bikeId);
+  if (!['favorite', 'buy'].includes(pending.action) || typeof pending.bikeId !== 'string') return;
+  if (!state.bikes.some((bike) => bike.id === pending.bikeId)) return;
+  if (pending.action === 'favorite') await toggleFavorite(pending.bikeId);
+  if (pending.action === 'buy') handleBuy(pending.bikeId);
 }
 
 function handleBuy(bikeId) {
@@ -2305,6 +2313,7 @@ async function init() {
     if (state.user?.role === 'admin') { await loadSalesData(); await loadPurchasingData(); }
   }
   render();
+  if (state.user?.role === 'customer') await resumePendingAuthAction();
 }
 
 const EN = {
