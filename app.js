@@ -1699,6 +1699,65 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
+  if (form.id === 'cashSessionOpenForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية فتح جلسة الخزينة','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('open_cash_session',{p_cash_account_id:fd.get('cash_account_id'),p_opening_balance:Number(fd.get('opening_balance')),p_note:safeName(fd.get('note'))||null});
+    if(error){toast(error.message||'تعذر فتح جلسة الخزينة','error');return;} await loadFinanceData();render();toast('تم فتح جلسة الخزينة','success');return;
+  }
+  if (form.id === 'cashSessionCloseForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إقفال جلسة الخزينة','error'); return; }
+    const fd=new FormData(form); const {data,error}=await supabase.rpc('close_cash_session',{p_session_id:form.dataset.sessionId,p_actual_closing:Number(fd.get('actual_closing')),p_note:null});
+    if(error){toast(error.message||'تعذر إقفال جلسة الخزينة','error');return;} await loadFinanceData();render();toast('تم إقفال الخزينة. الفرق: '+money(data?.difference||0),'success');return;
+  }
+  if (form.id === 'cashHandoverForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسليم النقدية','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_cash_handover',{p_session_id:fd.get('session_id'),p_to_user_id:fd.get('to_user_id'),p_amount:Number(fd.get('amount')),p_notes:safeName(fd.get('notes'))||null});
+    if(error){toast(error.message||'تعذر تسجيل التسليم','error');return;} await loadFinanceData();render();toast('تم تسجيل التسليم بانتظار تأكيد المستلم','success');return;
+  }
+  if (form.id === 'handoverResponseForm') {
+    const accept=String(e.submitter?.value||'true')==='true';
+    const {error}=await supabase.rpc('respond_cash_handover',{p_handover_id:form.dataset.handoverId,p_accept:accept});
+    if(error){toast(error.message||'تعذر الرد على التسليم','error');return;} await loadFinanceData();render();toast(accept?'تم تأكيد استلام النقدية':'تم رفض استلام النقدية',accept?'success':'info');return;
+  }
+  if (form.id === 'pettyCashLimitForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية ضبط حد المصروفات النثرية','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('set_petty_cash_limit',{p_limit:Number(fd.get('limit'))});
+    if(error){toast(error.message||'تعذر حفظ الحد','error');return;} await loadFinanceData();render();toast('تم حفظ حد المصروفات النثرية','success');return;
+  }
+  if (form.id === 'pettyCashForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسجيل المصروفات النثرية','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_petty_cash',{p_date:fd.get('transaction_date'),p_description:safeName(fd.get('description')),p_expense_account_id:fd.get('expense_account_id'),p_cash_account_id:fd.get('cash_account_id'),p_amount:Number(fd.get('amount')),p_recipient:safeName(fd.get('recipient'))||null,p_reference:safeName(fd.get('reference'))||null});
+    if(error){toast(error.message||'تعذر تسجيل المصروف النثري','error');return;} await loadFinanceData();render();toast('تم تسجيل المصروف النثري وترحيل قيده','success');return;
+  }
+  if (form.id === 'reverseJournalForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية عكس القيود','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('reverse_journal_entry',{p_original_id:fd.get('original_id'),p_reason:safeName(fd.get('reason'))});
+    if(error){toast(error.message||'تعذر عكس القيد','error');return;} await loadFinanceData();render();toast('تم إنشاء القيد العكسي مع الحفاظ على القيد الأصلي','success');return;
+  }
+  if (form.id === 'financeBudgetForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إنشاء الموازنات','error'); return; }
+    const fd=new FormData(form),lines=[];
+    for(const row of form.querySelectorAll('[data-budget-line]')){const account_id=row.querySelector('[name="account_id"]').value;const budget_amount=Number(row.querySelector('[name="budget_amount"]').value||0);if(account_id)lines.push({account_id,budget_amount});else if(budget_amount>0){toast('اختر الحساب لكل مبلغ مخطط','error');return;}}
+    if(!lines.length){toast('أدخل بند موازنة واحدًا على الأقل','error');return;}
+    const {error}=await supabase.rpc('create_finance_budget',{p_period_id:fd.get('period_id'),p_name:safeName(fd.get('budget_name')),p_lines:lines});
+    if(error){toast(error.message||'تعذر حفظ الموازنة','error');return;} await loadFinanceData();render();toast('تم حفظ الموازنة كمسودة؛ اعتمدها بعد المراجعة','success');return;
+  }
+  if (form.id === 'budgetApproveForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية اعتماد الموازنة','error'); return; }
+    const {error}=await supabase.rpc('approve_finance_budget',{p_budget_id:form.dataset.budgetId});
+    if(error){toast(error.message||'تعذر اعتماد الموازنة','error');return;} await loadFinanceData();render();toast('تم اعتماد الموازنة','success');return;
+  }
+  if (form.id === 'accrualForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إنشاء جدول الاستحقاق','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('create_accrual_schedule',{p_name:safeName(fd.get('schedule_name')),p_description:safeName(fd.get('description'))||null,p_debit_account_id:fd.get('debit_account_id'),p_credit_account_id:fd.get('credit_account_id'),p_monthly_amount:Number(fd.get('monthly_amount')),p_start:fd.get('start_date'),p_end:fd.get('end_date')||null});
+    if(error){toast(error.message||'تعذر إنشاء جدول الاستحقاق','error');return;} await loadFinanceData();render();toast('تم إنشاء جدول الاستحقاق','success');return;
+  }
+  if (form.id === 'accrualRunForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية ترحيل الاستحقاق','error'); return; }
+    const fd=new FormData(form); const {error}=await supabase.rpc('run_accrual_schedule',{p_schedule_id:form.dataset.scheduleId,p_run_date:fd.get('run_date')});
+    if(error){toast(error.message||'تعذر ترحيل الاستحقاق','error');return;} await loadFinanceData();render();toast('تم ترحيل قيد الاستحقاق','success');return;
+  }
+
   if (form.id === 'fiscalPeriodForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية إدارة الفترات','error'); return; }
     const fd=new FormData(form); const {error}=await supabase.rpc('create_fiscal_period',{p_period_code:safeName(fd.get('period_code')),p_period_name:safeName(fd.get('period_name')),p_start_date:fd.get('start_date'),p_end_date:fd.get('end_date')});
