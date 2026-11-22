@@ -70,6 +70,18 @@ const state = {
   recurringJournalTemplates: [],
   recurringJournalRuns: [],
   taxRates: [],
+  cashSessions: [],
+  cashHandovers: [],
+  pettyCashTransactions: [],
+  financeSettings: null,
+  journalReversals: [],
+  financeBudgets: [],
+  financeBudgetVsActual: [],
+  accrualSchedules: [],
+  accrualRuns: [],
+  agingReport: [],
+  cashBook: [],
+  financeJournalEntries: [],
   contactMessages: [],
   requestReplies: [],
   contactReplies: [],
@@ -2351,7 +2363,10 @@ async function loadFinanceData() {
     accountsResult, allAccountsResult, cashResult, expensesResult, trialResult, balancesResult,
     periodsResult, centersResult, openingResult, advancesResult, advanceAllocationsResult,
     assetsResult, depreciationResult, reconciliationsResult, reconciliationLinesResult,
-    journalLinesResult, chequesResult, recurringResult, recurringRunsResult, taxRatesResult
+    journalLinesResult, chequesResult, recurringResult, recurringRunsResult, taxRatesResult,
+    sessionsResult, handoversResult, pettyCashResult, settingsResult, reversalsResult,
+    budgetsResult, budgetActualResult, accrualSchedulesResult, accrualRunsResult,
+    agingResult, cashBookResult, journalEntriesResult
   ] = await Promise.all([
     supabase.from('accounting_accounts').select('id,code,name,account_type').eq('is_active', true).eq('account_type', 'expense').order('code'),
     supabase.from('accounting_accounts').select('id,code,name,account_type,parent_code').eq('is_active', true).order('code'),
@@ -2372,9 +2387,21 @@ async function loadFinanceData() {
     supabase.from('cheques').select('*,cash_accounts(name)').order('due_date',{ascending:true}).limit(250),
     supabase.from('recurring_journal_templates').select('*,recurring_journal_template_lines(id,account_id,debit,credit,memo)').order('created_at',{ascending:false}).limit(100),
     supabase.from('recurring_journal_runs').select('*').order('run_date',{ascending:false}).limit(250),
-    supabase.from('tax_rates').select('*,accounting_accounts(name,code)').order('effective_from',{ascending:false}).limit(100)
+    supabase.from('tax_rates').select('*,accounting_accounts(name,code)').order('effective_from',{ascending:false}).limit(100),
+    supabase.from('cash_sessions').select('*,cash_accounts(name,account_kind)').order('opened_at',{ascending:false}).limit(100),
+    supabase.from('cash_handovers').select('*').order('created_at',{ascending:false}).limit(200),
+    supabase.from('petty_cash_transactions').select('*,accounting_accounts(name,code),cash_accounts(name)').order('transaction_date',{ascending:false}).limit(250),
+    supabase.from('finance_settings').select('petty_cash_limit,updated_at').limit(1),
+    supabase.from('journal_entry_reversals').select('*').order('created_at',{ascending:false}).limit(250),
+    supabase.from('finance_budgets').select('*,finance_budget_lines(id,account_id,cost_center_id,budget_amount)').order('created_at',{ascending:false}).limit(100),
+    supabase.from('finance_budget_vs_actual').select('*').limit(500),
+    supabase.from('accrual_schedules').select('*').order('next_run_date').limit(100),
+    supabase.from('accrual_runs').select('*').order('run_date',{ascending:false}).limit(250),
+    supabase.from('accounting_aging_report').select('*').order('days_overdue',{ascending:false,nullsFirst:false}).limit(500),
+    supabase.from('accounting_cash_book').select('*').order('entry_date',{ascending:false}).limit(500),
+    supabase.from('journal_entries').select('id,entry_number,entry_date,description,status').order('entry_date',{ascending:false}).limit(250)
   ]);
-  const results=[accountsResult,allAccountsResult,cashResult,expensesResult,trialResult,balancesResult,periodsResult,centersResult,openingResult,advancesResult,advanceAllocationsResult,assetsResult,depreciationResult,reconciliationsResult,reconciliationLinesResult,journalLinesResult,chequesResult,recurringResult,recurringRunsResult,taxRatesResult];
+  const results=[accountsResult,allAccountsResult,cashResult,expensesResult,trialResult,balancesResult,periodsResult,centersResult,openingResult,advancesResult,advanceAllocationsResult,assetsResult,depreciationResult,reconciliationsResult,reconciliationLinesResult,journalLinesResult,chequesResult,recurringResult,recurringRunsResult,taxRatesResult,sessionsResult,handoversResult,pettyCashResult,settingsResult,reversalsResult,budgetsResult,budgetActualResult,accrualSchedulesResult,accrualRunsResult,agingResult,cashBookResult,journalEntriesResult];
   const failed=results.find(r=>r.error);
   if(failed){console.error('Finance data load failed',failed.error);toast('تعذر تحميل بعض الأدوات المالية: '+(failed.error.message||''),'error');return;}
   state.financeAccounts=accountsResult.data||[];
@@ -2397,6 +2424,18 @@ async function loadFinanceData() {
   state.recurringJournalTemplates=recurringResult.data||[];
   state.recurringJournalRuns=recurringRunsResult.data||[];
   state.taxRates=taxRatesResult.data||[];
+  state.cashSessions=sessionsResult.data||[];
+  state.cashHandovers=handoversResult.data||[];
+  state.pettyCashTransactions=pettyCashResult.data||[];
+  state.financeSettings=settingsResult.data?.[0]||null;
+  state.journalReversals=reversalsResult.data||[];
+  state.financeBudgets=budgetsResult.data||[];
+  state.financeBudgetVsActual=budgetActualResult.data||[];
+  state.accrualSchedules=accrualSchedulesResult.data||[];
+  state.accrualRuns=accrualRunsResult.data||[];
+  state.agingReport=agingResult.data||[];
+  state.cashBook=cashBookResult.data||[];
+  state.financeJournalEntries=journalEntriesResult.data||[];
 }
 async function loadBusinessData() {
   if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
