@@ -91,6 +91,13 @@ const state = {
   payrollRuns: [],
   payrollItems: [],
   payrollPayments: [],
+  inventoryCosts: [],
+  motorcycleUnits: [],
+  stocktakeBatches: [],
+  stocktakeLines: [],
+  warranties: [],
+  serviceOrders: [],
+  reorderAlerts: [],
   contactMessages: [],
   requestReplies: [],
   contactReplies: [],
@@ -282,6 +289,7 @@ function sidebarItems() {
     if (hasPermission('expenses_manage') || hasPermission('accounting_view')) items.push({ route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' });
     if (hasPermission('finance_manage') || hasPermission('accounting_view')) items.push({ route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' });
     if (hasPermission('finance_manage')) items.push({ route: 'hr', label: 'الموارد البشرية والرواتب', icon: 'fa-users-gear' });
+    if (hasPermission('catalog_manage') || hasPermission('finance_manage')) items.push({ route: 'inventory-tools', label: 'الجرد والضمان والصيانة', icon: 'fa-warehouse' });
     items.push({ section: 'المتجر' }, { route: 'home', label: 'عرض المتجر', icon: 'fa-store' });
     return items;
   }
@@ -300,6 +308,7 @@ function sidebarItems() {
     { route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' },
     { route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' },
     { route: 'hr', label: 'الموارد البشرية والرواتب', icon: 'fa-users-gear' },
+    { route: 'inventory-tools', label: 'الجرد والضمان والصيانة', icon: 'fa-warehouse' },
     { route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null },
     { section: 'المتجر' },
     { route: 'home', label: 'عرض المتجر', icon: 'fa-store' }
@@ -1252,7 +1261,8 @@ const ROUTES = {
   'staff-orders': pageStaffOrders,
   expenses: pageExpenses,
   'finance-tools': pageFinanceTools,
-  hr: pageHR
+  hr: pageHR,
+  'inventory-tools': pageInventoryTools
 };
 
 function render() {
@@ -1286,6 +1296,7 @@ function navigate(route) {
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
   if (route === 'hr' && state.user && (hasRole('admin','manager','owner') || hasPermission('finance_manage'))) Promise.all([loadHRData(),loadFinanceData(),loadSalesData()]).then(render);
+  if (route === 'inventory-tools' && state.user && (hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage'))) Promise.all([loadMotorcycles(),loadInventoryData(),loadHRData(),loadSalesData()]).then(render);
   if ((route === 'expenses' || route === 'finance-tools') && state.user && (hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view') || hasPermission('finance_manage'))) {
     const load = route === 'finance-tools' && hasRole('admin') ? loadPurchasingData() : Promise.resolve();
     Promise.all([load,loadFinanceData()]).then(render);
@@ -2551,6 +2562,23 @@ async function loadCustomerData() {
   set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
   set(DB.ORDERS, []);
   set(DB.FAVS, { [user.id]: (favoritesResult.data || []).map((f) => f.motorcycle_id) });
+}
+
+async function loadInventoryData() {
+ const u=currentUser();if(!u||!supabase||!(hasRole('admin','manager','owner')||hasPermission('catalog_manage')||hasPermission('finance_manage')))return;
+ const [costs,units,batches,lines,warranties,orders,alerts]=await Promise.all([
+  supabase.from('motorcycle_inventory_costs').select('*'),
+  supabase.from('motorcycle_units').select('*,motorcycles(name,category,model_year)').order('registered_at',{ascending:false}).limit(500),
+  supabase.from('stocktake_batches').select('*').order('stocktake_date',{ascending:false}).limit(100),
+  supabase.from('stocktake_lines').select('*,motorcycles(name)').limit(1000),
+  supabase.from('warranties').select('*,motorcycles(name)').order('created_at',{ascending:false}).limit(300),
+  supabase.from('service_orders').select('*,motorcycles(name),employees(full_name,employee_code)').order('opened_at',{ascending:false}).limit(300),
+  supabase.from('inventory_reorder_alerts').select('*').order('stock')
+ ]);
+ const results=[costs,units,batches,lines,warranties,orders,alerts],failed=results.find(x=>x.error);
+ if(failed){console.error('Inventory data load failed',failed.error);toast('تعذر تحميل بيانات الجرد والصيانة: '+failed.error.message,'error');return;}
+ state.inventoryCosts=costs.data||[];state.motorcycleUnits=units.data||[];state.stocktakeBatches=batches.data||[];state.stocktakeLines=lines.data||[];
+ state.warranties=warranties.data||[];state.serviceOrders=orders.data||[];state.reorderAlerts=alerts.data||[];
 }
 
 async function loadHRData() {
