@@ -1890,6 +1890,16 @@ document.addEventListener('submit', async (e) => {
     if(error){toast(error.message||'تعذر صرف الرواتب','error');return;} await Promise.all([loadHRData(),loadFinanceData()]);render();toast('تم تسجيل صرف الرواتب وترحيل القيد','success');return;
   }
 
+  if (form.id === 'allocateSalePaymentForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسوية المقبوضات','error'); return; }
+    const fd=new FormData(form);const {error}=await supabase.rpc('allocate_sale_payment_to_cash_account',{p_payment_id:form.dataset.paymentId,p_cash_account_id:fd.get('cash_account_id')});
+    if(error){toast(error.message||'تعذر تسوية الدفعة','error');return;}await loadFinanceData();render();toast('تمت تسوية الدفعة إلى الحساب المختار','success');return;
+  }
+  if (form.id === 'allocateCustomerRefundForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تسوية ردود العملاء','error'); return; }
+    const fd=new FormData(form);const {error}=await supabase.rpc('allocate_customer_refund_to_cash_account',{p_transaction_id:form.dataset.transactionId,p_cash_account_id:fd.get('cash_account_id')});
+    if(error){toast(error.message||'تعذر تسوية رد العميل','error');return;}await loadFinanceData();render();toast('تمت تسوية رد العميل إلى الحساب المختار','success');return;
+  }
   if (form.id === 'cashSessionOpenForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية فتح جلسة الخزينة','error'); return; }
     const fd=new FormData(form); const {error}=await supabase.rpc('open_cash_session',{p_cash_account_id:fd.get('cash_account_id'),p_opening_balance:Number(fd.get('opening_balance')),p_note:safeName(fd.get('note'))||null});
