@@ -42,3 +42,8 @@ The HR workspace includes employee files, optional links to existing staff login
 Inventory tools include actual unit-cost capture from recorded purchase receipts, reorder thresholds and alerts, VIN/barcode unit registration, stocktakes with inventory-adjustment journals, warranty records, and service orders. CRM tools include customer credit limits, credit-limit enforcement on new sales, customer statements, interaction history, complaints, customer classification/lead source/marketing consent, and internal notifications.
 
 These additions are implemented against the existing Supabase project and main branch. A successful frontend build/deploy and live UI smoke test are required before treating the release as complete.
+
+
+## Sales and receivables workflows
+
+Sales staff can create quotations with item-level pricing, mark a quotation as sent or accepted, and convert an accepted, unexpired quotation into a sales invoice. Quotation creation does not reserve or reduce stock; stock is affected only when the quotation is converted. Custom installment schedules can be attached to an invoice; their amounts must equal the outstanding balance, and installment collections post through the existing sale-payment flow. No interest or financing fees are added automatically.
