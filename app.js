@@ -51,10 +51,25 @@ const state = {
   supplierReturns: [],
   supplierReturnItems: [],
   financeAccounts: [],
+  financeAllAccounts: [],
   cashAccounts: [],
   cashBalances: [],
   trialBalance: [],
   expenses: [],
+  fiscalPeriods: [],
+  costCenters: [],
+  openingBatches: [],
+  supplierAdvances: [],
+  supplierAdvanceAllocations: [],
+  fixedAssets: [],
+  fixedAssetDepreciations: [],
+  bankReconciliations: [],
+  bankReconciliationLines: [],
+  financeJournalLines: [],
+  cheques: [],
+  recurringJournalTemplates: [],
+  recurringJournalRuns: [],
+  taxRates: [],
   contactMessages: [],
   requestReplies: [],
   contactReplies: [],
@@ -70,6 +85,7 @@ const STAFF_PERMISSION_OPTIONS = [
   { key: 'customer_data_view', label: 'رؤية أسماء وهواتف العملاء', description: 'لعملاء الطلبات التي يحق للموظف عرضها.' },
   { key: 'expenses_manage', label: 'إدارة المصروفات', description: 'تسجيل المصروفات وسدادها ومراجعة سجلها.' },
   { key: 'accounting_view', label: 'عرض الحسابات والتقارير المالية', description: 'عرض دليل الحسابات والقيود والأرصدة المالية.' },
+  { key: 'finance_manage', label: 'إدارة الأدوات المالية المتقدمة', description: 'الفترات والأرصدة الافتتاحية والأصول والسلف والتسويات والشيكات والقيود المتكررة.' },
 ];
 const PERMISSION_LABELS = Object.fromEntries(STAFF_PERMISSION_OPTIONS.map((item) => [item.key, item.label]));
 
@@ -243,6 +259,7 @@ function sidebarItems() {
     if (hasPermission('catalog_manage')) items.push({ route: 'manage-bikes', label: 'إدارة الدراجات', icon: 'fa-motorcycle' });
     if (hasRequestAccess()) items.push({ route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null });
     if (hasPermission('expenses_manage') || hasPermission('accounting_view')) items.push({ route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' });
+    if (hasPermission('finance_manage') || hasPermission('accounting_view')) items.push({ route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' });
     items.push({ section: 'المتجر' }, { route: 'home', label: 'عرض المتجر', icon: 'fa-store' });
     return items;
   }
@@ -259,6 +276,7 @@ function sidebarItems() {
     { route: 'manage-bikes', label: 'إدارة الدراجات', icon: 'fa-motorcycle' },
     { route: 'staff', label: 'الموظفين والأداء', icon: 'fa-users-gear' },
     { route: 'expenses', label: 'المصروفات والحسابات', icon: 'fa-money-bill-transfer' },
+    { route: 'finance-tools', label: 'الأدوات المالية المتقدمة', icon: 'fa-building-columns' },
     { route: 'staff-orders', label: 'طلبات العملاء', icon: 'fa-clipboard-list', badge: pendingTotal || null },
     { section: 'المتجر' },
     { route: 'home', label: 'عرض المتجر', icon: 'fa-store' }
@@ -1101,7 +1119,8 @@ const ROUTES = {
   'manage-bikes': pageManageBikes,
   staff: pageStaff,
   'staff-orders': pageStaffOrders,
-  expenses: pageExpenses
+  expenses: pageExpenses,
+  'finance-tools': pageFinanceTools
 };
 
 function render() {
@@ -1134,7 +1153,10 @@ function navigate(route) {
   if (route === 'pos') loadSalesData().then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
-  if (route === 'expenses' && state.user && (hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view'))) loadFinanceData().then(render);
+  if ((route === 'expenses' || route === 'finance-tools') && state.user && (hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view') || hasPermission('finance_manage'))) {
+    const load = route === 'finance-tools' && hasRole('admin') ? loadPurchasingData() : Promise.resolve();
+    Promise.all([load,loadFinanceData()]).then(render);
+  }
 }
 
 /* ---------- Buy Flow ---------- */
@@ -2175,23 +2197,57 @@ async function loadCustomerData() {
 
 async function loadFinanceData() {
   const u = currentUser();
-  if (!u || !supabase || !(hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view'))) return;
-  const [accountsResult, cashResult, expensesResult, trialResult, balancesResult] = await Promise.all([
+  if (!u || !supabase || !(hasRole('admin','manager','owner') || hasPermission('expenses_manage') || hasPermission('accounting_view') || hasPermission('finance_manage'))) return;
+  const [
+    accountsResult, allAccountsResult, cashResult, expensesResult, trialResult, balancesResult,
+    periodsResult, centersResult, openingResult, advancesResult, advanceAllocationsResult,
+    assetsResult, depreciationResult, reconciliationsResult, reconciliationLinesResult,
+    journalLinesResult, chequesResult, recurringResult, recurringRunsResult, taxRatesResult
+  ] = await Promise.all([
     supabase.from('accounting_accounts').select('id,code,name,account_type').eq('is_active', true).eq('account_type', 'expense').order('code'),
-    supabase.from('cash_accounts').select('id,name,account_kind,currency').eq('is_active', true).order('name'),
+    supabase.from('accounting_accounts').select('id,code,name,account_type,parent_code').eq('is_active', true).order('code'),
+    supabase.from('cash_accounts').select('id,name,account_id,account_kind,currency').eq('is_active', true).order('name'),
     supabase.from('expenses').select('id,expense_number,expense_date,description,vendor_name,reference_number,amount,paid_amount,due_date,notes,accounting_accounts(name,code)').order('expense_date', {ascending:false}).limit(250),
     supabase.from('accounting_trial_balance').select('account_id,account_code,account_name,account_type,total_debit,total_credit,debit_balance,credit_balance').order('account_code'),
-    supabase.from('accounting_cash_balances').select('cash_account_id,cash_account_name,account_kind,currency,balance').order('cash_account_name')
+    supabase.from('accounting_cash_balances').select('cash_account_id,cash_account_name,account_kind,currency,balance').order('cash_account_name'),
+    supabase.from('fiscal_periods').select('*').order('start_date',{ascending:false}).limit(60),
+    supabase.from('cost_centers').select('*').order('code'),
+    supabase.from('opening_balance_batches').select('*').order('effective_date',{ascending:false}).limit(100),
+    supabase.from('supplier_advances').select('*,suppliers(name)').order('advance_date',{ascending:false}).limit(200),
+    supabase.from('supplier_advance_allocations').select('*').order('created_at',{ascending:false}).limit(500),
+    supabase.from('fixed_assets').select('*').order('asset_number',{ascending:false}).limit(200),
+    supabase.from('fixed_asset_depreciations').select('*').order('period_date',{ascending:false}).limit(500),
+    supabase.from('bank_reconciliations').select('*,cash_accounts(name,account_id,account_kind)').order('period_end',{ascending:false}).limit(100),
+    supabase.from('bank_reconciliation_lines').select('*').order('statement_date',{ascending:false}).limit(500),
+    supabase.from('journal_entry_lines').select('id,journal_entry_id,account_id,debit,credit,memo,journal_entries(entry_date,description,entry_number)').order('created_at',{ascending:false}).limit(500),
+    supabase.from('cheques').select('*,cash_accounts(name)').order('due_date',{ascending:true}).limit(250),
+    supabase.from('recurring_journal_templates').select('*,recurring_journal_template_lines(id,account_id,debit,credit,memo)').order('created_at',{ascending:false}).limit(100),
+    supabase.from('recurring_journal_runs').select('*').order('run_date',{ascending:false}).limit(250),
+    supabase.from('tax_rates').select('*,accounting_accounts(name,code)').order('effective_from',{ascending:false}).limit(100)
   ]);
-  if (accountsResult.error || cashResult.error || expensesResult.error || trialResult.error || balancesResult.error) {
-    console.error('Finance data load failed', accountsResult.error || cashResult.error || expensesResult.error || trialResult.error || balancesResult.error);
-    toast('تعذر تحميل بيانات المصروفات والحسابات', 'error'); return;
-  }
-  state.financeAccounts = accountsResult.data || [];
-  state.cashAccounts = cashResult.data || [];
-  state.expenses = expensesResult.data || [];
-  state.trialBalance = trialResult.data || [];
-  state.cashBalances = balancesResult.data || [];
+  const results=[accountsResult,allAccountsResult,cashResult,expensesResult,trialResult,balancesResult,periodsResult,centersResult,openingResult,advancesResult,advanceAllocationsResult,assetsResult,depreciationResult,reconciliationsResult,reconciliationLinesResult,journalLinesResult,chequesResult,recurringResult,recurringRunsResult,taxRatesResult];
+  const failed=results.find(r=>r.error);
+  if(failed){console.error('Finance data load failed',failed.error);toast('تعذر تحميل بعض الأدوات المالية: '+(failed.error.message||''),'error');return;}
+  state.financeAccounts=accountsResult.data||[];
+  state.financeAllAccounts=allAccountsResult.data||[];
+  state.cashAccounts=cashResult.data||[];
+  state.expenses=expensesResult.data||[];
+  state.trialBalance=trialResult.data||[];
+  state.cashBalances=balancesResult.data||[];
+  state.fiscalPeriods=periodsResult.data||[];
+  state.costCenters=centersResult.data||[];
+  state.openingBatches=openingResult.data||[];
+  state.supplierAdvances=advancesResult.data||[];
+  state.supplierAdvanceAllocations=advanceAllocationsResult.data||[];
+  state.fixedAssets=assetsResult.data||[];
+  state.fixedAssetDepreciations=depreciationResult.data||[];
+  state.bankReconciliations=reconciliationsResult.data||[];
+  state.bankReconciliationLines=reconciliationLinesResult.data||[];
+  state.financeJournalLines=journalLinesResult.data||[];
+  state.cheques=chequesResult.data||[];
+  state.recurringJournalTemplates=recurringResult.data||[];
+  state.recurringJournalRuns=recurringRunsResult.data||[];
+  state.taxRates=taxRatesResult.data||[];
 }
 async function loadBusinessData() {
   if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
