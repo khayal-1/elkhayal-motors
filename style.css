@@ -1161,3 +1161,28 @@ td .mini-img {
 .contact-details i {
   margin-inline-end: 6px;
 }
+
+
+/* Customer invoice history */
+.customer-invoice > summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-weight: 700;
+}
+.customer-invoice[open] > summary {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--gray-200);
+}
+.customer-invoice .invoice-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 16px;
+  padding-top: 14px;
+}
+.customer-invoice .invoice-totals p {
+  margin: 0;
+}
