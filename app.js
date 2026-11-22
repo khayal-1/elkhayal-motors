@@ -1343,7 +1343,7 @@ function pageDashboard() {
 
 function pageManageBikes() {
   const u = currentUser();
-  if (!u || !['staff', 'admin'].includes(u.role)) return pageLogin();
+  if (!u || !['staff', 'admin', 'manager', 'owner'].includes(u.role)) return pageLogin();
   if (u.role === 'staff' && !hasPermission('catalog_manage')) return pageNoPermission();
   const bikes = get(DB.BIKES);
   return `
@@ -1356,7 +1356,7 @@ function pageManageBikes() {
         <tbody>${bikes.map((b) => `
           <tr>
             <td><img class="mini-img" src="${esc((b.images && b.images[0]) || '')}" alt="" loading="lazy"></td>
-            <td><b>${esc(b.name)}</b></td>
+            <td><b>${esc(b.name)}</b>${b.is_demo ? '<small class="demo-data-label">تجريبية</small>' : ''} </td>
             <td>${esc(b.model)}</td>
             <td>${esc(b.category)}</td>
             <td class="text-red" style="font-weight:700">${money(b.price)}</td>
