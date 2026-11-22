@@ -862,14 +862,33 @@ function pageDashboard() {
   const u = currentUser();
   if (!u || u.role !== 'admin') return pageLogin();
   const bikes = get(DB.BIKES), requests = get(DB.CUSTOM_REQS);
+  const sales = state.sales || [], bills = state.supplierBills || [], expenses = state.expenses || [];
   const totalStock = bikes.reduce((sum, bike) => sum + Number(bike.stock || 0), 0);
   const pending = requests.filter((r) => ['pending', 'reviewing'].includes(r.status)).length;
+  const salesTotal = sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+  const receivables = sales.reduce((sum, sale) => sum + Math.max(0, Number(sale.total || 0) - Number(sale.amount_paid || 0) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0)), 0);
+  const supplierDue = bills.reduce((sum, bill) => sum + Number(bill.balanceDue || 0), 0);
+  const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const cashTotal = (state.cashBalances || []).reduce((sum, account) => sum + Number(account.balance || 0), 0);
+  const recentSales = sales.slice(0,5);
   return `<h2 class="page-title"><i class="fa-solid fa-chart-line"></i> لوحة الإحصائيات</h2>
-    <p class="page-sub">ملخص من بيانات Supabase</p><div class="stats-grid">
+    <p class="page-sub">ملخص مباشر من بيانات المخزون والمبيعات والموردين والحسابات. أرقام المبيعات والمصروفات تخص السجلات المحملة في هذه الصفحة.</p>
+    <div class="stats-grid">
       <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-motorcycle"></i></div><div class="stat-label">الدراجات المسجلة</div><div class="stat-value">${bikes.length}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="stat-label">إجمالي المخزون</div><div class="stat-value">${totalStock}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-clipboard-list"></i></div><div class="stat-label">طلبات العملاء المفتوحة</div><div class="stat-value">${pending}</div></div></div>
-    <div class="panel"><p>تقارير المبيعات والفواتير غير متاحة حتى تُربط بجدول محفوظ في Supabase.</p></div>`;
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="stat-label">وحدات المخزون</div><div class="stat-value">${totalStock}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-clipboard-list"></i></div><div class="stat-label">طلبات العملاء المفتوحة</div><div class="stat-value">${pending}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div><div class="stat-label">مبيعات آخر ${sales.length} فاتورة</div><div class="stat-value">${money(salesTotal)}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div><div class="stat-label">مستحقات العملاء ضمن الفواتير المعروضة</div><div class="stat-value">${money(receivables)}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-truck"></i></div><div class="stat-label">مستحقات الموردين ضمن الفواتير المحملة</div><div class="stat-value">${money(supplierDue)}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-money-bill-transfer"></i></div><div class="stat-label">مصروفات السجلات المحملة</div><div class="stat-value">${money(expenseTotal)}</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-vault"></i></div><div class="stat-label">أرصدة الخزائن والبنوك</div><div class="stat-value">${money(cashTotal)}</div></div>
+    </div>
+    <div class="panel"><div class="panel-title"><i class="fa-solid fa-receipt"></i> أحدث الفواتير المحملة</div>
+      ${recentSales.length ? `<div class="table-wrap"><table><thead><tr><th>الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>التاريخ</th></tr></thead><tbody>
+      ${recentSales.map(sale => `<tr><td><b>${esc(sale.invoice_number)}</b></td><td>${esc(sale.customer_name)}</td><td>${money(sale.total)}</td><td>${money(sale.amount_paid)}</td><td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="empty"><p>لا توجد فواتير محملة بعد.</p></div>'}
+      <div class="contact-actions mt-2"><button class="btn btn-primary" data-nav="pos">فتح نقطة البيع</button><button class="btn btn-outline" data-nav="suppliers">إدارة الموردين</button><button class="btn btn-outline" data-nav="expenses">الحسابات والمصروفات</button></div>
+    </div>`;
 }
 
 function pageManageBikes() {
@@ -1110,6 +1129,7 @@ function navigate(route) {
   closeModal();
   closeSidebar();
   render();
+  if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
   if (route === 'pos') loadSalesData().then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
