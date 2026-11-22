@@ -1295,7 +1295,7 @@ function pageInventory() {
             const img = (b.images && b.images[0]) || '';
             return `<tr>
               <td><img class="mini-img" src="${esc(img)}" alt="" loading="lazy"></td>
-              <td><b>${esc(b.name)}</b></td>
+              <td><b>${esc(b.name)}</b>${b.is_demo ? '<small class="demo-data-label">تجريبية</small>' : ''} </td>
               <td>${esc(b.model)}</td>
               <td>${esc(b.category)}</td>
               <td class="text-red" style="font-weight:900">${money(b.price)}</td>
@@ -1348,7 +1348,7 @@ function pageManageBikes() {
   const bikes = get(DB.BIKES);
   return `
     <h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> إدارة الدراجات</h2>
-    <p class="page-sub">إضافة وتعديل الدراجات المحفوظة في Supabase</p>
+    <p class="page-sub">إدارة جميع الدراجات التجريبية — يمكنك تعديل بيانات أي دراجة أو حذفها عند عدم ارتباطها بسجلات مالية أو حركات مخزون.</p>
     <div class="panel">
       ${(u.role === 'admin' || hasPermission('catalog_manage')) ? `<div class="contact-actions mb-2"><button class="btn btn-primary" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة دراجة جديدة</button><button class="btn btn-outline" id="syncTelegramPhotosBtn"><i class="fa-solid fa-rotate"></i> مزامنة الصور القديمة</button></div>` : ''}
       <div class="table-wrap"><table>
@@ -1362,7 +1362,7 @@ function pageManageBikes() {
             <td class="text-red" style="font-weight:700">${money(b.price)}</td>
             <td>${b.stock}</td>
             <td style="display:flex;gap:6px">
-              <button class="btn btn-outline btn-sm" data-edit-bike="${esc(b.id)}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-outline btn-sm" data-edit-bike="${esc(b.id)}" title="تعديل"><i class="fa-solid fa-pen"></i></button>${b.is_demo ? '<button class="btn btn-danger btn-sm" data-delete-bike="${esc(b.id)}" data-bike-name="${esc(b.name)}" title="حذف الدراجة التجريبية"><i class="fa-solid fa-trash"></i></button>' : ''}
             </td>
           </tr>`).join('')}</tbody>
       </table></div>
@@ -2014,6 +2014,19 @@ document.addEventListener('click', async (e) => {
   if (e.target.closest('#addBikeBtn')) {
     if (!hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
     openModal(bikeFormHTML(null)); return;
+  }
+  const deleteBike = e.target.closest('[data-delete-bike]');
+  if (deleteBike) {
+    if (!hasPermission('catalog_manage') || !supabase) { toast('ليس لديك صلاحية حذف الدراجات', 'error'); return; }
+    const bikeName = deleteBike.dataset.bikeName || 'هذه الدراجة';
+    if (!confirm('هل تريد حذف الدراجة التجريبية «' + bikeName + '»؟ سيتم حذف وحداتها التجريبية فقط. إذا كانت مرتبطة بمشتريات أو حركات مخزون فلن يسمح النظام بحذفها حفاظًا على السجلات.')) return;
+    deleteBike.disabled = true;
+    const { error } = await supabase.rpc('delete_demo_motorcycle', { p_motorcycle_id: deleteBike.dataset.deleteBike });
+    if (error) { deleteBike.disabled = false; toast(error.message || 'تعذر حذف الدراجة', 'error'); return; }
+    await Promise.all([loadMotorcycles(), loadInventoryData()]);
+    render();
+    toast('تم حذف الدراجة التجريبية ووحداتها', 'success');
+    return;
   }
   const editBike = e.target.closest('[data-edit-bike]');
   if (editBike) {
@@ -3011,14 +3024,14 @@ document.addEventListener('keydown', (e) => {
 async function loadMotorcycles() {
   if (!supabase) return;
   let query = supabase.from('motorcycles')
-    .select('id,name,model_year,category,price,stock,image_urls,status')
+    .select('id,name,model_year,category,price,stock,image_urls,status,is_demo')
     .order('created_at', { ascending: false });
   if (!state.user || (state.user.role === 'customer') || (state.user.role === 'staff' && !hasAnyPermission('catalog_view', 'catalog_manage'))) query = query.eq('status', 'available');
   const { data, error } = await query;
   if (error) { console.error('Catalogue load failed', error); return; }
   state.bikes = (data || []).map((row) => ({
     id: row.id, name: row.name, model: String(row.model_year || ''), category: row.category,
-    price: Number(row.price), stock: row.stock, images: row.image_urls || [], status: row.status
+    price: Number(row.price), stock: row.stock, images: row.image_urls || [], status: row.status, is_demo: !!row.is_demo
   }));
   set(DB.BIKES, state.bikes);
 }
