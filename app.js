@@ -38,6 +38,8 @@ const state = {
   sidebarOpen: false,
   bikes: [],
   sales: [],
+  customerInvoices: [],
+  registeredCustomers: [],
   saleReturns: [],
   saleReturnItems: [],
   customerCredits: [],
@@ -229,7 +231,8 @@ function sidebarItems() {
       { section: 'حسابي' },
       { route: 'account', label: 'ملفي الشخصي', icon: 'fa-user' },
       { route: 'favorites', label: 'المفضلة', icon: 'fa-heart' },
-      { route: 'orders', label: 'طلباتي', icon: 'fa-receipt' }
+      { route: 'orders', label: 'طلباتي', icon: 'fa-clipboard-list' },
+      { route: 'invoices', label: 'فواتيري', icon: 'fa-file-invoice' }
     ];
   }
 
@@ -595,6 +598,26 @@ function pageOrders() {
     </div>`;
 }
 
+function pageCustomerInvoices() {
+  const u = currentUser();
+  if (!u) return pageLogin();
+  if (u.role !== 'customer') return pageNoPermission();
+  const invoices = state.customerInvoices || [];
+  return `
+    <h2 class="page-title"><i class="fa-solid fa-file-invoice"></i> فواتيري</h2>
+    <p class="page-sub">فواتير المبيعات المرتبطة بحسابك لدى معرض الخيال موتورز</p>
+    ${invoices.length ? invoices.map((invoice) => {
+      const status = invoice.payment_status === 'paid' ? 'مدفوعة' : invoice.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة';
+      return `<details class="panel customer-invoice">
+        <summary><b>${esc(invoice.invoice_number)}</b> — ${new Date(invoice.created_at).toLocaleDateString('ar-EG')} — ${money(invoice.total)} <span class="status-pill ${esc(invoice.payment_status)}">${status}</span></summary>
+        <div class="table-wrap mt-2"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+        <tbody>${invoice.items.map(item => `<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(item.model_year || '—')}</td><td>${Number(item.quantity)}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`).join('')}</tbody></table></div>
+        <div class="invoice-totals"><p><b>إجمالي الفاتورة:</b> ${money(invoice.total)}</p><p><b>المدفوع:</b> ${money(invoice.amount_paid)}</p><p><b>الرصيد المستخدم:</b> ${money(invoice.credit_applied)}</p><p><b>المتبقي:</b> ${money(invoice.balance_due)}</p></div>
+      </details>`;
+    }).join('') : `<div class="panel empty"><i class="fa-solid fa-file-invoice"></i><p>لا توجد فواتير مرتبطة بحسابك حتى الآن.</p><small>إذا اشتريت من المعرض ولم تظهر فاتورتك، اطلب من الموظف ربط عملية البيع بحسابك عند إصدار الفاتورة.</small></div>`}
+  `;
+}
+
 /* =========================================================
    SECTION 4 — POS & INVOICES
    ========================================================= */
@@ -611,6 +634,7 @@ function pagePOS() {
       <div class="panel-title"><i class="fa-solid fa-cart-plus"></i> فاتورة بيع جديدة</div>
       ${available.length ? `
       <form id="posSaleForm" class="form-grid">
+        <div class="field"><label for="posCustomerAccount">ربط الفاتورة بحساب عميل مسجل (اختياري)</label><select id="posCustomerAccount" name="customer_user_id"><option value="">عميل نقدي / بدون ربط بحساب</option>${state.registeredCustomers.map(customer => `<option value="${esc(customer.user_id)}" data-name="${esc(customer.display_name)}" data-phone="${esc(customer.phone || '')}">${esc(customer.display_name)} — ${esc(customer.phone || 'بدون هاتف')}</option>`).join('')}</select><small class="hint">عند اختيار حساب عميل، ستظهر الفاتورة في قسم «فواتيري» بعد تسجيل دخوله.</small></div>
         <div class="form-row">
           <div class="field"><label for="posCustomerName">اسم العميل (اختياري)</label><input id="posCustomerName" name="customer_name" maxlength="120" placeholder="عميل نقدي"></div>
           <div class="field"><label for="posCustomerPhone">رقم الهاتف (اختياري)</label><input id="posCustomerPhone" name="customer_phone" maxlength="32" type="tel"></div>
@@ -1048,6 +1072,7 @@ const ROUTES = {
   account: pageAccount,
   favorites: pageFavorites,
   orders: pageOrders,
+  invoices: pageCustomerInvoices,
   pos: pagePOS,
   suppliers: pageSuppliers,
   target: pageTarget,
@@ -1746,7 +1771,8 @@ document.addEventListener('submit', async (e) => {
     }
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
-    const { data, error } = await supabase.rpc('create_showroom_sale', {
+    const { data, error } = await supabase.rpc('create_showroom_sale_for_customer', {
+      p_customer_user_id: String(fd.get('customer_user_id') || '') || null,
       p_customer_name: safeName(fd.get('customer_name')) || null,
       p_customer_phone: safeName(fd.get('customer_phone')) || null,
       p_items: items.map(({ motorcycle_id, quantity, bike }) => ({ motorcycle_id: bike.id, quantity })),
@@ -1986,6 +2012,15 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.id === 'filterCat') { state.filterCat = e.target.value; render(); }
   if (e.target.id === 'filterPrice') { state.filterPrice = e.target.value; render(); }
+  if (e.target.id === 'posCustomerAccount') {
+    const option = e.target.selectedOptions?.[0];
+    const name = document.getElementById('posCustomerName');
+    const phone = document.getElementById('posCustomerPhone');
+    if (e.target.value && option) {
+      if (name) name.value = option.dataset.name || '';
+      if (phone) phone.value = option.dataset.phone || '';
+    }
+  }
 });
 
 /* ---------- Keyboard A11y ---------- */
@@ -2028,6 +2063,14 @@ async function loadSalesData() {
     return;
   }
   state.sales = data || [];
+  const customersResult = await supabase.from('clients')
+    .select('user_id,display_name,phone').not('user_id','is',null).order('display_name');
+  if (customersResult.error) {
+    console.error('Registered customer list failed', customersResult.error);
+    state.registeredCustomers = [];
+  } else {
+    state.registeredCustomers = customersResult.data || [];
+  }
   const saleIds = state.sales.map(s => s.id);
   const returnsResult = saleIds.length
     ? await supabase.from('sale_returns').select('id,return_number,sale_id,total_amount,customer_name,created_at,notes').in('sale_id', saleIds).order('created_at', { ascending: false })
@@ -2056,15 +2099,32 @@ async function loadSalesData() {
 async function loadCustomerData() {
   const user = state.user;
   if (!user || !supabase) return;
-  const [{ data: requests, error: requestError }, { data: favorites, error: favoriteError }] = await Promise.all([
+  const [requestsResult, favoritesResult, salesResult] = await Promise.all([
     supabase.from('customer_requests').select('id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at').eq('client_user_id', user.id).order('created_at', { ascending: false }),
-    supabase.from('favorites').select('motorcycle_id').eq('user_id', user.id)
+    supabase.from('favorites').select('motorcycle_id').eq('user_id', user.id),
+    supabase.from('sales').select('id,invoice_number,total,amount_paid,credit_applied,payment_status,created_at').eq('channel','showroom').eq('status','posted').order('created_at',{ascending:false}).limit(100)
   ]);
-  if (requestError) console.error('Customer request load failed', requestError);
-  if (favoriteError) console.error('Favorites load failed', favoriteError);
-  set(DB.CUSTOM_REQS, (requests || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
+  if (requestsResult.error) console.error('Customer request load failed', requestsResult.error);
+  if (favoritesResult.error) console.error('Favorites load failed', favoritesResult.error);
+  if (salesResult.error) console.error('Customer invoice history load failed', salesResult.error);
+  const sales = salesResult.data || [];
+  const saleIds = sales.map((sale) => sale.id);
+  const itemsResult = saleIds.length
+    ? await supabase.from('sale_items').select('sale_id,motorcycle_name,model_year,quantity,unit_price,line_total').in('sale_id', saleIds).order('created_at',{ascending:true})
+    : {data:[],error:null};
+  if (itemsResult.error) console.error('Customer invoice items load failed', itemsResult.error);
+  const invoiceItems = itemsResult.data || [];
+  state.customerInvoices = sales.map((sale) => ({
+    ...sale,
+    total: Number(sale.total || 0),
+    amount_paid: Number(sale.amount_paid || 0),
+    credit_applied: Number(sale.credit_applied || 0),
+    balance_due: Math.max(0, Number(sale.total || 0) - Number(sale.amount_paid || 0) - Number(sale.credit_applied || 0)),
+    items: invoiceItems.filter((item) => item.sale_id === sale.id)
+  }));
+  set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
   set(DB.ORDERS, []);
-  set(DB.FAVS, { [user.id]: (favorites || []).map((f) => f.motorcycle_id) });
+  set(DB.FAVS, { [user.id]: (favoritesResult.data || []).map((f) => f.motorcycle_id) });
 }
 
 async function loadFinanceData() {
