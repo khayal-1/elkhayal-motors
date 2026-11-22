@@ -1838,6 +1838,37 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
+  if (form.id === 'salesQuotationForm') {
+    if (!hasRole('admin','manager','owner') && !hasPermission('sales_manage')) { toast('ليس لديك صلاحية إنشاء عرض سعر','error'); return; }
+    const fd=new FormData(form),items=[];
+    for(const row of form.querySelectorAll('[data-quote-line]')){
+      const quantity=Number(row.querySelector('[name="quantity"]').value||0);
+      if(quantity>0)items.push({motorcycle_id:row.dataset.quoteLine,quantity,unit_price:Number(row.querySelector('[name="unit_price"]').value||0)});
+    }
+    if(!items.length){toast('اختر دراجة واحدة على الأقل في عرض السعر','error');return;}
+    const {error}=await supabase.rpc('create_sales_quotation',{p_customer_id:fd.get('customer_id')||null,p_name:safeName(fd.get('customer_name')),p_phone:safeName(fd.get('customer_phone')),p_valid_until:fd.get('valid_until'),p_notes:safeName(fd.get('notes'))||null,p_items:items});
+    if(error){toast(error.message||'تعذر إنشاء عرض السعر','error');return;}await loadSalesToolsData();render();toast('تم إنشاء عرض السعر دون حجز المخزون','success');return;
+  }
+  if (form.id === 'quotationStatusForm') {
+    const fd=new FormData(form);const {error}=await supabase.rpc('update_sales_quotation_status',{p_quote_id:form.dataset.quoteId,p_status:fd.get('status')});
+    if(error){toast(error.message||'تعذر تحديث عرض السعر','error');return;}await loadSalesToolsData();render();toast('تم تحديث حالة عرض السعر','success');return;
+  }
+  if (form.id === 'convertQuotationForm') {
+    const fd=new FormData(form);const {data,error}=await supabase.rpc('convert_sales_quotation',{p_quote_id:form.dataset.quoteId,p_payment_amount:Number(fd.get('payment_amount')||0),p_payment_method:fd.get('payment_method'),p_reference:null});
+    if(error){toast(error.message||'تعذر تحويل عرض السعر إلى فاتورة','error');return;}await Promise.all([loadSalesToolsData(),loadSalesData(),loadMotorcycles(),loadFinanceData()]);render();toast('تم تحويل عرض السعر إلى فاتورة رقم '+(data?.sale_result?.invoice_number||data?.sale_id||''),'success');return;
+  }
+  if (form.id === 'installmentScheduleForm') {
+    const fd=new FormData(form);let schedule;
+    try{schedule=JSON.parse(fd.get('schedule_json'));}catch{toast('صيغة جدول الأقساط JSON غير صحيحة','error');return;}
+    if(!Array.isArray(schedule)){toast('جدول الأقساط يجب أن يكون قائمة','error');return;}
+    const {error}=await supabase.rpc('create_sale_installment_schedule',{p_sale_id:fd.get('sale_id'),p_schedule:schedule});
+    if(error){toast(error.message||'تعذر إنشاء جدول الأقساط','error');return;}await loadSalesToolsData();render();toast('تم إنشاء جدول الأقساط وربطه بالفاتورة','success');return;
+  }
+  if (form.id === 'installmentPaymentForm') {
+    const fd=new FormData(form);const {error}=await supabase.rpc('record_sale_installment_payment',{p_installment_id:form.dataset.installmentId,p_amount:Number(fd.get('amount')),p_method:fd.get('method'),p_reference:null});
+    if(error){toast(error.message||'تعذر تحصيل القسط','error');return;}await Promise.all([loadSalesToolsData(),loadSalesData(),loadFinanceData()]);render();toast('تم تحصيل القسط وتحديث رصيد الفاتورة','success');return;
+  }
+
   if (form.id === 'customerProfileMetaForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('customer_data_manage')) { toast('ليس لديك صلاحية تعديل ملف العميل','error'); return; }
     const fd=new FormData(form);const {error}=await supabase.rpc('set_customer_profile_meta',{p_customer_id:form.dataset.customerId,p_credit_limit:fd.get('credit_limit')?Number(fd.get('credit_limit')):null,p_segment:fd.get('customer_segment'),p_lead_source:safeName(fd.get('lead_source'))||null,p_marketing_consent:fd.get('marketing_consent')==='on'});
