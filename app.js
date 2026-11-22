@@ -1382,10 +1382,10 @@ function pageManageBikes() {
     const available = list.filter((x)=>x.unit_status==='available' && !x.is_demo).length;
     const sold = list.filter((x)=>x.unit_status==='sold').length;
     const reserved = list.filter((x)=>x.unit_status==='reserved').length;
-    const retired = list.filter((x)=>x.unit_status==='retired' || x.is_demo).length;
+    const retired = list.filter((x)=>x.unit_status==='retired').length;
     const rows = list.map((x) => '<article class="unit-admin-card '+(x.is_demo?'demo-unit-row':'')+'">' +
       '<div class="unit-admin-main"><div><b>شاسيه: <span dir="ltr">'+esc(x.vin)+'</span></b><small>موتور: <span dir="ltr">'+esc(x.engine_number||'غير مسجل')+'</span></small></div>' +
-      '<span class="status-pill '+(x.unit_status==='available'?'available':x.unit_status==='sold'?'out':'pending')+'">'+unitStatusLabel(x.is_demo?'retired':x.unit_status)+'</span></div>' +
+      '<span class="status-pill '+(x.unit_status==='available'?'available':x.unit_status==='sold'?'out':'pending')+'">'+unitStatusLabel(x.unit_status)+'</span>'+(x.is_demo?'<small class="demo-data-label">تجريبية</small>':'')+'</div>' +
       '<div class="unit-admin-meta"><span>'+(x.unit_condition==='used'?'مستعملة':'جديدة')+'</span><span>العداد: '+Number(x.odometer_reading||0).toLocaleString('en-US')+' كم</span><span>باركود: '+esc(x.barcode||'—')+'</span></div>' +
       '<div class="unit-admin-meta"><span>الضمان: '+esc(x.warranty_start||'—')+' إلى '+esc(x.warranty_end||'—')+'</span><span>تسجيل: '+esc((x.registered_at||'').slice(0,10)||'—')+'</span></div>' +
       (x.notes?'<p class="hint">'+esc(x.notes)+'</p>':'') +
