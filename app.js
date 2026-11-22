@@ -680,6 +680,7 @@ function pageCustomerInvoices() {
         <div class="table-wrap mt-2"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
         <tbody>${invoice.items.map(item => `<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(item.model_year || '—')}</td><td>${Number(item.quantity)}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`).join('')}</tbody></table></div>
         <div class="invoice-totals"><p><b>إجمالي الفاتورة:</b> ${money(invoice.total)}</p><p><b>المدفوع:</b> ${money(invoice.amount_paid)}</p><p><b>الرصيد المستخدم:</b> ${money(invoice.credit_applied)}</p><p><b>المتبقي:</b> ${money(invoice.balance_due)}</p></div>
+        <div class="contact-actions mt-2 no-print"><button class="btn btn-primary btn-sm" type="button" data-print-customer-invoice><i class="fa-solid fa-print"></i> طباعة هذه الفاتورة</button></div>
       </details>`;
     }).join('') : `<div class="panel empty"><i class="fa-solid fa-file-invoice"></i><p>لا توجد فواتير مرتبطة بحسابك حتى الآن.</p><small>إذا اشتريت من المعرض ولم تظهر فاتورتك، اطلب من الموظف ربط عملية البيع بحسابك عند إصدار الفاتورة.</small></div>`}
   `;
@@ -1126,14 +1127,14 @@ function pageDashboard() {
   return `<h2 class="page-title"><i class="fa-solid fa-chart-line"></i> لوحة الإحصائيات</h2>
     <p class="page-sub">ملخص مباشر من بيانات المخزون والمبيعات والموردين والحسابات. أرقام المبيعات والمصروفات تخص السجلات المحملة في هذه الصفحة.</p>
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-motorcycle"></i></div><div class="stat-label">الدراجات المسجلة</div><div class="stat-value">${bikes.length}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="stat-label">وحدات المخزون</div><div class="stat-value">${totalStock}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-clipboard-list"></i></div><div class="stat-label">طلبات العملاء المفتوحة</div><div class="stat-value">${pending}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div><div class="stat-label">مبيعات آخر ${sales.length} فاتورة</div><div class="stat-value">${money(salesTotal)}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div><div class="stat-label">مستحقات العملاء ضمن الفواتير المعروضة</div><div class="stat-value">${money(receivables)}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-truck"></i></div><div class="stat-label">مستحقات الموردين ضمن الفواتير المحملة</div><div class="stat-value">${money(supplierDue)}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-money-bill-transfer"></i></div><div class="stat-label">مصروفات السجلات المحملة</div><div class="stat-value">${money(expenseTotal)}</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-vault"></i></div><div class="stat-label">أرصدة الخزائن والبنوك</div><div class="stat-value">${money(cashTotal)}</div></div>
+      <a class="stat-card stat-card-link" href="#manage-bikes" data-nav="manage-bikes" aria-label="فتح إدارة الدراجات"><div class="stat-icon"><i class="fa-solid fa-motorcycle"></i></div><div class="stat-label">الدراجات المسجلة</div><div class="stat-value">${bikes.length}</div><span class="stat-hint">فتح إدارة الدراجات <i class="fa-solid fa-arrow-left"></i></span></a>
+      <a class="stat-card stat-card-link" href="#inventory-tools" data-nav="inventory-tools" aria-label="فتح إدارة المخزون"><div class="stat-icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="stat-label">وحدات المخزون</div><div class="stat-value">${totalStock}</div><span class="stat-hint">فتح المخزون والجرد <i class="fa-solid fa-arrow-left"></i></span></a>
+      <a class="stat-card stat-card-link" href="#staff-orders" data-nav="staff-orders" aria-label="فتح طلبات العملاء"><div class="stat-icon"><i class="fa-solid fa-clipboard-list"></i></div><div class="stat-label">طلبات العملاء المفتوحة</div><div class="stat-value">${pending}</div><span class="stat-hint">فتح الطلبات <i class="fa-solid fa-arrow-left"></i></span></a>
+      <a class="stat-card stat-card-link" href="#pos" data-nav="pos" aria-label="فتح فواتير المبيعات"><div class="stat-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div><div class="stat-label">مبيعات آخر ${sales.length} فاتورة</div><div class="stat-value">${money(salesTotal)}</div><span class="stat-hint">فتح نقطة البيع والفواتير <i class="fa-solid fa-arrow-left"></i></span></a>
+      <a class="stat-card stat-card-link" href="#sales-tools" data-nav="sales-tools" aria-label="فتح مستحقات العملاء"><div class="stat-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div><div class="stat-label">مستحقات العملاء ضمن الفواتير المعروضة</div><div class="stat-value">${money(receivables)}</div><span class="stat-hint">فتح أدوات المبيعات والتحصيل <i class="fa-solid fa-arrow-left"></i></span></a>
+      <a class="stat-card stat-card-link" href="#suppliers" data-nav="suppliers" aria-label="فتح مستحقات الموردين"><div class="stat-icon"><i class="fa-solid fa-truck"></i></div><div class="stat-label">مستحقات الموردين ضمن الفواتير المحملة</div><div class="stat-value">${money(supplierDue)}</div><span class="stat-hint">فتح الموردين والمشتريات <i class="fa-solid fa-arrow-left"></i></span></a>
+      <a class="stat-card stat-card-link" href="#expenses" data-nav="expenses" aria-label="فتح المصروفات"><div class="stat-icon"><i class="fa-solid fa-money-bill-transfer"></i></div><div class="stat-label">مصروفات السجلات المحملة</div><div class="stat-value">${money(expenseTotal)}</div><span class="stat-hint">فتح المصروفات والحسابات <i class="fa-solid fa-arrow-left"></i></span></a>
+      <a class="stat-card stat-card-link" href="#finance-tools" data-nav="finance-tools" aria-label="فتح الأرصدة المالية"><div class="stat-icon"><i class="fa-solid fa-vault"></i></div><div class="stat-label">أرصدة الخزائن والبنوك</div><div class="stat-value">${money(cashTotal)}</div><span class="stat-hint">فتح الأدوات المالية <i class="fa-solid fa-arrow-left"></i></span></a>
     </div>
     <div class="panel"><div class="panel-title"><i class="fa-solid fa-receipt"></i> أحدث الفواتير المحملة</div>
       ${recentSales.length ? `<div class="table-wrap"><table><thead><tr><th>الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>المدفوع</th><th>التاريخ</th></tr></thead><tbody>
@@ -1370,6 +1371,9 @@ function render() {
 
   const fn = ROUTES[state.route] || pageHome;
   main.innerHTML = fn();
+  if (state.route !== 'home' && state.route !== 'login' && state.route !== 'signup') {
+    main.insertAdjacentHTML('afterbegin', '<div class="page-tools no-print"><button class="btn btn-outline btn-sm" id="printPageBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الصفحة / التقرير</button></div>');
+  }
   applyLanguage(document);
 
 
@@ -1522,8 +1526,46 @@ document.addEventListener('click', async (e) => {
     w.document.close();return;
   }
 
-  /* Print invoice */
-  if (e.target.closest('#printInvoiceBtn')) { window.print(); return; }
+  /* Print invoice and printable customer invoice details */
+  if (e.target.closest('#printInvoiceBtn') || e.target.closest('[data-print-customer-invoice]')) {
+    document.body.classList.add('print-invoice');
+    window.print();
+    document.body.classList.remove('print-invoice');
+    return;
+  }
+  if (e.target.closest('#printPageBtn')) {
+    document.body.classList.add('print-page');
+    window.print();
+    document.body.classList.remove('print-page');
+    return;
+  }
+  const sendInvoiceButton = e.target.closest('#sendInvoiceWhatsAppBtn');
+  if (sendInvoiceButton) {
+    const phone = String(sendInvoiceButton.dataset.phone || '').replace(/[^0-9]/g, '');
+    if (!phone) { toast('أضف رقم هاتف العميل في بيانات البيع لإرسال الفاتورة عبر واتساب', 'error'); return; }
+    const message = [
+      'الخيال موتورز — فاتورة بيع',
+      'رقم الفاتورة: ' + sendInvoiceButton.dataset.invoice,
+      'العميل: ' + sendInvoiceButton.dataset.customer,
+      'الإجمالي: ' + sendInvoiceButton.dataset.total + ' ج.م',
+      'المدفوع: ' + sendInvoiceButton.dataset.paid + ' ج.م',
+      'المتبقي: ' + sendInvoiceButton.dataset.due + ' ج.م',
+      'شكراً لثقتكم في El Khayal Motors.'
+    ].join('\\n');
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(message), '_blank', 'noopener');
+    return;
+  }
+  if (e.target.closest('#shareInvoiceBtn')) {
+    const invoiceText = document.querySelector('.modal .invoice')?.innerText || '';
+    if (navigator.share) {
+      try { await navigator.share({ title: 'فاتورة الخيال موتورز', text: invoiceText }); }
+      catch (error) { if (error?.name !== 'AbortError') toast('تعذرت مشاركة الفاتورة', 'error'); }
+    } else if (navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(invoiceText); toast('تم نسخ تفاصيل الفاتورة؛ يمكنك إرسالها للعميل', 'success'); }
+      catch { toast('تعذر نسخ الفاتورة من هذا المتصفح', 'error'); }
+    } else toast('المشاركة غير مدعومة في هذا المتصفح', 'error');
+    return;
+  }
 
   if (e.target.closest('#addPosItemBtn')) {
     const rows = $('#posCartRows');
@@ -2455,7 +2497,7 @@ document.addEventListener('submit', async (e) => {
         <p><b>المتبقي:</b> ${money(data.balance_due)}</p><p><b>حالة الدفع:</b> ${data.payment_status === 'paid' ? 'مدفوعة' : data.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</p>
         <p class="text-center">شكرًا لثقتكم في El Khayal Motors</p>
       </div>
-      <div class="modal-header"><button class="btn btn-primary" id="printInvoiceBtn"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
+      <div class="contact-actions no-print invoice-actions"><button class="btn btn-primary" id="printInvoiceBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" id="sendInvoiceWhatsAppBtn" type="button" data-phone="${esc(fd.get('customer_phone') || '')}" data-invoice="${esc(data.invoice_number)}" data-customer="${esc(customerName)}" data-total="${esc(data.total)}" data-paid="${esc(data.amount_paid)}" data-due="${esc(data.balance_due)}"><i class="fa-brands fa-whatsapp"></i> إرسال للعميل عبر واتساب</button><button class="btn btn-outline" id="shareInvoiceBtn" type="button"><i class="fa-solid fa-share-nodes"></i> مشاركة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
     openModal(invoice);
     render();
     toast('تم تسجيل البيع وتحديث المخزون وإصدار الفاتورة', 'success');
