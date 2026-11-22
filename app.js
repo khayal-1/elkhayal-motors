@@ -387,9 +387,12 @@ function renderAccountArea() {
    ========================================================= */
 
 function filteredBikes() {
-  let bikes = (state.storeUnits || []).map((unit, index) => {
+  const unitCounters = new Map();
+  let bikes = (state.storeUnits || []).map((unit) => {
     const bike = (state.bikes || []).find((item) => item.id === unit.motorcycle_id);
-    return bike ? { ...bike, unit_id: unit.unit_id, unit_condition: unit.unit_condition, unit_number: index + 1, stock: 1 } : null;
+    const unitNumber = (unitCounters.get(unit.motorcycle_id) || 0) + 1;
+    unitCounters.set(unit.motorcycle_id, unitNumber);
+    return bike ? { ...bike, unit_id: unit.unit_id, unit_condition: unit.unit_condition, unit_number: unitNumber, stock: 1 } : null;
   }).filter(Boolean);
   const q = state.search.trim().toLowerCase();
   if (q) {
@@ -1008,7 +1011,6 @@ function pageInventoryTools() {
  const employeeOpts=(state.employees||[]).filter(x=>x.employment_status==='active').map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+'</option>').join('');
  const saleOpts=(state.sales||[]).map(x=>'<option value="'+esc(x.id)+'">فاتورة '+esc(x.invoice_number)+' — '+esc(x.customer_name)+'</option>').join('');
  const costRows=bikes.map(b=>{const x=costMap.get(b.id)||{};return '<tr><td>'+esc(b.name)+'</td><td>'+b.stock+'</td><td>'+money(x.unit_cost)+'</td><td>'+Number(x.reorder_level||0)+'</td><td>'+(canFinance||hasPermission('catalog_manage')?'<form id="inventoryCostForm" class="inline-form" data-bike-id="'+esc(b.id)+'"><input type="number" name="unit_cost" min="0" step="0.01" value="'+(x.unit_cost??'')+'" placeholder="تكلفة الوحدة" required><input type="number" name="reorder_level" min="0" step="1" value="'+Number(x.reorder_level||0)+'" required><button class="btn btn-outline btn-sm" type="submit">حفظ</button></form>':'—')+'</td></tr>';}).join('');
- const unitRows=(state.motorcycleUnits||[]).map(x=>'<tr class="'+(x.is_demo?'demo-unit-row':'')+'"><td>'+esc(x.vin)+'</td><td>'+esc(x.engine_number||'—')+'</td><td>'+Number(x.odometer_reading||0).toLocaleString('en-US')+' كم</td><td>'+ (x.unit_condition==='used'?'مستعمل':'جديد')+'</td><td>'+esc(x.barcode||'—')+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+ (x.is_demo?'بيانات تجريبية — غير قابلة للبيع':esc(x.unit_status))+'</td><td>'+esc(x.warranty_start||'—')+' – '+esc(x.warranty_end||'—')+'</td></tr>').join('');
  const batchRows=(state.stocktakeBatches||[]).map(x=>'<tr><td>#'+x.stocktake_number+'</td><td>'+esc(x.stocktake_date)+'</td><td>'+esc(x.notes||'—')+'</td><td>'+money(x.total_increase)+'</td><td>'+money(x.total_decrease)+'</td><td>'+esc(x.journal_entry_id||'بدون فرق مالي')+'</td></tr>').join('');
  const warrantyRows=(state.warranties||[]).map(x=>'<tr><td>#'+x.warranty_number+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc(x.customer_phone)+'</td><td>'+esc(x.start_date)+' – '+esc(x.end_date)+'</td><td>'+esc(x.status)+'</td></tr>').join('');
  const serviceRows=(state.serviceOrders||[]).map(x=>'<tr><td>#'+x.service_number+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc(x.customer_phone)+'</td><td>'+esc(x.issue_description)+'</td><td>'+money(x.estimated_cost)+'</td><td>'+esc(x.status)+'</td><td>'+(canCatalog&&!['completed','cancelled'].includes(x.status)?'<form id="serviceStatusForm" class="inline-form" data-order-id="'+esc(x.id)+'"><select name="status"><option value="in_progress">قيد العمل</option><option value="waiting_parts">بانتظار قطع غيار</option><option value="completed">مكتمل</option><option value="cancelled">ملغي</option></select><input name="actual_cost" type="number" min="0" step="0.01" placeholder="التكلفة الفعلية"><input name="diagnosis" placeholder="التشخيص"><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':'—')+'</td></tr>').join('');
