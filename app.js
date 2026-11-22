@@ -1692,7 +1692,8 @@ function handleBuy(bikeId) {
   if (u.role !== 'customer') { toast('الشراء وطلبات العملاء متاحة لحسابات العملاء فقط', 'error'); return; }
   const bike = state.bikes.find((b) => b.id === bikeId);
   if (!bike) return toast('الدراجة غير موجودة', 'error');
-  if (bike.stock <= 0 || bike.status !== 'available') return toast('الدراجة غير متوفرة حالياً', 'error');
+  const hasAvailableUnit = (state.storeUnits || []).some((unit) => unit.motorcycle_id === bikeId);
+  if (!hasAvailableUnit || bike.status !== 'available') return toast('هذه الوحدة لم تعد متاحة حالياً؛ حدّث الصفحة لاختيار وحدة أخرى', 'error');
   openModal(`
     <div class="modal-header"><h3><i class="fa-solid fa-cart-shopping"></i> طلب شراء ${esc(bike.name)}</h3>
       <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
