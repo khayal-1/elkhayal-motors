@@ -32,38 +32,42 @@ async function listBucketFiles(admin: ReturnType<typeof createClient>, bucket: s
 
 async function clearResetStorage(admin: ReturnType<typeof createClient>) {
   let deleted = 0;
+  const errors: string[] = [];
   for (const bucket of RESET_STORAGE_BUCKETS) {
-    const paths = await listBucketFiles(admin, bucket);
+    let paths: string[];
+    try { paths = await listBucketFiles(admin, bucket); }
+    catch (error) { errors.push(error instanceof Error ? error.message : `Could not list ${bucket}`); continue; }
     for (let i = 0; i < paths.length; i += 100) {
-      const { error } = await admin.storage.from(bucket).remove(paths.slice(i, i + 100));
-      if (error) throw new Error(`Could not remove files from ${bucket}: ${error.message}`);
-      deleted += Math.min(100, paths.length - i);
+      const batch = paths.slice(i, i + 100);
+      const { error } = await admin.storage.from(bucket).remove(batch);
+      if (error) errors.push(`Could not remove ${batch.length} files from ${bucket}: ${error.message}`);
+      else deleted += batch.length;
     }
   }
-  return deleted;
+  return { deleted, errors };
 }
 
 async function deleteNonOwnerAuthUsers(admin: ReturnType<typeof createClient>, ownerId: string) {
-  let deleted = 0;
+  const ids: string[] = [];
+  const errors: string[] = [];
   for (let page = 1; ; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error) throw new Error(`Could not list Auth users: ${error.message}`);
-    const users = data.users || [];
-    for (const user of users) {
-      if (user.id === ownerId) continue;
-      const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
-      if (deleteError) throw new Error(`Could not delete a non-owner Auth account: ${deleteError.message}`);
-      deleted++;
+    if (error) {
+      errors.push(`Could not list Auth users: ${error.message}`);
+      break;
     }
+    const users = data.users || [];
+    ids.push(...users.filter((user) => user.id !== ownerId).map((user) => user.id));
     if (users.length < 1000) break;
   }
-  return deleted;
+  let deleted = 0;
+  for (const id of ids) {
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (error) errors.push(`Could not delete non-owner Auth account ${id}: ${error.message}`);
+    else deleted++;
+  }
+  return { deleted, errors };
 }
-
-const sha256 = async (value: string) => {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
-};
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -127,19 +131,15 @@ Deno.serve(async (req: Request) => {
 
       // Public tables (including photo_assets) are cleared transactionally by the RPC.
       // Storage and Auth are separate Supabase services, so report their outcomes explicitly.
-      const cleanupErrors: string[] = [];
-      let storageDeleted = 0;
-      let authUsersDeleted = 0;
-      try { storageDeleted = await clearResetStorage(admin); }
-      catch (cleanupError) { cleanupErrors.push(cleanupError instanceof Error ? cleanupError.message : "Storage cleanup failed"); }
-      try { authUsersDeleted = await deleteNonOwnerAuthUsers(admin, ownerId); }
-      catch (cleanupError) { cleanupErrors.push(cleanupError instanceof Error ? cleanupError.message : "Auth cleanup failed"); }
+      const storageCleanup = await clearResetStorage(admin);
+      const authCleanup = await deleteNonOwnerAuthUsers(admin, ownerId);
+      const cleanupErrors = [...storageCleanup.errors, ...authCleanup.errors];
 
       return json({
         ok: cleanupErrors.length === 0,
         result: data,
-        storageDeleted,
-        authUsersDeleted,
+        storageDeleted: storageCleanup.deleted,
+        authUsersDeleted: authCleanup.deleted,
         ownerPreserved: true,
         cleanupErrors,
         error: cleanupErrors.length ? "Database reset completed, but some Auth or Storage cleanup steps failed. Retry the reset to finish cleanup." : undefined
