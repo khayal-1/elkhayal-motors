@@ -3355,17 +3355,26 @@ async function loadCustomerData() {
   if (salesResult.error) console.error('Customer invoice history load failed', salesResult.error);
   const sales = salesResult.data || [];
   const saleIds = sales.map((sale) => sale.id);
-  const itemsResult = saleIds.length
-    ? await supabase.from('sale_items').select('sale_id,motorcycle_name,model_year,quantity,unit_price,line_total').in('sale_id', saleIds).order('created_at',{ascending:true})
-    : {data:[],error:null};
+  const [itemsResult,returnsResult] = await Promise.all([
+    saleIds.length
+      ? supabase.from('sale_items').select('sale_id,motorcycle_name,model_year,quantity,unit_price,line_total').in('sale_id', saleIds).order('created_at',{ascending:true})
+      : Promise.resolve({data:[],error:null}),
+    saleIds.length
+      ? supabase.from('sale_returns').select('sale_id,total_amount').in('sale_id',saleIds)
+      : Promise.resolve({data:[],error:null})
+  ]);
   if (itemsResult.error) console.error('Customer invoice items load failed', itemsResult.error);
+  if (returnsResult.error) console.error('Customer invoice returns load failed', returnsResult.error);
   const invoiceItems = itemsResult.data || [];
+  const returnedBySale = new Map();
+  for(const returned of returnsResult.data||[]) returnedBySale.set(returned.sale_id,(returnedBySale.get(returned.sale_id)||0)+Number(returned.total_amount||0));
   state.customerInvoices = sales.map((sale) => ({
     ...sale,
     total: Number(sale.total || 0),
     amount_paid: Number(sale.amount_paid || 0),
     credit_applied: Number(sale.credit_applied || 0),
-    balance_due: Math.max(0, Number(sale.total || 0) - Number(sale.amount_paid || 0) - Number(sale.credit_applied || 0)),
+    returned_amount: returnedBySale.get(sale.id)||0,
+    balance_due: Math.max(0, Number(sale.total || 0) - Number(sale.amount_paid || 0) - Number(sale.credit_applied || 0) - (returnedBySale.get(sale.id)||0)),
     items: invoiceItems.filter((item) => item.sale_id === sale.id)
   }));
   set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
