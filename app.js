@@ -1955,7 +1955,7 @@ document.addEventListener('click', async (e) => {
 
   const returnSaleButton = e.target.closest('[data-return-sale]');
   if (returnSaleButton) {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
     const sale = state.sales.find(s => s.id === returnSaleButton.dataset.returnSale);
     if (!sale) return;
     const { data: saleItems, error } = await supabase.from('sale_items')
@@ -2001,7 +2001,7 @@ document.addEventListener('click', async (e) => {
 
   const applyCredit = e.target.closest('[data-apply-credit]');
   if (applyCredit) {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
     const sale = state.sales.find(x=>x.id===applyCredit.dataset.applyCredit);
     const credit = sale && state.customerCredits.find(x=>x.customerId===sale.customer_id);
     if (!sale || !credit || credit.balance<=0) return;
@@ -2664,7 +2664,7 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'saleReturnForm') {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
     const fd = new FormData(form), items = [];
     for (const row of form.querySelectorAll('[data-sale-item-id]')) {
       const quantity = Number(row.querySelector('[name=quantity]').value || 0);
@@ -2816,7 +2816,7 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'applyCustomerCreditForm') {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
     const fd = new FormData(form), amount = Number(fd.get('amount')), max = Number(form.dataset.max);
     if (!Number.isFinite(amount) || amount<=0 || amount>max) { toast('قيمة استخدام الرصيد غير صحيحة','error'); return; }
     const submit = form.querySelector('button[type="submit"]'); if (submit) submit.disabled = true;
@@ -2831,7 +2831,7 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'collectPaymentForm') {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تحصيل المدفوعات', 'error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية تحصيل المدفوعات', 'error'); return; }
     const fd = new FormData(form);
     const amount = Number(fd.get('amount'));
     const submit = form.querySelector('button[type="submit"]');
