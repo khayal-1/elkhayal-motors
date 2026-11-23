@@ -4008,6 +4008,11 @@ const EN = {
   ,'ترفع البيانات إلى Supabase وتصبح مشتركة مع الموقع ولوحة الإدارة. الاستعادة ذرّية؛ إذا فشل التحقق تُلغى بالكامل.':'Uploads data to Supabase so it is shared with the storefront and admin panel. Restore is atomic and rolls back completely if validation fails.'
   ,'يحذف المبيعات والمشتريات والمخزون والعملاء والموظفين والقيود والحركات التشغيلية. يحتفظ بحساب المالك ودوره وإعدادات الحسابات والخزائن والضرائب وسجل التدقيق.':'Deletes sales, purchases, inventory, customers, staff, journal entries, and operational movements. Preserves the owner account, role and permissions, chart of accounts, cash accounts, tax settings, and audit log.'
 
+  ,'يحذف بيانات التشغيل والحسابات المسجلة غير حساب المالك، وملفات الصور التي نُقلت من Telegram إلى Supabase Storage (catalog-images)، مع الاحتفاظ بحساب المالك وصلاحياته وإعدادات النظام الأساسية وسجل التدقيق.':'Deletes operational data, all registered accounts except the owner, and Telegram-synced image files in Supabase Storage (catalog-images). Preserves the owner account and permissions, core system settings, and audit log.'
+  ,'تنبيه:':'Warning:'
+  ,'ملف النسخة الاحتياطية JSON لا يتضمن الصور الثنائية؛ حذفها هنا نهائي من Supabase Storage، ولا يحذف الرسائل أو الصور الأصلية من محادثة Telegram.':'The JSON backup does not include binary images. Deleting them here permanently removes the Supabase Storage copies; it does not delete the original Telegram messages or images.'
+
+
 };
 function applyLanguage(root) {
   const en = state.language === 'en';
