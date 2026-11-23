@@ -15,6 +15,8 @@ const productionOrigin = 'https://khayal-1.github.io';
 const allowedOrigins = new Set([
   productionOrigin,
   'https://elkhayal-motors-website.vercel.app',
+  'https://khayal01.vercel.app',
+  'https://el-khayal.vercel.app',
   'http://localhost:5173'
 ]);
 const responseHeaders = (origin: string | null) => ({
