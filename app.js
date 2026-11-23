@@ -3637,6 +3637,18 @@ async function loadBusinessData() {
 }
 
 
+async function loadPurchasingRows(table, columns, key, values) {
+  if(!values?.length)return {data:[],error:null};
+  const rows=[];
+  for(let offset=0;;offset+=1000){
+    const result=await supabase.from(table).select(columns).in(key,values).range(offset,offset+999);
+    if(result.error)return {data:null,error:result.error};
+    rows.push(...(result.data||[]));
+    if((result.data||[]).length<1000)break;
+  }
+  return {data:rows,error:null};
+}
+
 function renderSupplierBillLines(orderId) {
   const container=$('#supplierBillLines');
   if(!container)return;
@@ -3699,9 +3711,7 @@ async function loadPurchasingData() {
   }
   state.suppliers=supplierResult.data||[];
   const billIds=(billResult.data||[]).map(b=>b.id);
-  const billItemsResult=billIds.length
-    ?await supabase.from('supplier_bill_items').select('id,supplier_bill_id,line_number,line_type,purchase_receipt_item_id,description,quantity,unit_cost,line_total').in('supplier_bill_id',billIds)
-    :{data:[],error:null};
+  const billItemsResult=await loadPurchasingRows('supplier_bill_items','id,supplier_bill_id,line_number,line_type,purchase_receipt_item_id,description,quantity,unit_cost,line_total','supplier_bill_id',billIds);
   if(billItemsResult.error){toast('تعذر تحميل تفاصيل فواتير الموردين','error');console.error(billItemsResult.error);return;}
   state.supplierBillItems=billItemsResult.data||[];
   state.supplierPayments=paymentResult.data||[];
@@ -3737,9 +3747,9 @@ async function loadPurchasingData() {
   const billItemIds=state.supplierBillItems.map(line=>line.id);
   const returnItemIds=state.supplierReturnItems.map(line=>line.id);
   const [receiptUnitsResult,billedUnitsResult,returnedUnitsResult]=await Promise.all([
-    receiptIds.length?supabase.from('purchase_receipt_units').select('receipt_item_id,motorcycle_unit_id').in('receipt_id',receiptIds):Promise.resolve({data:[],error:null}),
-    billItemIds.length?supabase.from('supplier_bill_item_units').select('motorcycle_unit_id').in('supplier_bill_item_id',billItemIds):Promise.resolve({data:[],error:null}),
-    returnItemIds.length?supabase.from('supplier_return_units').select('motorcycle_unit_id').in('supplier_return_item_id',returnItemIds):Promise.resolve({data:[],error:null})
+    loadPurchasingRows('purchase_receipt_units','receipt_item_id,motorcycle_unit_id','receipt_id',receiptIds),
+    loadPurchasingRows('supplier_bill_item_units','motorcycle_unit_id','supplier_bill_item_id',billItemIds),
+    loadPurchasingRows('supplier_return_units','motorcycle_unit_id','supplier_return_item_id',returnItemIds)
   ]);
   for(const [result,label] of [[receiptUnitsResult,'وحدات الاستلام'],[billedUnitsResult,'الوحدات المفوترة'],[returnedUnitsResult,'الوحدات المرتجعة']]){
     if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
