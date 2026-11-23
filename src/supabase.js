@@ -26,15 +26,20 @@ export async function getCurrentProfile(userId) {
   if (rolesError) throw rolesError;
   if (permissionError) throw permissionError;
   const roleNames = (roles || []).map((entry) => entry.role);
-  const role = roleNames.includes('admin') || roleNames.includes('owner') || roleNames.includes('manager')
+  const systemRole = roleNames.includes('owner') ? 'owner'
+    : roleNames.includes('admin') ? 'admin'
+    : roleNames.includes('manager') ? 'manager'
+    : roleNames.includes('employee') ? 'employee' : 'customer';
+  const role = ['owner', 'admin', 'manager'].includes(systemRole)
     ? 'admin'
-    : roleNames.includes('employee') ? 'staff' : 'customer';
+    : systemRole === 'employee' ? 'staff' : 'customer';
   return profile ? {
     id: profile.id,
     name: profile.full_name || '',
     phone: profile.phone || '',
     preferredLanguage: profile.preferred_language || 'ar',
     role,
+    systemRole,
     permissions: (permissions || []).map((entry) => entry.permission_key)
   } : null;
 }
