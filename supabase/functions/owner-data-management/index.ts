@@ -9,6 +9,57 @@ const CORS = {
   "Content-Type": "application/json; charset=utf-8"
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: CORS });
+
+const RESET_STORAGE_BUCKETS = ["catalog-images"];
+
+// Recursively collect files (not folder placeholders) from a Storage bucket.
+async function listBucketFiles(admin: ReturnType<typeof createClient>, bucket: string, prefix = ""): Promise<string[]> {
+  const paths: string[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const { data, error } = await admin.storage.from(bucket).list(prefix, {
+      limit: 100, offset, sortBy: { column: "name", order: "asc" }
+    });
+    if (error) throw new Error(`Storage listing failed for ${bucket}/${prefix}: ${error.message}`);
+    for (const entry of data || []) {
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.id === null) paths.push(...await listBucketFiles(admin, bucket, path));
+      else paths.push(path);
+    }
+    if (!data || data.length < 100) break;
+  }
+  return paths;
+}
+
+async function clearResetStorage(admin: ReturnType<typeof createClient>) {
+  let deleted = 0;
+  for (const bucket of RESET_STORAGE_BUCKETS) {
+    const paths = await listBucketFiles(admin, bucket);
+    for (let i = 0; i < paths.length; i += 100) {
+      const { error } = await admin.storage.from(bucket).remove(paths.slice(i, i + 100));
+      if (error) throw new Error(`Could not remove files from ${bucket}: ${error.message}`);
+      deleted += Math.min(100, paths.length - i);
+    }
+  }
+  return deleted;
+}
+
+async function deleteNonOwnerAuthUsers(admin: ReturnType<typeof createClient>, ownerId: string) {
+  let deleted = 0;
+  for (let page = 1; ; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw new Error(`Could not list Auth users: ${error.message}`);
+    const users = data.users || [];
+    for (const user of users) {
+      if (user.id === ownerId) continue;
+      const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+      if (deleteError) throw new Error(`Could not delete a non-owner Auth account: ${deleteError.message}`);
+      deleted++;
+    }
+    if (users.length < 1000) break;
+  }
+  return deleted;
+}
+
 const sha256 = async (value: string) => {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -73,7 +124,26 @@ Deno.serve(async (req: Request) => {
       if (body.confirmation !== "DELETE ALL DATA") return json({ error: "Typed confirmation does not match" }, 400);
       const { data, error } = await admin.rpc("owner_reset_operational_data", { p_owner_id: ownerId });
       if (error) throw error;
-      return json({ ok: true, result: data });
+
+      // Public tables (including photo_assets) are cleared transactionally by the RPC.
+      // Storage and Auth are separate Supabase services, so report their outcomes explicitly.
+      const cleanupErrors: string[] = [];
+      let storageDeleted = 0;
+      let authUsersDeleted = 0;
+      try { storageDeleted = await clearResetStorage(admin); }
+      catch (cleanupError) { cleanupErrors.push(cleanupError instanceof Error ? cleanupError.message : "Storage cleanup failed"); }
+      try { authUsersDeleted = await deleteNonOwnerAuthUsers(admin, ownerId); }
+      catch (cleanupError) { cleanupErrors.push(cleanupError instanceof Error ? cleanupError.message : "Auth cleanup failed"); }
+
+      return json({
+        ok: cleanupErrors.length === 0,
+        result: data,
+        storageDeleted,
+        authUsersDeleted,
+        ownerPreserved: true,
+        cleanupErrors,
+        error: cleanupErrors.length ? "Database reset completed, but some Auth or Storage cleanup steps failed. Retry the reset to finish cleanup." : undefined
+      });
     }
 
     if (body.action === "restore") {
