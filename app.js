@@ -1642,12 +1642,12 @@ function pageOwnerData() {
     <section class="panel">
       <h2 class="page-title"><i class="fa-solid fa-shield-halved"></i> أدوات المالك والنسخ الاحتياطي</h2>
       <p class="page-sub">النسخ والاستعادة وإعادة ضبط بيانات التشغيل. جميع العمليات تتطلب كلمة مرور حساب المالك.</p>
-      <div class="alert alert-warning" role="alert"><strong>تنبيه مهم:</strong> النسخة تشمل بيانات جداول قاعدة البيانات الـ86، ولا تشمل الملفات الثنائية في Supabase Storage. الاستعادة تستبدل بيانات التشغيل الحالية مع الاحتفاظ بحساب المالك والإعدادات المحاسبية الأساسية وسجل التدقيق.</div>
+      <div class="alert alert-warning" role="alert"><strong>تنبيه مهم:</strong> النسخة تشمل بيانات جداول قاعدة البيانات الـ86، ولا تشمل الملفات الثنائية في Supabase Storage. الاستعادة تستبدل بيانات التشغيل الحالية مع الاحتفاظ بحساب المالك وصلاحياته والإعدادات المحاسبية الأساسية وسجل التدقيق.</div>
       <div class="form-grid"><div class="field"><label for="ownerDataPassword">كلمة مرور حساب المالك (تُطلب لكل عملية)</label><input id="ownerDataPassword" type="password" autocomplete="current-password" required placeholder="أدخل كلمة المرور"></div></div>
       <div class="grid grid-2">
         <article class="card"><h3><i class="fa-solid fa-cloud-arrow-down"></i> نسخة احتياطية</h3><p>تصدير بيانات قاعدة البيانات في ملف JSON مع بصمة تحقق SHA-256.</p><button class="btn btn-primary" type="button" data-owner-backup><i class="fa-solid fa-download"></i> إنشاء وتنزيل نسخة</button></article>
         <article class="card"><h3><i class="fa-solid fa-cloud-arrow-up"></i> استعادة / استيراد</h3><p>ترفع البيانات إلى Supabase وتصبح مشتركة مع الموقع ولوحة الإدارة. الاستعادة ذرّية؛ إذا فشل التحقق تُلغى بالكامل.</p><div class="field"><label for="ownerBackupFile">ملف النسخة الاحتياطية JSON</label><input id="ownerBackupFile" type="file" accept=".json,application/json"></div><div class="field"><label for="ownerRestoreConfirmation">اكتب RESTORE BACKUP للتأكيد</label><input id="ownerRestoreConfirmation" autocomplete="off"></div><button class="btn btn-outline" type="button" data-owner-restore><i class="fa-solid fa-rotate"></i> استيراد النسخة</button></article>
-        <article class="card"><h3><i class="fa-solid fa-triangle-exclamation"></i> حذف بيانات التشغيل</h3><p>يحذف المبيعات والمشتريات والمخزون والعملاء والموظفين والقيود والحركات التشغيلية. يحتفظ بحساب المالك ودوره وإعدادات الحسابات والخزائن والضرائب وسجل التدقيق.</p><div class="field"><label for="ownerResetConfirmation">اكتب DELETE ALL DATA للتأكيد</label><input id="ownerResetConfirmation" autocomplete="off"></div><button class="btn btn-danger" type="button" data-owner-reset><i class="fa-solid fa-trash"></i> حذف كل بيانات التشغيل</button></article>
+        <article class="card"><h3><i class="fa-solid fa-triangle-exclamation"></i> حذف بيانات التشغيل</h3><p>يحذف المبيعات والمشتريات والمخزون والعملاء والموظفين والقيود والحركات التشغيلية. يحتفظ بحساب المالك ودوره وصلاحياته وإعدادات الحسابات والخزائن والضرائب وسجل التدقيق.</p><div class="field"><label for="ownerResetConfirmation">اكتب DELETE ALL DATA للتأكيد</label><input id="ownerResetConfirmation" autocomplete="off"></div><button class="btn btn-danger" type="button" data-owner-reset><i class="fa-solid fa-trash"></i> حذف كل بيانات التشغيل</button></article>
       </div>
     </section>`;
 }
@@ -3993,6 +3993,20 @@ const EN = {
   ,'حذف بيانات التشغيل':'Delete operational data','اكتب DELETE ALL DATA للتأكيد':'Type DELETE ALL DATA to confirm'
   ,'حذف كل بيانات التشغيل':'Delete all operational data','صلاحيات المالك':'Owner tools'
   ,'النسخ الاحتياطي وإعادة الضبط':'Backup & reset','تنبيه مهم:':'Important:'
+
+  ,'الإدارة':'Management','البيع':'Sales','لوحة الإحصائيات':'Dashboard'
+  ,'نقطة البيع POS':'Point of Sale (POS)','ماسح الشاسيه والموتور':'VIN & engine scanner'
+  ,'الموردون والتوريد':'Suppliers & purchasing','المخزن والأسعار':'Inventory & pricing'
+  ,'إدارة الدراجات':'Motorcycle management','الموظفين والأداء':'Staff & performance'
+  ,'المصروفات والحسابات':'Expenses & accounts','الأدوات المالية المتقدمة':'Advanced finance tools'
+  ,'الموارد البشرية والرواتب':'HR & payroll','الجرد والضمان والصيانة':'Stocktake, warranty & service'
+  ,'إدارة العملاء والعلاقات':'Customer relations','عروض الأسعار والتقسيط':'Quotations & installments'
+  ,'طلبات العملاء':'Customer requests','عرض المتجر':'View storefront','المتجر':'Store'
+  ,'النسخة تشمل بيانات جداول قاعدة البيانات الـ86، ولا تشمل الملفات الثنائية في Supabase Storage. الاستعادة تستبدل بيانات التشغيل الحالية مع الاحتفاظ بحساب المالك والإعدادات المحاسبية الأساسية وسجل التدقيق.':'The backup includes all 86 database tables, but not binary files in Supabase Storage. Restore replaces operational data while preserving the owner account, core accounting settings, and audit log.'
+  ,'أدخل كلمة المرور':'Enter password'
+  ,'تصدير بيانات قاعدة البيانات في ملف JSON مع بصمة تحقق SHA-256.':'Export database data to a JSON file with a SHA-256 integrity hash.'
+  ,'ترفع البيانات إلى Supabase وتصبح مشتركة مع الموقع ولوحة الإدارة. الاستعادة ذرّية؛ إذا فشل التحقق تُلغى بالكامل.':'Uploads data to Supabase so it is shared with the storefront and admin panel. Restore is atomic and rolls back completely if validation fails.'
+  ,'يحذف المبيعات والمشتريات والمخزون والعملاء والموظفين والقيود والحركات التشغيلية. يحتفظ بحساب المالك ودوره وإعدادات الحسابات والخزائن والضرائب وسجل التدقيق.':'Deletes sales, purchases, inventory, customers, staff, journal entries, and operational movements. Preserves the owner account, role and permissions, chart of accounts, cash accounts, tax settings, and audit log.'
 
 };
 function applyLanguage(root) {
