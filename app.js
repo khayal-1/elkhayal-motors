@@ -54,6 +54,7 @@ const state = {
   financeAccounts: [],
   financeAllAccounts: [],
   cashAccounts: [],
+  salesCashAccounts: [],
   cashBalances: [],
   trialBalance: [],
   expenses: [],
@@ -781,7 +782,7 @@ function renderVinUnitMatch(unit) {
     (bike.description?'<p>'+esc(bike.description)+'</p>':'')+'</div></div>'+
     (available?'<form id="vinScannerSaleForm" class="vin-sale-form form-grid" data-unit-id="'+esc(unit.id)+'"><h3><i class="fa-solid fa-cash-register"></i> بيع هذه الوحدة</h3>'+
       '<div class="form-row"><div class="field"><label>حساب العميل (اختياري)</label><select name="customer_user_id"><option value="">عميل نقدي / بدون ربط</option>'+((state.registeredCustomers||[]).map(c=>'<option value="'+esc(c.user_id)+'" data-name="'+esc(c.display_name)+'" data-phone="'+esc(c.phone||'')+'">'+esc(c.display_name)+' — '+esc(c.phone||'بدون هاتف')+'</option>').join(''))+'</select></div><div class="field"><label>اسم العميل</label><input name="customer_name" maxlength="120" placeholder="عميل نقدي"></div><div class="field"><label>هاتف العميل</label><input name="customer_phone" type="tel" maxlength="32"></div></div>'+
-      '<div class="form-row"><div class="field"><label>المبلغ المدفوع الآن (ج.م)</label><input name="payment_amount" type="number" min="0" max="'+Number(bike.price||0)+'" step="0.01" value="'+Number(bike.price||0)+'" required></div><div class="field"><label>طريقة الدفع</label><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div></div>'+
+      '<div class="form-row"><div class="field"><label>المبلغ المدفوع الآن (ج.م)</label><input name="payment_amount" type="number" min="0" max="'+Number(bike.price||0)+'" step="0.01" value="'+Number(bike.price||0)+'" required></div><div class="field"><label>طريقة الدفع</label><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div><div class="field"><label>استلمت الدفعة في</label><select name="cash_account_id"><option value="">اختر الخزينة / البنك</option>'+((state.salesCashAccounts||[]).map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' — '+esc(a.account_kind==='bank'?'بنك':'خزينة')+'</option>').join(''))+'</select></div></div>'+
       '<div class="field"><label>مرجع الدفع (اختياري)</label><input name="payment_reference" maxlength="120"></div><div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="500"></textarea></div>'+
       '<button class="btn btn-primary btn-block" type="submit"><i class="fa-solid fa-file-invoice"></i> تأكيد البيع وإصدار الفاتورة</button></form>':'<div class="hint">لا يمكن بيع الوحدة من هنا لأنها مباعة أو محجوزة أو غير متاحة أو أن مخزون الطراز غير كافٍ.</div>');
 }
@@ -1671,8 +1672,8 @@ function navigate(route) {
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
   if (route === 'manage-bikes' && state.user) Promise.all([loadMotorcycles(),loadMotorcycleUnits()]).then(render);
   if (route === 'staff' && state.user?.role === 'admin') loadStaffDirectory().then(render);
-  if (route === 'pos') Promise.all([loadSalesData(),loadMotorcycles(),loadMotorcycleUnits()]).then(render);
-  if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData()]).then(render);
+  if (route === 'pos') Promise.all([loadSalesData(),loadMotorcycles(),loadMotorcycleUnits(),loadSalesCashAccounts()]).then(render);
+  if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData(),loadSalesCashAccounts()]).then(render);
   if (route === 'home') Promise.all([loadMotorcycles(),loadStoreUnits()]).then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
@@ -2074,6 +2075,7 @@ document.addEventListener('click', async (e) => {
       <form id="collectPaymentForm" class="form-grid" data-sale-id="${esc(sale.id)}">
         <div class="field"><label for="collectAmount">قيمة الدفعة</label><input id="collectAmount" name="amount" type="number" min="0.01" max="${balance}" step="0.01" required></div>
         <div class="field"><label for="collectMethod">طريقة الدفع</label><select id="collectMethod" name="method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div>
+        <div class="field"><label>استلمت الدفعة في</label><select name="cash_account_id" required><option value="">اختر الخزينة / البنك</option>${(state.salesCashAccounts||[]).map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' — '+esc(a.account_kind==='bank'?'بنك':'خزينة')+'</option>').join('')}</select></div>
         <div class="field"><label for="collectReference">مرجع الدفع (اختياري)</label><input id="collectReference" name="reference" maxlength="120"></div>
         <button class="btn btn-primary" type="submit">حفظ الدفعة</button>
       </form>`);
@@ -2869,7 +2871,8 @@ document.addEventListener('submit', async (e) => {
     const { error } = await supabase.rpc('record_sale_payment', {
       p_sale_id: form.dataset.saleId, p_amount: amount, p_method: String(fd.get('method')),
       p_reference: safeName(fd.get('reference')) || null,
-      p_idempotency_key: form.dataset.paymentIdempotencyKey
+      p_idempotency_key: form.dataset.paymentIdempotencyKey,
+      p_cash_account_id: String(fd.get('cash_account_id'))
     });
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل الدفعة', 'error'); return; }
@@ -2914,7 +2917,8 @@ document.addEventListener('submit', async (e) => {
       p_payment_amount: amount,
       p_payment_method: amount > 0 ? String(fd.get('payment_method')) : null,
       p_payment_reference: safeName(fd.get('payment_reference')) || null,
-      p_notes: safeName(fd.get('notes')) || null
+      p_notes: safeName(fd.get('notes')) || null,
+      p_cash_account_id: String(fd.get('cash_account_id')||'') || null
     });
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد العملية', 'error'); return; }
@@ -2977,7 +2981,8 @@ document.addEventListener('submit', async (e) => {
       p_payment_amount: paymentAmount,
       p_payment_method: paymentAmount > 0 ? String(fd.get('payment_method')) : null,
       p_payment_reference: safeName(fd.get('payment_reference')) || null,
-      p_notes: safeName(fd.get('notes')) || null
+      p_notes: safeName(fd.get('notes')) || null,
+      p_cash_account_id: paymentAmount > 0 ? (String(fd.get('cash_account_id')||'') || null) : null
     });
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد أي وحدة', 'error'); return; }
@@ -3463,6 +3468,13 @@ async function loadHRData() {
   state.employees=employees.data||[];state.attendanceRecords=attendance.data||[];state.employeeLeaveRequests=leaves.data||[];
   state.employeeCustody=custody.data||[];state.employeeAdvances=advances.data||[];state.salesCommissions=commissions.data||[];
   state.payrollRuns=runs.data||[];state.payrollItems=items.data||[];state.payrollPayments=payments.data||[];
+}
+
+async function loadSalesCashAccounts() {
+  if (!currentUser() || !supabase || !(hasRole('admin','manager','owner') || hasPermission('sales_manage'))) return;
+  const {data,error}=await supabase.rpc('get_sales_cash_accounts');
+  if(error){console.error('Sales cash accounts load failed',error);toast('تعذر تحميل حسابات التحصيل','error');return;}
+  state.salesCashAccounts=data||[];
 }
 
 async function loadFinanceData() {
