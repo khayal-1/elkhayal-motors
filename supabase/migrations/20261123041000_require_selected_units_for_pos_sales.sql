@@ -152,7 +152,9 @@ begin
       ));
     end loop;
     perform set_config('ekm.sale_unit_id','',true);
+    perform set_config('ekm.stock_movement_source','sale',true);
     update public.motorcycles set stock=stock-quantity_value where id=b.id;
+    perform set_config('ekm.stock_movement_source','',true);
     insert into public.stock_movements(
       motorcycle_id,movement_type,quantity_delta,reference_id,notes,created_by
     ) values(b.id,'sale',-quantity_value,sale_id,'بيع وحدات محددة بأرقام الشاسيه ضمن فاتورة '||invoice_value,(select auth.uid()));
