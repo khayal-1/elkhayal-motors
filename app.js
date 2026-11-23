@@ -1376,13 +1376,14 @@ function unitRegistrationFormHTML(motorcycleId) {
   const bike = (state.bikes || []).find((item) => item.id === motorcycleId);
   if (!bike) return '';
   return '<div class="modal-header"><h3><i class="fa-solid fa-barcode"></i> تسجيل دراجة فعلية — '+esc(bike.name)+'</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>' +
-    '<p class="hint">تسجيل رقم الشاسيه يضيف وحدة فعلية إلى المخزون ويحدّث الرصيد بحركة تسوية موثقة.</p>' +
+    '<p class="hint">هذا الإجراء لإدخال رصيد افتتاحي موجود فعليًا بالمعرض فقط. إذا كانت الدراجة واردة من مورد جديد، استخدم أمر التوريد والاستلام وفاتورة المورد حتى لا تُسجل التكلفة مرتين.</p>' +
     '<form id="motorcycleUnitForm" class="form-grid"><input type="hidden" name="motorcycle_id" value="'+esc(bike.id)+'">' +
     '<div class="form-row"><div class="field"><label>رقم الشاسيه (VIN)</label><input name="vin" required maxlength="80"></div><div class="field"><label>رقم الموتور</label><input name="engine_number" maxlength="80"></div></div>' +
     '<div class="form-row"><div class="field"><label>الباركود</label><input name="barcode" maxlength="80"></div><div class="field"><label>عداد الكيلومترات</label><input name="odometer_reading" type="number" min="0" step="1" value="0" required></div></div>' +
-    '<div class="form-row"><div class="field"><label>حالة الدراجة</label><select name="unit_condition"><option value="new">جديدة</option><option value="used">مستعملة</option></select></div><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date"></div></div>' +
+    '<div class="form-row"><div class="field"><label>حالة الدراجة</label><select name="unit_condition"><option value="new">جديدة</option><option value="used">مستعملة</option></select></div><div class="field"><label>تكلفة الوحدة الافتتاحية (ج.م)</label><input name="unit_cost" type="number" min="0.01" step="0.01" required></div></div>' +
+    '<div class="form-row"><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date"></div></div>' +
     '<div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="500"></textarea></div>' +
-    '<p class="hint">بمجرد تسجيل الدراجة كمتاحة في المعرض ستظهر تلقائيًا في المتجر؛ وعند بيعها أو حجزها أو دخولها الصيانة تختفي من المتجر تلقائيًا.</p>' +
+    '<p class="hint">تُحفظ تكلفة الوحدة، ويُحدّث متوسط تكلفة مخزون الطراز، ويُنشأ قيد افتتاحي: مدين المخزون ودائن رأس المال. بعد التسجيل تظهر الوحدة في المتجر إذا كانت متاحة.</p>' +
     '<button class="btn btn-primary btn-block" type="submit">حفظ الوحدة</button></form>';
 }
 function unitEditFormHTML(unit) {
@@ -2430,7 +2431,8 @@ document.addEventListener('submit', async (e) => {
       p_warranty_end:fd.get('warranty_end')||null,
       p_notes:safeName(fd.get('notes'))||null,
       p_odometer_reading:Number(fd.get('odometer_reading')||0),
-      p_unit_condition:String(fd.get('unit_condition')||'new')
+      p_unit_condition:String(fd.get('unit_condition')||'new'),
+      p_unit_cost:Number(fd.get('unit_cost'))
     });
     if(error){toast(error.message||'تعذر تسجيل الوحدة؛ لم يتم حفظ أي جزء من العملية','error');return;}
     await Promise.all([loadMotorcycleUnits(),loadStoreUnits(),loadMotorcycles()]);
