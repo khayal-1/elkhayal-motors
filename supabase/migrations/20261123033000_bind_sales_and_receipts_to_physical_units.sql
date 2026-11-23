@@ -107,11 +107,11 @@ $$;
 -- Atomic, VIN-specific showroom sale used by the barcode/VIN scanner.
 create or replace function private.create_showroom_sale_for_unit_impl(
   p_unit_id uuid,
-  p_customer_user_id uuid,
-  p_customer_name text,
-  p_customer_phone text,
-  p_payment_amount numeric,
-  p_payment_method text,
+  p_customer_user_id uuid default null,
+  p_customer_name text default null,
+  p_customer_phone text default null,
+  p_payment_amount numeric default 0,
+  p_payment_method text default null,
   p_payment_reference text default null,
   p_notes text default null
 )
@@ -228,11 +228,11 @@ grant execute on function private.create_showroom_sale_for_unit_impl(uuid,uuid,t
 
 create or replace function public.create_showroom_sale_for_unit(
   p_unit_id uuid,
-  p_customer_user_id uuid,
-  p_customer_name text,
-  p_customer_phone text,
-  p_payment_amount numeric,
-  p_payment_method text,
+  p_customer_user_id uuid default null,
+  p_customer_name text default null,
+  p_customer_phone text default null,
+  p_payment_amount numeric default 0,
+  p_payment_method text default null,
   p_payment_reference text default null,
   p_notes text default null
 )
