@@ -124,6 +124,7 @@ const STAFF_PERMISSION_OPTIONS = [
   { key: 'requests_view', label: 'عرض طلبات العملاء', description: 'رؤية الطلبات وتفاصيلها التي أرسلها العميل.' },
   { key: 'requests_manage', label: 'تحديث حالة الطلبات', description: 'عرض الطلبات وتغيير حالتها؛ لا يسمح بالحذف.' },
   { key: 'customer_data_view', label: 'رؤية أسماء وهواتف العملاء', description: 'لعملاء الطلبات التي يحق للموظف عرضها.' },
+  { key: 'sales_manage', label: 'إدارة المبيعات ونقاط البيع', description: 'تنفيذ المبيعات ومتابعة الفواتير والعمليات المسموح بها.' },
   { key: 'expenses_manage', label: 'إدارة المصروفات', description: 'تسجيل المصروفات وسدادها ومراجعة سجلها.' },
   { key: 'accounting_view', label: 'عرض الحسابات والتقارير المالية', description: 'عرض دليل الحسابات والقيود والأرصدة المالية.' },
   { key: 'finance_manage', label: 'إدارة الأدوات المالية المتقدمة', description: 'الفترات والأرصدة الافتتاحية والأصول والسلف والتسويات والشيكات والقيود المتكررة.' },
@@ -367,7 +368,7 @@ function renderAccountArea() {
       </button>`;
     return;
   }
-  const roleLabel = u.role === 'admin' ? 'مدير' : u.role === 'staff' ? 'موظف' : 'عميل';
+  const roleLabel = u.systemRole === 'manager' ? 'مدير مساعد' : u.role === 'admin' ? 'مدير' : u.role === 'staff' ? 'موظف' : 'عميل';
   area.innerHTML = `
     <div class="user-chip">
       <div class="avatar">${esc((u.name || '?').charAt(0))}</div>
@@ -1449,8 +1450,9 @@ function pageStaff() {
   if (!u || u.role !== 'admin') return pageLogin();
   const staff = get(DB.USERS).filter((entry) => entry.role === 'staff');
   const result = state.staffProvisionResult;
+  const canManageManagerRole = ['owner', 'admin'].includes(u.systemRole);
   return `<h2 class="page-title"><i class="fa-solid fa-users-gear"></i> حسابات الموظفين</h2>
-    <p class="page-sub">المدير وحده ينشئ حسابات الموظفين ويحدد صلاحيات كل حساب.</p>
+    <p class="page-sub">إدارة بيانات الموظفين وصلاحياتهم، مع إمكانية ترقية الموظف إلى مدير مساعد.</p>
     ${result ? `<div class="panel staff-created"><h3>تم إنشاء الحساب</h3><p>البريد: <b>${esc(result.staff.email)}</b></p><p>تم حفظ كلمة المرور التي أدخلتها، والحساب جاهز لتسجيل الدخول.</p></div>` : ''}
     <div class="panel"><h3>إنشاء حساب موظف</h3>
       <p class="hint">تحقق من صحة البريد مع الموظف قبل الإنشاء. كلمة المرور تُحفظ لحساب الموظف؛ شاركها معه بأمان خارج الموقع.</p>
@@ -1467,8 +1469,35 @@ function pageStaff() {
       </form>
     </div>
     <div class="panel"><h3>الموظفون الحاليون</h3><div class="table-wrap"><table>
-      <thead><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الصلاحيات</th></tr></thead>
-      <tbody>${staff.map((person) => `<tr><td><b>${esc(person.name || '—')}</b></td><td>${esc(person.email || '—')}</td><td>${esc(person.phone || '—')}</td><td>${person.permissions.length ? person.permissions.map((key) => esc(PERMISSION_LABELS[key] || key)).join('، ') : 'لا توجد صلاحيات'}</td></tr>`).join('') || `<tr><td colspan="4" class="text-center">لا توجد حسابات موظفين</td></tr>`}</tbody>
+      <thead><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الصفة</th><th>الصلاحيات</th><th>الإدارة</th></tr></thead>
+      <tbody>${staff.map((person) => {
+        const isAssistant = person.accountRole === 'manager';
+        const canEditPerson = canManageManagerRole || !isAssistant;
+        const permissionChecks = STAFF_PERMISSION_OPTIONS.map((item) =>
+          `<label class="permission-option"><input type="checkbox" name="permissions" value="${esc(item.key)}" ${person.permissions.includes(item.key) ? 'checked' : ''}><span><b>${esc(item.label)}</b><small>${esc(item.description)}</small></span></label>`
+        ).join('');
+        const roleField = canManageManagerRole
+          ? `<div class="field"><label>صفة الحساب</label><select name="account_role"><option value="employee" ${!isAssistant ? 'selected' : ''}>موظف</option><option value="manager" ${isAssistant ? 'selected' : ''}>مدير مساعد — صلاحيات الإدارة</option></select><small class="hint">المدير المساعد يحصل على صلاحيات الإدارة الكاملة.</small></div>`
+          : `<input type="hidden" name="account_role" value="employee"><p class="hint">يمكنك تعديل الموظفين العاديين فقط. ترقية المدير المساعد متاحة للمدير الأساسي.</p>`;
+        return `<tr>
+          <td><b>${esc(person.name || '—')}</b></td>
+          <td><span dir="ltr">${esc(person.email || '—')}</span></td>
+          <td>${esc(person.phone || '—')}</td>
+          <td><span class="role-badge">${isAssistant ? 'مدير مساعد' : 'موظف'}</span></td>
+          <td>${isAssistant ? 'صلاحيات الإدارة الكاملة' : (person.permissions.length ? person.permissions.map((key) => esc(PERMISSION_LABELS[key] || key)).join('، ') : 'لا توجد صلاحيات')}</td>
+          <td>${canEditPerson ? `<details class="staff-edit"><summary class="btn btn-outline btn-sm"><i class="fa-solid fa-pen"></i> تعديل</summary>
+            <form id="staffEditForm" class="staff-edit-form" data-user-id="${esc(person.id)}">
+              <div class="field"><label>اسم الموظف</label><input name="full_name" required maxlength="120" value="${esc(person.name)}"></div>
+              <div class="field"><label>البريد الإلكتروني (ثابت)</label><input type="email" value="${esc(person.email)}" disabled><small class="hint">تغيير البريد يحتاج إجراء تحقق منفصل لحماية تسجيل الدخول.</small></div>
+              <div class="field"><label>رقم الهاتف</label><input name="phone" type="tel" maxlength="32" value="${esc(person.phone)}"></div>
+              ${roleField}
+              <fieldset class="permission-fieldset"><legend>الصلاحيات</legend><div class="permission-grid">${permissionChecks}</div></fieldset>
+              <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ التعديلات</button>
+            </form>
+          </details>` : 'لا يمكن تعديل حساب مدير مساعد من هذا الحساب'}
+          </td>
+        </tr>`;
+      }).join('') || `<tr><td colspan="6" class="text-center">لا توجد حسابات موظفين</td></tr>`}</tbody>
     </table></div></div>`;
 }
 
@@ -3006,6 +3035,24 @@ document.addEventListener('submit', async (e) => {
     return;
   }
 
+  if (form.id === 'staffEditForm') {
+    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية إدارة الموظفين', 'error'); return; }
+    const fd = new FormData(form);
+    const accountRole = String(fd.get('account_role') || 'employee');
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    const { data, error } = await supabase.functions.invoke('manage-staff', { body: {
+      action: 'update', user_id: form.dataset.userId, full_name: fd.get('full_name'),
+      phone: fd.get('phone'), permissions: fd.getAll('permissions'), account_role: accountRole
+    }});
+    if (button) button.disabled = false;
+    if (error || !data?.success) { toast(data?.error || error?.message || 'تعذر حفظ تعديلات الموظف', 'error'); return; }
+    await loadStaffDirectory();
+    render();
+    toast(accountRole === 'manager' ? 'تم حفظ البيانات وترقية الحساب إلى مدير مساعد' : 'تم حفظ بيانات الموظف وصلاحياته', 'success');
+    return;
+  }
+
   /* Motorcycle catalogue data and Telegram-backed images are stored through Supabase. */
   if (form.id === 'bikeForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية إدارة الدراجات', 'error'); return; }
@@ -3462,6 +3509,7 @@ async function loadStaffDirectory() {
     email: person.email || '',
     phone: person.phone || '',
     permissions: person.permissions || [],
+    accountRole: person.account_role || 'employee',
     role: 'staff'
   })));
 }
