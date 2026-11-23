@@ -27,5 +27,7 @@ jobs:
         run: pnpm run check
       - name: Run unit tests
         run: pnpm test
+      - name: Audit production dependencies
+        run: pnpm audit --prod
       - name: Build production bundle
         run: pnpm run build
