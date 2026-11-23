@@ -1419,10 +1419,10 @@ function pageManageBikes() {
       const visibleInStore = !!x.is_published && x.unit_status === 'available' && b.status === 'available';
       const canPublish = !x.is_demo && !b.is_demo && !x.sale_item_id && ['available','retired'].includes(x.unit_status);
       const canDelete = !x.sale_item_id && x.unit_status !== 'sold';
-      return '<article class="unit-admin-card '+(x.is_demo?'demo-unit-row':'')+'">' +
+      return '<article class="unit-admin-card '+(x.is_demo||b.is_demo?'demo-unit-row':'')+'">' +
         '<div class="unit-admin-main"><div><b>شاسيه: <span dir="ltr">'+esc(x.vin)+'</span></b><small>موتور: <span dir="ltr">'+esc(x.engine_number||'غير مسجل')+'</span></small></div>' +
         '<span class="status-pill '+(x.unit_status==='available'?'available':x.unit_status==='sold'?'out':'pending')+'">'+unitStatusLabel(x.unit_status)+'</span>' +
-        '<span class="status-pill '+(visibleInStore?'available':'pending')+'">'+(visibleInStore?'معروضة في المتجر':'غير معروضة في المتجر')+'</span>'+(x.is_demo?'<small class="demo-data-label">تجريبية</small>':'')+'</div>' +
+        '<span class="status-pill '+(visibleInStore?'available':'pending')+'">'+(visibleInStore?'معروضة في المتجر':'غير معروضة في المتجر')+'</span>'+(x.is_demo||b.is_demo?'<small class="demo-data-label">تجريبية</small>':'')+'</div>' +
         '<div class="unit-admin-meta"><span>'+(x.unit_condition==='used'?'مستعملة':'جديدة')+'</span><span>العداد: '+Number(x.odometer_reading||0).toLocaleString('en-US')+' كم</span><span>باركود: '+esc(x.barcode||'—')+'</span></div>' +
         '<div class="unit-admin-meta"><span>الضمان: '+esc(x.warranty_start||'—')+' إلى '+esc(x.warranty_end||'—')+'</span><span>تسجيل: '+esc((x.registered_at||'').slice(0,10)||'—')+'</span></div>' +
         (x.notes?'<p class="hint">'+esc(x.notes)+'</p>':'') +
@@ -2421,8 +2421,11 @@ document.addEventListener('submit', async (e) => {
     });
     if(error){toast(error.message||'تعذر تسجيل الوحدة؛ لم يتم حفظ أي جزء من العملية','error');return;}
     let publishError = null;
-    if(fd.get('publish_to_store') === 'on' && unitId){
-      const publishResult = await supabase.rpc('set_motorcycle_unit_store_visibility',{p_unit_id:unitId,p_is_published:true});
+    if(unitId){
+      const publishResult = await supabase.rpc('set_motorcycle_unit_store_visibility',{
+        p_unit_id:unitId,
+        p_is_published:fd.get('publish_to_store') === 'on'
+      });
       publishError = publishResult.error;
     }
     await Promise.all([loadMotorcycleUnits(),loadStoreUnits(),loadMotorcycles()]);
