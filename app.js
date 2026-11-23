@@ -2019,16 +2019,32 @@ document.addEventListener('click', async (e) => {
       .select('id,motorcycle_id,motorcycle_name,model_year,quantity,unit_price')
       .eq('sale_id', sale.id).order('created_at');
     if (error) { toast('تعذر تحميل بنود الفاتورة','error'); return; }
+    const saleItemIds = (saleItems || []).map(item => item.id);
+    const unitResult = saleItemIds.length
+      ? await supabase.from('sale_item_units').select('sale_item_id,vin_snapshot,engine_number_snapshot').in('sale_item_id', saleItemIds)
+      : {data:[],error:null};
+    if (unitResult.error) { toast('تعذر تحميل أرقام الشاسيه المرتبطة بالفاتورة','error'); return; }
+    const unitSnapshots = unitResult.data || [];
     const items = (saleItems || []).map(item => {
       const returned = state.saleReturnItems.filter(x => x.sale_item_id === item.id).reduce((n,x)=>n+Number(x.quantity),0);
-      return {...item, remaining: Number(item.quantity)-returned};
+      return {
+        ...item,
+        unitSnapshots: unitSnapshots.filter(unit => unit.sale_item_id === item.id),
+        remaining: Number(item.quantity)-returned
+      };
     }).filter(item => item.remaining > 0);
     if (!items.length) { toast('تم إرجاع كامل كميات هذه الفاتورة','info'); return; }
-    const rows = items.map(item => `<div class="sale-return-row form-row" data-sale-item-id="${esc(item.id)}">
+    const rows = items.map(item => {
+      const unitLabel = item.unitSnapshots.length
+        ? item.unitSnapshots.map(unit => `VIN: ${esc(unit.vin_snapshot)}${unit.engine_number_snapshot ? ` — موتور: ${esc(unit.engine_number_snapshot)}` : ''}`).join(' | ')
+        : 'فاتورة قديمة غير مرتبطة بأرقام شاسيه';
+      return `<div class="sale-return-row form-row" data-sale-item-id="${esc(item.id)}">
       <div class="field"><label>${esc(item.motorcycle_name)} — موديل ${esc(item.model_year || '—')} — المتبقي ${item.remaining}</label>
+      <small class="hint">${unitLabel}</small>
       <input name="quantity" type="number" min="0" max="${item.remaining}" value="0" required></div>
       <div class="field"><label>حالة القطعة</label><select name="disposition"><option value="restock">صالحة لإعادة البيع (إضافة للمخزون)</option><option value="damaged">تالفة / لا تعاد للمخزون</option></select></div>
-      <small class="hint">سعر الوحدة: ${money(item.unit_price)}</small></div>`).join('');
+      <small class="hint">سعر الوحدة: ${money(item.unit_price)}</small></div>`;
+    }).join('');
     openModal(`<div class="modal-header"><h3>مرتجع فاتورة ${esc(sale.invoice_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
       <p>العميل: <b>${esc(sale.customer_name)}</b> — إجمالي الفاتورة: ${money(sale.total)}</p>
       <p class="hint">تُخصم قيمة المرتجع من مديونية الفاتورة أولًا؛ لا ينشأ رصيد قابل للرد إلا إذا تجاوز ما دفعه العميل إجمالي الفاتورة بعد المرتجعات.</p>
