@@ -69,6 +69,11 @@ begin
   );
   v_definition:=replace(
     v_definition,
+    '  v_count:=(v_item->>''counted_quantity'')::integer;if v_count<0 then raise exception ''الكمية المعدودة لا يمكن أن تكون سالبة'' using errcode=''22023'';end if;',
+    '  v_count:=(v_item->>''counted_quantity'')::integer;if v_count<0 then raise exception ''الكمية المعدودة لا يمكن أن تكون سالبة'' using errcode=''22023'';end if; if v_count<>(select count(*) from public.motorcycle_units where motorcycle_id=v_bike.id and unit_status in (''available'',''reserved'',''service'')) then raise exception ''عدد الجرد لا يطابق الوحدات المسجلة بأرقام الشاسيه'' using errcode=''23514'';end if;'
+  );
+  v_definition:=replace(
+    v_definition,
     '   update public.motorcycles set stock=v_count where id=v_bike.id;',
     '   perform set_config(''ekm.stock_movement_source'',''stocktake'',true); update public.motorcycles set stock=v_count where id=v_bike.id; perform set_config(''ekm.stock_movement_source'','''',true);'
   );
