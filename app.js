@@ -1424,7 +1424,7 @@ function bikeFormHTML(bike) {
         <div class="field"><label>السعر</label><input type="number" name="price" required min="0" value="${esc(b.price)}"></div>
       </div>
       <div class="form-row">
-        <div class="field"><label>المخزون</label><input type="number" name="stock" required min="0" value="${esc(b.stock)}"></div>
+        <div class="field"><label>الرصيد الفعلي (يُحسب من أرقام الشاسيه)</label><input type="number" name="stock" min="0" value="${esc(b.stock)}" readonly><small class="hint">يُحدّث الرصيد تلقائيًا من استلام الوحدات وحركات البيع والمرتجعات والجرد المعتمد.</small></div>
         <div class="field"><label>حالة العرض</label><select name="status">
           <option value="draft" ${b.status === 'draft' ? 'selected' : ''}>مسودة</option>
           <option value="available" ${b.status === 'available' ? 'selected' : ''}>متاحة</option>
@@ -3146,13 +3146,12 @@ document.addEventListener('submit', async (e) => {
       model_year: Number(fd.get('model')) || null,
       category: safeName(fd.get('category')),
       price: Number(fd.get('price')) || 0,
-      stock: Number(fd.get('stock')) || 0,
       status: String(fd.get('status') || 'draft'),
       image_urls: images
     };
     const result = id
       ? await supabase.from('motorcycles').update(values).eq('id', id).select('id').single()
-      : await supabase.from('motorcycles').insert(values).select('id').single();
+      : await supabase.from('motorcycles').insert({ ...values, stock: 0 }).select('id').single();
     if (result.error) { toast(result.error.message, 'error'); return; }
 
     const savedId = result.data.id;
