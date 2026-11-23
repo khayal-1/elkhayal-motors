@@ -1847,11 +1847,14 @@ document.addEventListener('click', async (e) => {
       } else {
         const confirmation = $('#ownerResetConfirmation')?.value || '';
         if (confirmation !== 'DELETE ALL DATA') throw new Error('اكتب DELETE ALL DATA كما هو للتأكيد');
-        if (!window.confirm('تحذير نهائي: سيتم حذف بيانات التشغيل من قاعدة البيانات. هل أنشأت نسخة احتياطية وتريد المتابعة؟')) return;
+        if (!window.confirm('تحذير نهائي: سيتم حذف الحسابات غير حساب المالك وكل الصور المخزنة في Supabase Storage نهائيًا، بالإضافة إلى بيانات التشغيل. ملف JSON لا يحتفظ بالصور. هل تريد المتابعة؟')) return;
         const { data, error } = await supabase.functions.invoke('owner-data-management', { body: { action: 'reset', password, confirmation } });
         if (error) throw error;
-        if (!data?.ok) throw new Error(data?.error || 'فشل حذف البيانات');
-        toast('اكتمل الحذف: ' + Number(data.authUsersDeleted || 0) + ' حسابات غير المالك و' + Number(data.storageDeleted || 0) + ' صورة. تم الاحتفاظ بحساب المالك.', data.ok ? 'success' : 'error');
+        if (!data?.ok) {
+          toast((data?.error || 'اكتمل جزء من الحذف فقط') + ' — حُذف حتى الآن ' + Number(data.authUsersDeleted || 0) + ' حسابات و' + Number(data.storageDeleted || 0) + ' صورة. أعد المحاولة لإكمال التنظيف.', 'error');
+          return;
+        }
+        toast('اكتمل الحذف: ' + Number(data.authUsersDeleted || 0) + ' حسابات غير المالك و' + Number(data.storageDeleted || 0) + ' صورة. تم الاحتفاظ بحساب المالك.', 'success');
         window.location.reload();
       }
     } catch (error) {
