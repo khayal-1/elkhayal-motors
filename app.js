@@ -1647,7 +1647,7 @@ function pageOwnerData() {
       <div class="grid grid-2">
         <article class="card"><h3><i class="fa-solid fa-cloud-arrow-down"></i> نسخة احتياطية</h3><p>تصدير بيانات قاعدة البيانات في ملف JSON مع بصمة تحقق SHA-256.</p><button class="btn btn-primary" type="button" data-owner-backup><i class="fa-solid fa-download"></i> إنشاء وتنزيل نسخة</button></article>
         <article class="card"><h3><i class="fa-solid fa-cloud-arrow-up"></i> استعادة / استيراد</h3><p>ترفع البيانات إلى Supabase وتصبح مشتركة مع الموقع ولوحة الإدارة. الاستعادة ذرّية؛ إذا فشل التحقق تُلغى بالكامل.</p><div class="field"><label for="ownerBackupFile">ملف النسخة الاحتياطية JSON</label><input id="ownerBackupFile" type="file" accept=".json,application/json"></div><div class="field"><label for="ownerRestoreConfirmation">اكتب RESTORE BACKUP للتأكيد</label><input id="ownerRestoreConfirmation" autocomplete="off"></div><button class="btn btn-outline" type="button" data-owner-restore><i class="fa-solid fa-rotate"></i> استيراد النسخة</button></article>
-        <article class="card"><h3><i class="fa-solid fa-triangle-exclamation"></i> حذف بيانات التشغيل</h3><p>يحذف المبيعات والمشتريات والمخزون والعملاء والموظفين والقيود والحركات التشغيلية. يحتفظ بحساب المالك ودوره وصلاحياته وإعدادات الحسابات والخزائن والضرائب وسجل التدقيق.</p><div class="field"><label for="ownerResetConfirmation">اكتب DELETE ALL DATA للتأكيد</label><input id="ownerResetConfirmation" autocomplete="off"></div><button class="btn btn-danger" type="button" data-owner-reset><i class="fa-solid fa-trash"></i> حذف كل بيانات التشغيل</button></article>
+        <article class="card"><h3><i class="fa-solid fa-triangle-exclamation"></i> حذف بيانات التشغيل</h3><p>يحذف بيانات التشغيل والحسابات المسجلة غير حساب المالك، وملفات الصور التي نُقلت من Telegram إلى Supabase Storage (catalog-images)، مع الاحتفاظ بحساب المالك وصلاحياته وإعدادات النظام الأساسية وسجل التدقيق.</p><p class="text-danger"><strong>تنبيه:</strong> ملف النسخة الاحتياطية JSON لا يتضمن الصور الثنائية؛ حذفها هنا نهائي من Supabase Storage، ولا يحذف الرسائل أو الصور الأصلية من محادثة Telegram.</p><div class="field"><label for="ownerResetConfirmation">اكتب DELETE ALL DATA للتأكيد</label><input id="ownerResetConfirmation" autocomplete="off"></div><button class="btn btn-danger" type="button" data-owner-reset><i class="fa-solid fa-trash"></i> حذف كل بيانات التشغيل</button></article>
       </div>
     </section>`;
 }
@@ -1851,7 +1851,7 @@ document.addEventListener('click', async (e) => {
         const { data, error } = await supabase.functions.invoke('owner-data-management', { body: { action: 'reset', password, confirmation } });
         if (error) throw error;
         if (!data?.ok) throw new Error(data?.error || 'فشل حذف البيانات');
-        toast('تم حذف بيانات التشغيل مع الاحتفاظ بحساب المالك والإعدادات الأساسية.', 'success');
+        toast('اكتمل الحذف: ' + Number(data.authUsersDeleted || 0) + ' حسابات غير المالك و' + Number(data.storageDeleted || 0) + ' صورة. تم الاحتفاظ بحساب المالك.', data.ok ? 'success' : 'error');
         window.location.reload();
       }
     } catch (error) {
@@ -4007,6 +4007,11 @@ const EN = {
   ,'تصدير بيانات قاعدة البيانات في ملف JSON مع بصمة تحقق SHA-256.':'Export database data to a JSON file with a SHA-256 integrity hash.'
   ,'ترفع البيانات إلى Supabase وتصبح مشتركة مع الموقع ولوحة الإدارة. الاستعادة ذرّية؛ إذا فشل التحقق تُلغى بالكامل.':'Uploads data to Supabase so it is shared with the storefront and admin panel. Restore is atomic and rolls back completely if validation fails.'
   ,'يحذف المبيعات والمشتريات والمخزون والعملاء والموظفين والقيود والحركات التشغيلية. يحتفظ بحساب المالك ودوره وإعدادات الحسابات والخزائن والضرائب وسجل التدقيق.':'Deletes sales, purchases, inventory, customers, staff, journal entries, and operational movements. Preserves the owner account, role and permissions, chart of accounts, cash accounts, tax settings, and audit log.'
+
+  ,'يحذف بيانات التشغيل والحسابات المسجلة غير حساب المالك، وملفات الصور التي نُقلت من Telegram إلى Supabase Storage (catalog-images)، مع الاحتفاظ بحساب المالك وصلاحياته وإعدادات النظام الأساسية وسجل التدقيق.':'Deletes operational data, all registered accounts except the owner, and Telegram-synced image files in Supabase Storage (catalog-images). Preserves the owner account and permissions, core system settings, and audit log.'
+  ,'تنبيه:':'Warning:'
+  ,'ملف النسخة الاحتياطية JSON لا يتضمن الصور الثنائية؛ حذفها هنا نهائي من Supabase Storage، ولا يحذف الرسائل أو الصور الأصلية من محادثة Telegram.':'The JSON backup does not include binary images. Deleting them here permanently removes the Supabase Storage copies; it does not delete the original Telegram messages or images.'
+
 
 };
 function applyLanguage(root) {

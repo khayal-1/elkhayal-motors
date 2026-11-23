@@ -9,10 +9,65 @@ const CORS = {
   "Content-Type": "application/json; charset=utf-8"
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: CORS });
-const sha256 = async (value: string) => {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
-};
+
+const RESET_STORAGE_BUCKETS = ["catalog-images"];
+
+// Recursively collect files (not folder placeholders) from a Storage bucket.
+async function listBucketFiles(admin: ReturnType<typeof createClient>, bucket: string, prefix = ""): Promise<string[]> {
+  const paths: string[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const { data, error } = await admin.storage.from(bucket).list(prefix, {
+      limit: 100, offset, sortBy: { column: "name", order: "asc" }
+    });
+    if (error) throw new Error(`Storage listing failed for ${bucket}/${prefix}: ${error.message}`);
+    for (const entry of data || []) {
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.id === null) paths.push(...await listBucketFiles(admin, bucket, path));
+      else paths.push(path);
+    }
+    if (!data || data.length < 100) break;
+  }
+  return paths;
+}
+
+async function clearResetStorage(admin: ReturnType<typeof createClient>) {
+  let deleted = 0;
+  const errors: string[] = [];
+  for (const bucket of RESET_STORAGE_BUCKETS) {
+    let paths: string[];
+    try { paths = await listBucketFiles(admin, bucket); }
+    catch (error) { errors.push(error instanceof Error ? error.message : `Could not list ${bucket}`); continue; }
+    for (let i = 0; i < paths.length; i += 100) {
+      const batch = paths.slice(i, i + 100);
+      const { error } = await admin.storage.from(bucket).remove(batch);
+      if (error) errors.push(`Could not remove ${batch.length} files from ${bucket}: ${error.message}`);
+      else deleted += batch.length;
+    }
+  }
+  return { deleted, errors };
+}
+
+async function deleteNonOwnerAuthUsers(admin: ReturnType<typeof createClient>, ownerId: string) {
+  const ids: string[] = [];
+  const errors: string[] = [];
+  for (let page = 1; ; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) {
+      errors.push(`Could not list Auth users: ${error.message}`);
+      break;
+    }
+    const users = data.users || [];
+    ids.push(...users.filter((user) => user.id !== ownerId).map((user) => user.id));
+    if (users.length < 1000) break;
+  }
+  let deleted = 0;
+  for (const id of ids) {
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (error) errors.push(`Could not delete non-owner Auth account ${id}: ${error.message}`);
+    else deleted++;
+  }
+  return { deleted, errors };
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -73,7 +128,22 @@ Deno.serve(async (req: Request) => {
       if (body.confirmation !== "DELETE ALL DATA") return json({ error: "Typed confirmation does not match" }, 400);
       const { data, error } = await admin.rpc("owner_reset_operational_data", { p_owner_id: ownerId });
       if (error) throw error;
-      return json({ ok: true, result: data });
+
+      // Public tables (including photo_assets) are cleared transactionally by the RPC.
+      // Storage and Auth are separate Supabase services, so report their outcomes explicitly.
+      const storageCleanup = await clearResetStorage(admin);
+      const authCleanup = await deleteNonOwnerAuthUsers(admin, ownerId);
+      const cleanupErrors = [...storageCleanup.errors, ...authCleanup.errors];
+
+      return json({
+        ok: cleanupErrors.length === 0,
+        result: data,
+        storageDeleted: storageCleanup.deleted,
+        authUsersDeleted: authCleanup.deleted,
+        ownerPreserved: true,
+        cleanupErrors,
+        error: cleanupErrors.length ? "Database reset completed, but some Auth or Storage cleanup steps failed. Retry the reset to finish cleanup." : undefined
+      });
     }
 
     if (body.action === "restore") {
