@@ -3176,6 +3176,16 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.id === 'filterCat') { state.filterCat = e.target.value; render(); }
   if (e.target.id === 'filterPrice') { state.filterPrice = e.target.value; render(); }
+  if (e.target.matches('.pos-cart-row select[name="motorcycle_id"]')) {
+    const row=e.target.closest('.pos-cart-row');
+    const unitSelect=row?.querySelector('select[name="unit_ids"]');
+    if(unitSelect){
+      [...unitSelect.options].forEach(option=>{
+        option.selected=false;
+        option.disabled=!!e.target.value && option.dataset.motorcycleId!==e.target.value;
+      });
+    }
+  }
   if (e.target.id === 'posCustomerAccount') {
     const option = e.target.selectedOptions?.[0];
     const name = document.getElementById('posCustomerName');
