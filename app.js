@@ -2750,10 +2750,10 @@ document.addEventListener('submit', async (e) => {
       const directAmount=Number(fd.get('direct_amount'));
       const description=safeName(fd.get('direct_description'));
       if(!description||!Number.isFinite(directAmount)||directAmount<=0){toast('أدخل وصفًا وقيمة صحيحة للبند المباشر','error');return;}
-      items.push({line_type:'direct',description,quantity:1,unit_cost:directAmount});
+      items.push({line_type:'direct',description,quantity:1,unit_cost:Number(directAmount.toFixed(2))});
     }
     if(!items.length){toast('اختر بند استلام واحدًا على الأقل أو أضف بندًا مباشرًا','error');return;}
-    const amount=Math.round(items.reduce((n,item)=>n+Number(item.quantity)*Number(item.unit_cost),0)*100)/100;
+    const amount=Math.round(items.reduce((n,item)=>n+Math.round(Number(item.quantity)*Number(item.unit_cost)*100)/100,0)*100)/100;
     const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
     const {error}=await supabase.rpc('create_supplier_bill',{
       p_supplier_id:String(fd.get('supplier_id')),p_bill_number:safeName(fd.get('bill_number')),
@@ -3684,7 +3684,7 @@ function updateSupplierBillTotal(form) {
 
 async function loadPurchasingData() {
   if (!state.user || state.user.role !== 'admin' || !supabase) {
-    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[]; return;
+    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierBillItems=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[]; return;
   }
   const [supplierResult,orderResult,billResult,paymentResult,returnResult,advanceAllocationResult]=await Promise.all([
     supabase.from('suppliers').select('id,name,phone,email,address,tax_id,is_active').order('name'),
