@@ -4,6 +4,12 @@ begin;
 -- Disable it so clients cannot bypass the new six-argument contract.
 revoke all on function public.record_sale_payment(uuid,numeric,text,text,uuid)
   from public,anon,authenticated;
+revoke all on function public.create_showroom_sale(text,text,jsonb,numeric,text,text,text)
+  from public,anon,authenticated;
+revoke all on function public.create_showroom_sale_for_unit(uuid,uuid,text,text,numeric,text,text,text)
+  from public,anon,authenticated;
+revoke all on function public.create_showroom_sale_with_units(uuid,text,text,jsonb,numeric,text,text,text)
+  from public,anon,authenticated;
 
 -- Compare the original account inside the serialized idempotent operation.
 -- Doing this in the implementation (after the sale row lock) closes the race
