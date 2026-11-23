@@ -43,10 +43,19 @@ begin
   if (select auth.uid()) is null or not public.can_manage_sales() then
     raise exception 'ليس لديك صلاحية تسجيل المبيعات' using errcode='42501';
   end if;
-  if jsonb_typeof(p_items) is distinct from 'array'
-     or jsonb_array_length(p_items)<1 or jsonb_array_length(p_items)>20
-     or paid_value<0 then
+  if jsonb_typeof(p_items) is distinct from 'array' then
     raise exception 'بيانات أصناف الفاتورة غير صحيحة' using errcode='22023';
+  end if;
+  if jsonb_array_length(p_items)<1 or jsonb_array_length(p_items)>20 or paid_value<0 then
+    raise exception 'بيانات أصناف الفاتورة غير صحيحة' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_array_elements(p_items) x(value)
+            where jsonb_typeof(value->'unit_ids') is distinct from 'array') then
+    raise exception 'حدد قائمة أرقام الشاسيه لكل صنف' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_array_elements(p_items) x(value)
+            where jsonb_array_length(value->'unit_ids')<1) then
+    raise exception 'حدد رقم شاسيه واحدًا على الأقل لكل طراز' using errcode='22023';
   end if;
 
   select array_agg(u.value)
@@ -78,7 +87,7 @@ begin
     end if;
     quantity_value:=jsonb_array_length(item->'unit_ids');
     if b.stock<quantity_value then
-      raise exception 'رصيد الطراز لا يكفي للوحدات المحددة: '||b.name using errcode='23514';
+      raise exception 'رصيد الطراز لا يكفي للوحدات المحددة: %',b.name using errcode='23514';
     end if;
     for unit_value in select value from jsonb_array_elements_text(item->'unit_ids') loop
       begin unit_id:=unit_value::uuid;
@@ -87,7 +96,7 @@ begin
        where id=unit_id and motorcycle_id=b.id and unit_status='available'
        for update;
       if not found then
-        raise exception 'إحدى الوحدات المحددة غير متاحة أو لا تطابق طراز الدراجة: '||b.name
+        raise exception 'إحدى الوحدات المحددة غير متاحة أو لا تطابق طراز الدراجة: %',b.name
           using errcode='23514';
       end if;
       total_value:=total_value+b.price;

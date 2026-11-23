@@ -197,8 +197,8 @@ $$;
 
 create or replace function public.update_motorcycle_unit_details(
   p_unit_id uuid,p_vin text,p_engine_number text,p_barcode text,p_unit_status text,
-  p_odometer_reading integer,p_unit_condition text,p_warranty_start date,
-  p_warranty_end date,p_notes text
+  p_odometer_reading integer,p_unit_condition text,p_warranty_start date default null,
+  p_warranty_end date default null,p_notes text default null
 )
 returns void
 language sql

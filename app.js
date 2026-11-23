@@ -1,4 +1,5 @@
 import { supabase, supabaseConfigured, getCurrentProfile } from './src/supabase.js';
+import { esc, safeImageUrl } from './src/security.js';
 
 /* =========================================================
    El Khayal Motors — app.js (Full SPA)
@@ -184,9 +185,6 @@ function contactActionLinks(person, message = '') {
   if (email) links.push(`<a class="btn btn-outline btn-sm" href="mailto:${esc(email)}?subject=${encodeURIComponent('El Khayal Motors')}&body=${body}"><i class="fa-solid fa-envelope"></i> بريد</a>`);
   return links.join(' ');
 }
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-}[c]));
 
 const transientStore = new Map([
   [DB.USERS, []], [DB.BIKES, []], [DB.ORDERS, []], [DB.INVOICES, []],
@@ -350,7 +348,7 @@ function renderSidebar() {
   nav.innerHTML = groups.map((group) => {
     const isActive = group.items.some((item) => item.route === active);
     const links = group.items.map((item) => {
-      const badge = item.badge ? '<span class="badge">'+item.badge+'</span>' : '';
+      const badge = item.badge ? '<span class="badge">'+esc(item.badge)+'</span>' : '';
       return '<a class="sidebar-link '+(active===item.route?'active':'')+'" data-nav="'+esc(item.route)+'" role="button" tabindex="0"><i class="fa-solid '+esc(item.icon)+'"></i><span>'+esc(item.label)+'</span>'+badge+'</a>';
     }).join('');
     return '<details class="sidebar-group" '+(isActive?'open':'')+'><summary>'+esc(group.title)+'<i class="fa-solid fa-chevron-down"></i></summary><div class="sidebar-group-links">'+links+'</div></details>';
@@ -432,7 +430,7 @@ function productCard(b) {
   return `
     <article class="product-card" data-bike-id="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}">
       <div class="slider-wrap" data-slider data-idx="0">
-        ${first ? `<img src="${esc(first)}" alt="${esc(b.name)}" data-slide-img loading="lazy">` : `<div class="bike-image-placeholder" aria-hidden="true"><i class="fa-solid fa-motorcycle"></i></div>`}
+        ${first ? `<img src="${esc(safeImageUrl(first))}" alt="${esc(b.name)}" data-slide-img loading="lazy">` : `<div class="bike-image-placeholder" aria-hidden="true"><i class="fa-solid fa-motorcycle"></i></div>`}
         <span class="stock-tag ${stockClass}"><i class="fa-solid fa-circle"></i> ${stockText}</span>
         ${isCustomer || isGuest ? `<button class="fav-btn ${isFav ? 'active' : ''}" data-fav="${esc(b.id)}" aria-label="${isGuest ? 'سجل الدخول لإضافة للمفضلة' : 'إضافة للمفضلة'}"><i class="fa-${isFav ? 'solid' : 'regular'} fa-heart"></i></button>` : ''}
         <button class="slider-btn prev" data-slide="prev" aria-label="السابق"><i class="fa-solid fa-chevron-right"></i></button>
@@ -446,7 +444,7 @@ function productCard(b) {
         <div class="unit-condition-tag">${b.unit_condition === 'used' ? 'مستعملة' : 'جديدة'}</div>
         <div class="product-price">${money(b.price)}</div>
         <div class="product-actions">
-          ${isCustomer ? `<button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> طلب شراء</button>` : isGuest ? `<button class="btn btn-primary btn-sm" data-login-action="buy" data-bike-id="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> تسجيل الدخول للشراء</button>` : ''}
+          ${isCustomer ? `<button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> طلب شراء</button>` : isGuest ? `<button class="btn btn-primary btn-sm" data-login-action="buy" data-bike-id="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> تسجيل الدخول للشراء</button>` : ''}
           <button class="btn btn-outline btn-sm" data-details="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}">
             <i class="fa-solid fa-eye"></i> تفاصيل
           </button>
@@ -666,7 +664,7 @@ function pageOrders() {
           <thead><tr><th>الدراجة</th><th>الميزانية</th><th>الحالة</th><th>التاريخ</th></tr></thead>
           <tbody>${orders.map((o) => `
             <tr>
-              <td>${esc(o.bikeName)}</td>
+              <td>${esc(o.bikeName)}${o.unitCondition ? `<br><small>${o.unitCondition === 'used' ? 'مستعملة' : 'جديدة'}</small>` : ''}</td>
               <td style="color:var(--red);font-weight:700">${money(o.budget)}</td>
               <td><span class="status-pill ${o.status}">${esc(requestStatusLabel(o.status))}</span></td>
               <td>${new Date(o.createdAt).toLocaleDateString('ar-EG')}</td>
@@ -777,7 +775,7 @@ function renderVinUnitMatch(unit) {
   }
   const bike = unit.motorcycles || {};
   const available = unit.unit_status === 'available' && Number(bike.stock || 0) > 0;
-  const image = bike.image_urls?.[0] ? '<img class="vin-unit-image" src="'+esc(bike.image_urls[0])+'" alt="'+esc(bike.name)+'">' : '<div class="vin-unit-image vin-unit-placeholder"><i class="fa-solid fa-motorcycle"></i></div>';
+  const image = bike.image_urls?.[0] ? '<img class="vin-unit-image" src="'+esc(safeImageUrl(bike.image_urls[0]))+'" alt="'+esc(bike.name)+'">' : '<div class="vin-unit-image vin-unit-placeholder"><i class="fa-solid fa-motorcycle"></i></div>';
   target.innerHTML = '<div class="vin-unit-card">'+image+'<div class="vin-unit-details"><div class="contact-actions"><span class="status-badge '+(available?'success':'danger')+'">'+(available?'متاحة للبيع':'غير متاحة للبيع')+'</span><b>'+esc(bike.name||'طراز غير معروف')+'</b></div>'+
     '<div class="vin-unit-grid"><div><small>الموديل</small><b>'+esc(bike.model_year||'—')+'</b></div><div><small>الفئة</small><b>'+esc(bike.category||'—')+'</b></div><div><small>السعر</small><b>'+money(bike.price)+'</b></div><div><small>المخزون العام</small><b>'+Number(bike.stock||0)+'</b></div><div><small>رقم الشاسيه VIN</small><b>'+esc(unit.vin||'—')+'</b></div><div><small>رقم الموتور</small><b>'+esc(unit.engine_number||'—')+'</b></div><div><small>العداد</small><b>'+Number(unit.odometer_reading||0).toLocaleString('en-US')+' كم</b></div><div><small>حالة الدراجة</small><b>'+(unit.unit_condition==='used'?'مستعملة':'جديدة')+'</b></div><div><small>الباركود</small><b>'+esc(unit.barcode||'—')+'</b></div><div><small>حالة الوحدة</small><b>'+(unit.is_demo?'بيانات تجريبية — غير قابلة للبيع':esc(unit.unit_status))+'</b></div><div><small>الضمان</small><b>'+esc(unit.warranty_start||'—')+' – '+esc(unit.warranty_end||'—')+'</b></div></div>'+
     (bike.description?'<p>'+esc(bike.description)+'</p>':'')+'</div></div>'+
@@ -952,7 +950,7 @@ function pagePOS() {
           <td><b>${esc(sale.invoice_number)}</b></td><td>${esc(sale.customer_name)}</td>
           <td>${money(sale.total)}</td><td>${money(sale.amount_paid)}</td><td>${money(sale.credit_applied || 0)}</td>
           <td>${money(Math.max(0, Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0)))}</td>
-          <td><span class="status-pill ${sale.payment_status}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
+          <td><span class="status-pill ${esc(sale.payment_status)}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
           <td>${money(sale.returnedAmount || 0)}</td>
           <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
           <td><button class="btn btn-outline btn-sm" data-view-invoice="${esc(sale.id)}">عرض / طباعة</button> ${Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} ${(state.customerCredits.find(c => c.customerId === sale.customer_id)?.balance || 0) > 0 && Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-apply-credit="${esc(sale.id)}">استخدام رصيد</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
@@ -978,7 +976,7 @@ function pageSalesTools() {
  const bikeLines=bikes.map(b=>'<div class="form-row" data-quote-line="'+esc(b.id)+'"><div class="field"><label>'+esc(b.name)+' — المتاح '+b.stock+'</label><input type="number" name="quantity" min="0" max="'+b.stock+'" step="1" value="0"></div><div class="field"><label>سعر الوحدة</label><input type="number" name="unit_price" min="0" step="0.01" value="'+Number(b.price||0)+'"></div></div>').join('');
  const quoteRows=(state.salesQuotations||[]).map(q=>{
   const items=(state.salesQuotationItems||[]).filter(i=>i.quotation_id===q.id);
-  return '<tr><td>#'+q.quotation_number+'</td><td>'+esc(q.customer_name)+'</td><td>'+esc(q.customer_phone)+'</td><td>'+money(q.total_amount)+'</td><td>'+esc(q.valid_until)+'</td><td>'+esc(q.status)+'</td><td>'+(q.status==='draft'||q.status==='sent'?'<form id="quotationStatusForm" class="inline-form" data-quote-id="'+esc(q.id)+'"><select name="status"><option value="sent">إرسال</option><option value="accepted">اعتماد العميل</option><option value="cancelled">إلغاء</option></select><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':q.status==='accepted'?'<form id="convertQuotationForm" class="form-grid" data-quote-id="'+esc(q.id)+'"><input type="number" name="payment_amount" min="0" step="0.01" value="0" placeholder="دفعة مقدمة إن وجدت"><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select><button class="btn btn-primary btn-sm" type="submit">تحويل إلى فاتورة</button></form>':q.status==='converted'?'<a href="#" data-route="sales">فاتورة '+esc(q.sale_id||'')+'</a>':'—')+'</td></tr><tr><td colspan="7"><small>'+items.map(i=>esc(i.motorcycles?.name||'')+' × '+i.quantity+' = '+money(i.line_total)).join(' | ')+'</small></td></tr>';
+  return '<tr><td>#'+esc(q.quotation_number)+'</td><td>'+esc(q.customer_name)+'</td><td>'+esc(q.customer_phone)+'</td><td>'+money(q.total_amount)+'</td><td>'+esc(q.valid_until)+'</td><td>'+esc(q.status)+'</td><td>'+(q.status==='draft'||q.status==='sent'?'<form id="quotationStatusForm" class="inline-form" data-quote-id="'+esc(q.id)+'"><select name="status"><option value="sent">إرسال</option><option value="accepted">اعتماد العميل</option><option value="cancelled">إلغاء</option></select><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':q.status==='accepted'?'<form id="convertQuotationForm" class="form-grid" data-quote-id="'+esc(q.id)+'"><input type="number" name="payment_amount" min="0" step="0.01" value="0" placeholder="دفعة مقدمة إن وجدت"><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select><button class="btn btn-primary btn-sm" type="submit">تحويل إلى فاتورة</button></form>':q.status==='converted'?'<a href="#" data-route="sales">فاتورة '+esc(q.sale_id||'')+'</a>':'—')+'</td></tr><tr><td colspan="7"><small>'+items.map(i=>esc(i.motorcycles?.name||'')+' × '+i.quantity+' = '+money(i.line_total)).join(' | ')+'</small></td></tr>';
  }).join('');
  const deliveredIds=new Set((state.saleDeliveries||[]).map(d=>d.sale_id));
  const deliverySales=sales.filter(s=>s.status==='posted'&&!deliveredIds.has(s.id));
@@ -1016,9 +1014,9 @@ function pageCustomerRelations() {
 function pageInventoryTools() {
  const u=currentUser(),canFinance=hasRole('admin','manager','owner')||hasPermission('finance_manage'),canCatalog=canFinance||hasPermission('catalog_manage');
  if(!u||!canCatalog)return pageNoPermission();
- const bikes=state.bikes||[],costMap=new Map((state.inventoryCosts||[]).map(x=>[x.motorcycle_id,x]));
+ const allBikes=state.bikes||[],bikes=allBikes.filter(b=>!b.is_demo),realModelIds=new Set(bikes.map(b=>b.id)),realUnits=(state.motorcycleUnits||[]).filter(x=>!x.is_demo&&realModelIds.has(x.motorcycle_id)),costMap=new Map((state.inventoryCosts||[]).map(x=>[x.motorcycle_id,x]));
  const bikeOpts=bikes.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.name)+' — مخزون '+b.stock+'</option>').join('');
- const unitOpts=(state.motorcycleUnits||[]).filter(x=>x.unit_status!=='sold'&&x.unit_status!=='retired').map(x=>'<option value="'+esc(x.id)+'">'+esc(x.vin)+' — '+esc(x.motorcycles?.name||'')+'</option>').join('');
+ const unitOpts=realUnits.filter(x=>x.unit_status!=='sold'&&x.unit_status!=='retired').map(x=>'<option value="'+esc(x.id)+'">'+esc(x.vin)+' — '+esc(x.motorcycles?.name||'')+'</option>').join('');
  const warrantyOpts=(state.warranties||[]).filter(x=>x.status==='active'&&x.end_date>=new Date().toISOString().slice(0,10)).map(x=>'<option value="'+esc(x.id)+'">ضمان #'+x.warranty_number+' — '+esc(x.customer_name)+'</option>').join('');
  const employeeOpts=(state.employees||[]).filter(x=>x.employment_status==='active').map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+'</option>').join('');
  const saleOpts=(state.sales||[]).map(x=>'<option value="'+esc(x.id)+'">فاتورة '+esc(x.invoice_number)+' — '+esc(x.customer_name)+'</option>').join('');
@@ -1027,11 +1025,11 @@ function pageInventoryTools() {
  const warrantyRows=(state.warranties||[]).map(x=>'<tr><td>#'+x.warranty_number+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc(x.customer_phone)+'</td><td>'+esc(x.start_date)+' – '+esc(x.end_date)+'</td><td>'+esc(x.status)+'</td></tr>').join('');
  const serviceRows=(state.serviceOrders||[]).map(x=>'<tr><td>#'+x.service_number+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc(x.customer_phone)+'</td><td>'+esc(x.issue_description)+'</td><td>'+money(x.estimated_cost)+'</td><td>'+esc(x.status)+'</td><td>'+(canCatalog&&!['completed','cancelled'].includes(x.status)?'<form id="serviceStatusForm" class="inline-form" data-order-id="'+esc(x.id)+'"><select name="status"><option value="in_progress">قيد العمل</option><option value="waiting_parts">بانتظار قطع غيار</option><option value="completed">مكتمل</option><option value="cancelled">ملغي</option></select><input name="actual_cost" type="number" min="0" step="0.01" placeholder="التكلفة الفعلية"><input name="diagnosis" placeholder="التشخيص"><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':'—')+'</td></tr>').join('');
  const reorderRows=(state.reorderAlerts||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+x.stock+'</td><td>'+x.reorder_level+'</td><td>'+money(x.unit_cost)+'</td><td>'+money(x.stock_value)+'</td></tr>').join('');
- const reconciliation=(state.inventoryReconciliation||[]).filter(x=>Number(x.difference)!==0);
+ const reconciliation=(state.inventoryReconciliation||[]).filter(x=>realModelIds.has(x.motorcycle_id)&&Number(x.difference)!==0);
  const reconciliationRows=reconciliation.map(x=>'<tr><td>'+esc(x.motorcycle_name)+'</td><td>'+x.model_stock+'</td><td>'+x.physical_units+'</td><td>'+x.difference+'</td><td>'+x.available_units+' متاح / '+x.reserved_units+' محجوز / '+x.service_units+' صيانة</td></tr>').join('');
 
  return '<h2 class="page-title"><i class="fa-solid fa-warehouse"></i> إدارة المخزون والجرد والضمان والصيانة</h2><p class="page-sub">تسجيل تكلفة المخزون الفعلية، حدود إعادة الطلب، أرقام الهياكل والباركود، الجرد الدوري مع قيد فروق المخزون، الضمان وأوامر الصيانة.</p>'+
- '<div class="stats-grid"><div class="stat-card"><div class="stat-label">طرازات المخزون</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">أرقام هياكل فعلية</div><div class="stat-value">'+(state.motorcycleUnits||[]).filter(x=>!x.is_demo).length+'</div></div><div class="stat-card"><div class="stat-label">وحدات ببيانات تجريبية</div><div class="stat-value">'+(state.motorcycleUnits||[]).filter(x=>x.is_demo).length+'</div></div><div class="stat-card"><div class="stat-label">تنبيهات إعادة الطلب</div><div class="stat-value">'+(state.reorderAlerts||[]).length+'</div></div><div class="stat-card"><div class="stat-label">أوامر صيانة مفتوحة</div><div class="stat-value">'+(state.serviceOrders||[]).filter(x=>!['completed','cancelled'].includes(x.status)).length+'</div></div></div>'+
+ '<div class="stats-grid"><div class="stat-card"><div class="stat-label">طرازات المخزون</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">أرقام هياكل فعلية</div><div class="stat-value">'+realUnits.length+'</div></div><div class="stat-card"><div class="stat-label">وحدات ببيانات تجريبية أو تابعة لطراز تجريبي</div><div class="stat-value">'+((state.motorcycleUnits||[]).length-realUnits.length)+'</div></div><div class="stat-card"><div class="stat-label">تنبيهات إعادة الطلب</div><div class="stat-value">'+(state.reorderAlerts||[]).length+'</div></div><div class="stat-card"><div class="stat-label">أوامر صيانة مفتوحة</div><div class="stat-value">'+(state.serviceOrders||[]).filter(x=>!['completed','cancelled'].includes(x.status)).length+'</div></div></div>'+
  '<div class="panel"><div class="panel-title">مطابقة رصيد الطراز مع الوحدات الفعلية</div><p class="hint">يجب أن يساوي رصيد الطراز عدد الوحدات المتاحة والمحجوزة وتحت الصيانة. سجلات الفروق القديمة تحتاج تسجيل أرقام الشاسيه أو مراجعة حركة مخزون قبل اعتماد الجرد أو البيع.</p><div class="table-wrap"><table><thead><tr><th>الطراز</th><th>رصيد الطراز</th><th>الوحدات المسجلة</th><th>الفرق</th><th>تفصيل الحالات</th></tr></thead><tbody>'+(reconciliationRows||'<tr><td colspan="5">لا توجد فروق بين الرصيد والوحدات المسجلة</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">تكلفة المخزون وحد إعادة الطلب</div><p class="hint">يُحدّث النظام متوسط تكلفة الوحدة المرجح تلقائيًا من استلامات الشراء بعد خصم مرتجعات المورد. يمكن للمحاسب تعديل التكلفة يدويًا عند وجود تسوية موثقة.</p><div class="table-wrap"><table><thead><tr><th>الدراجة</th><th>المخزون</th><th>متوسط التكلفة المرجح</th><th>حد الطلب</th><th>تحديث التكلفة / الحد</th></tr></thead><tbody>'+(costRows||'<tr><td colspan="5">لا توجد دراجات</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">إدارة وحدات الدراجات</div><p>أرقام الشاسيه والموتور وتفاصيل كل دراجة أصبحت داخل إدارة الدراجات. افتح مجلد النوع لإضافة الوحدات أو تعديل بياناتها وحالاتها.</p><button class="btn btn-outline" data-nav="manage-bikes">فتح إدارة الدراجات</button></div>'+
@@ -1322,7 +1320,7 @@ function pageInventory() {
             const st = b.stock <= 0 ? 'نفذ' : b.stock <= 2 ? 'منخفض' : 'متوفر';
             const img = (b.images && b.images[0]) || '';
             return `<tr>
-              <td><img class="mini-img" src="${esc(img)}" alt="" loading="lazy"></td>
+              <td><img class="mini-img" src="${esc(safeImageUrl(img))}" alt="" loading="lazy"></td>
               <td><b>${esc(b.name)}</b>${b.is_demo ? '<small class="demo-data-label">تجريبية</small>' : ''} </td>
               <td>${esc(b.model)}</td>
               <td>${esc(b.category)}</td>
@@ -1370,24 +1368,28 @@ function pageDashboard() {
 }
 
 function unitStatusLabel(status) {
-  return ({available:'متاحة للبيع',reserved:'محجوزة',sold:'مباعة',retired:'مستبعدة من البيع'})[status] || status || 'غير محددة';
+  return ({available:'متاحة للبيع',reserved:'محجوزة',sold:'مباعة',service:'تحت الصيانة',retired:'مستبعدة من المخزون'})[status] || status || 'غير محددة';
 }
 function unitRegistrationFormHTML(motorcycleId) {
   const bike = (state.bikes || []).find((item) => item.id === motorcycleId);
   if (!bike) return '';
-  return '<div class="modal-header"><h3><i class="fa-solid fa-barcode"></i> إضافة وحدة إلى '+esc(bike.name)+'</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>' +
+  return '<div class="modal-header"><h3><i class="fa-solid fa-barcode"></i> تسجيل دراجة فعلية — '+esc(bike.name)+'</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>' +
+    '<p class="hint">هذا الإجراء لإدخال رصيد افتتاحي موجود فعليًا بالمعرض فقط. إذا كانت الدراجة واردة من مورد جديد، استخدم أمر التوريد والاستلام وفاتورة المورد حتى لا تُسجل التكلفة مرتين.</p>' +
     '<form id="motorcycleUnitForm" class="form-grid"><input type="hidden" name="motorcycle_id" value="'+esc(bike.id)+'">' +
     '<div class="form-row"><div class="field"><label>رقم الشاسيه (VIN)</label><input name="vin" required maxlength="80"></div><div class="field"><label>رقم الموتور</label><input name="engine_number" maxlength="80"></div></div>' +
     '<div class="form-row"><div class="field"><label>الباركود</label><input name="barcode" maxlength="80"></div><div class="field"><label>عداد الكيلومترات</label><input name="odometer_reading" type="number" min="0" step="1" value="0" required></div></div>' +
-    '<div class="form-row"><div class="field"><label>حالة الدراجة</label><select name="unit_condition"><option value="new">جديدة</option><option value="used">مستعملة</option></select></div><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date"></div></div>' +
-    '<div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="500"></textarea></div><button class="btn btn-primary btn-block" type="submit">حفظ الوحدة</button></form>';
+    '<div class="form-row"><div class="field"><label>حالة الدراجة</label><select name="unit_condition"><option value="new">جديدة</option><option value="used">مستعملة</option></select></div><div class="field"><label>تكلفة الوحدة الافتتاحية (ج.م)</label><input name="unit_cost" type="number" min="0.01" step="0.01" required></div></div>' +
+    '<div class="form-row"><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date"></div></div>' +
+    '<div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="500"></textarea></div>' +
+    '<p class="hint">تُحفظ تكلفة الوحدة، ويُحدّث متوسط تكلفة مخزون الطراز، ويُنشأ قيد افتتاحي: مدين المخزون ودائن رأس المال. بعد التسجيل تظهر الوحدة في المتجر إذا كانت متاحة.</p>' +
+    '<button class="btn btn-primary btn-block" type="submit">حفظ الوحدة</button></form>';
 }
 function unitEditFormHTML(unit) {
   return '<div class="modal-header"><h3><i class="fa-solid fa-pen"></i> تعديل بيانات الوحدة</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>' +
     '<form id="motorcycleUnitEditForm" class="form-grid" data-unit-id="'+esc(unit.id)+'">' +
     '<div class="form-row"><div class="field"><label>رقم الشاسيه (VIN)</label><input name="vin" required maxlength="80" value="'+esc(unit.vin)+'"></div><div class="field"><label>رقم الموتور</label><input name="engine_number" maxlength="80" value="'+esc(unit.engine_number||'')+'"></div></div>' +
     '<div class="form-row"><div class="field"><label>الباركود</label><input name="barcode" maxlength="80" value="'+esc(unit.barcode||'')+'"></div><div class="field"><label>عداد الكيلومترات</label><input name="odometer_reading" type="number" min="0" step="1" required value="'+Number(unit.odometer_reading||0)+'"></div></div>' +
-    '<div class="form-row"><div class="field"><label>حالة الدراجة</label><select name="unit_condition"><option value="new" '+(unit.unit_condition==='new'?'selected':'')+'>جديدة</option><option value="used" '+(unit.unit_condition==='used'?'selected':'')+'>مستعملة</option></select></div><div class="field"><label>حالة المخزون</label><select name="unit_status">'+['available','reserved',...(unit.sale_item_id?['sold']:[]),'retired'].map((status)=>'<option value="'+status+'" '+(unit.unit_status===status?'selected':'')+'>'+unitStatusLabel(status)+'</option>').join('')+'</select></div></div>' +
+    '<div class="form-row"><div class="field"><label>حالة الدراجة</label><select name="unit_condition"><option value="new" '+(unit.unit_condition==='new'?'selected':'')+'>جديدة</option><option value="used" '+(unit.unit_condition==='used'?'selected':'')+'>مستعملة</option></select></div><div class="field"><label>حالة المخزون</label><select name="unit_status">'+['available','reserved','service',...(unit.sale_item_id?['sold']:[]),'retired'].map((status)=>'<option value="'+status+'" '+(unit.unit_status===status?'selected':'')+'>'+unitStatusLabel(status)+'</option>').join('')+'</select></div></div>' +
     '<div class="form-row"><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date" value="'+esc(unit.warranty_start||'')+'"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date" value="'+esc(unit.warranty_end||'')+'"></div></div>' +
     '<div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="500">'+esc(unit.notes||'')+'</textarea></div>' +
     (unit.sale_item_id ? '<p class="hint">هذه الوحدة مرتبطة بفاتورة بيع؛ لا يمكن تغيير حالة بيعها من هنا.</p>' : '') +
@@ -1399,31 +1401,44 @@ function pageManageBikes() {
   if (u.role === 'staff' && !hasPermission('catalog_manage')) return pageNoPermission();
   const bikes = get(DB.BIKES) || [];
   const units = state.motorcycleUnits || [];
-  const totalUnits = units.length;
-  const availableUnits = units.filter((x)=>x.unit_status==='available' && !x.is_demo).length;
-  const soldUnits = units.filter((x)=>x.unit_status==='sold').length;
+  const isRealUnit = (unit) => !unit.is_demo && !bikes.find((bike)=>bike.id===unit.motorcycle_id)?.is_demo;
+  const realUnits = units.filter(isRealUnit);
+  const totalUnits = realUnits.length;
+  const demoUnits = units.length - realUnits.length;
+  const availableUnits = realUnits.filter((x)=>x.unit_status==='available').length;
+  const soldUnits = realUnits.filter((x)=>x.unit_status==='sold').length;
+  const publishedUnitIds = new Set((state.storeUnits || []).map((x) => x.unit_id));
+  const publishedUnits = realUnits.filter((x) => publishedUnitIds.has(x.id)).length;
   const groups = bikes.map((b) => {
     const list = units.filter((x)=>x.motorcycle_id===b.id);
-    const available = list.filter((x)=>x.unit_status==='available' && !x.is_demo).length;
+    const available = list.filter((x)=>x.unit_status==='available' && !x.is_demo && !b.is_demo).length;
     const sold = list.filter((x)=>x.unit_status==='sold').length;
     const reserved = list.filter((x)=>x.unit_status==='reserved').length;
     const retired = list.filter((x)=>x.unit_status==='retired').length;
-    const rows = list.map((x) => '<article class="unit-admin-card '+(x.is_demo?'demo-unit-row':'')+'">' +
-      '<div class="unit-admin-main"><div><b>شاسيه: <span dir="ltr">'+esc(x.vin)+'</span></b><small>موتور: <span dir="ltr">'+esc(x.engine_number||'غير مسجل')+'</span></small></div>' +
-      '<span class="status-pill '+(x.unit_status==='available'?'available':x.unit_status==='sold'?'out':'pending')+'">'+unitStatusLabel(x.unit_status)+'</span>'+(x.is_demo?'<small class="demo-data-label">تجريبية</small>':'')+'</div>' +
-      '<div class="unit-admin-meta"><span>'+(x.unit_condition==='used'?'مستعملة':'جديدة')+'</span><span>العداد: '+Number(x.odometer_reading||0).toLocaleString('en-US')+' كم</span><span>باركود: '+esc(x.barcode||'—')+'</span></div>' +
-      '<div class="unit-admin-meta"><span>الضمان: '+esc(x.warranty_start||'—')+' إلى '+esc(x.warranty_end||'—')+'</span><span>تسجيل: '+esc((x.registered_at||'').slice(0,10)||'—')+'</span></div>' +
-      (x.notes?'<p class="hint">'+esc(x.notes)+'</p>':'') +
-      '<div class="unit-admin-actions"><button class="btn btn-outline btn-sm" data-edit-unit="'+esc(x.id)+'"><i class="fa-solid fa-pen"></i> تعديل الوحدة</button></div></article>').join('');
+    const rows = list.map((x) => {
+      const visibleInStore = !x.is_demo && !b.is_demo && x.unit_status === 'available';
+      const canDelete = !x.sale_item_id && x.unit_status !== 'sold';
+      return '<article class="unit-admin-card '+(x.is_demo||b.is_demo?'demo-unit-row':'')+'">' +
+        '<div class="unit-admin-main"><div><b>شاسيه: <span dir="ltr">'+esc(x.vin)+'</span></b><small>موتور: <span dir="ltr">'+esc(x.engine_number||'غير مسجل')+'</span></small></div>' +
+        '<span class="status-pill '+(x.unit_status==='available'?'available':x.unit_status==='sold'?'out':'pending')+'">'+unitStatusLabel(x.unit_status)+'</span>' +
+        '<span class="status-pill '+(visibleInStore?'available':'pending')+'">'+(visibleInStore?'تظهر في المتجر تلقائيًا':'لا تظهر — ليست متاحة للبيع')+'</span>'+(x.is_demo||b.is_demo?'<small class="demo-data-label">تجريبية</small>':'')+'</div>' +
+        '<div class="unit-admin-meta"><span>'+(x.unit_condition==='used'?'مستعملة':'جديدة')+'</span><span>العداد: '+Number(x.odometer_reading||0).toLocaleString('en-US')+' كم</span><span>باركود: '+esc(x.barcode||'—')+'</span></div>' +
+        '<div class="unit-admin-meta"><span>الضمان: '+esc(x.warranty_start||'—')+' إلى '+esc(x.warranty_end||'—')+'</span><span>تسجيل: '+esc((x.registered_at||'').slice(0,10)||'—')+'</span></div>' +
+        (x.notes?'<p class="hint">'+esc(x.notes)+'</p>':'') +
+        '<div class="unit-admin-actions"><button class="btn btn-outline btn-sm" data-edit-unit="'+esc(x.id)+'"><i class="fa-solid fa-pen"></i> تعديل الوحدة</button>' +
+        '' +
+        (canDelete?'<button class="btn btn-danger btn-sm" data-delete-unit="'+esc(x.id)+'" data-unit-vin="'+esc(x.vin)+'"><i class="fa-solid fa-trash"></i> حذف السجل</button>':'') +
+        '</div></article>';
+    }).join('');
     return '<details class="bike-folder"><summary><span class="bike-folder-name"><i class="fa-solid fa-folder"></i> '+esc(b.name)+' <small>موديل '+esc(b.model)+'</small></span><span class="bike-folder-count">'+list.length+' وحدة · متاح '+available+'</span></summary>' +
       '<div class="bike-folder-body"><div class="bike-folder-summary"><span>الإجمالي: <b>'+list.length+'</b></span><span>متاح: <b>'+available+'</b></span><span>مباع: <b>'+sold+'</b></span><span>محجوز: <b>'+reserved+'</b></span><span>مستبعد: <b>'+retired+'</b></span></div>' +
-      '<div class="bike-folder-actions"><button class="btn btn-outline btn-sm" data-edit-bike="'+esc(b.id)+'"><i class="fa-solid fa-pen"></i> تعديل بيانات النوع</button><button class="btn btn-primary btn-sm" data-add-unit-for="'+esc(b.id)+'"><i class="fa-solid fa-plus"></i> إضافة دراجة من هذا النوع</button>'+(b.is_demo?'<button class="btn btn-danger btn-sm" data-delete-bike="'+esc(b.id)+'" data-bike-name="'+esc(b.name)+'"><i class="fa-solid fa-trash"></i> حذف النوع التجريبي</button>':'')+'</div>' +
+      '<div class="bike-folder-actions"><button class="btn btn-outline btn-sm" data-edit-bike="'+esc(b.id)+'"><i class="fa-solid fa-pen"></i> تعديل بيانات النوع</button>'+(!b.is_demo?'<button class="btn btn-primary btn-sm" data-add-unit-for="'+esc(b.id)+'"><i class="fa-solid fa-plus"></i> تسجيل دراجة فعلية</button>':'<span class="demo-data-label">نوع تجريبي — لا يقبل مخزونًا فعليًا</span>')+''+(b.is_demo?'<button class="btn btn-danger btn-sm" data-delete-bike="'+esc(b.id)+'" data-bike-name="'+esc(b.name)+'"><i class="fa-solid fa-trash"></i> حذف النوع التجريبي</button>':'')+'</div>' +
       (rows || '<div class="empty">لا توجد وحدات مسجلة لهذا النوع بعد.</div>')+'</div></details>';
   }).join('');
   return '<h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> إدارة الدراجات والمخزون</h2>' +
     '<p class="page-sub">كل مجلد يمثل نوعاً واحداً. افتح المجلد لرؤية كل دراجة فعلية وأرقامها وحالتها وتفاصيلها.</p>' +
-    '<div class="stats-grid"><div class="stat-card"><div class="stat-label">أنواع الدراجات</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">إجمالي الوحدات المسجلة</div><div class="stat-value">'+totalUnits+'</div></div><div class="stat-card"><div class="stat-label">وحدات متاحة للبيع</div><div class="stat-value">'+availableUnits+'</div></div><div class="stat-card"><div class="stat-label">وحدات مباعة</div><div class="stat-value">'+soldUnits+'</div></div></div>' +
-    '<div class="panel"><div class="bike-folder-toolbar"><button class="btn btn-primary" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة نوع دراجة</button><button class="btn btn-outline" id="syncTelegramPhotosBtn"><i class="fa-solid fa-rotate"></i> مزامنة الصور</button></div>' +
+    '<div class="stats-grid"><div class="stat-card"><div class="stat-label">أنواع الدراجات</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">إجمالي الوحدات المسجلة</div><div class="stat-value">'+totalUnits+'</div></div><div class="stat-card"><div class="stat-label">وحدات متاحة للبيع</div><div class="stat-value">'+availableUnits+'</div></div><div class="stat-card"><div class="stat-label">معروضة على المتجر</div><div class="stat-value">'+publishedUnits+'</div></div><div class="stat-card"><div class="stat-label">وحدات مباعة</div><div class="stat-value">'+soldUnits+'</div></div><div class="stat-card"><div class="stat-label">سجلات تجريبية</div><div class="stat-value">'+demoUnits+'</div></div></div>' +
+    '<div class="panel"><div class="bike-folder-toolbar"><button class="btn btn-primary" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة نوع دراجة</button><button class="btn btn-outline" id="syncTelegramPhotosBtn"><i class="fa-solid fa-rotate"></i> مزامنة الصور</button></div><p class="hint">المخزون الفعلي هو المتجر نفسه: كل وحدة حقيقية متاحة للبيع تظهر تلقائيًا، وتختفي تلقائيًا عند بيعها أو حجزها أو تحويلها للصيانة. حذف السجل متاح فقط للوحدات غير المرتبطة بمبيعات أو مستندات مخزون.</p>' +
     (groups || '<div class="empty">لا توجد أنواع دراجات مسجلة.</div>')+'</div>';
 }
 
@@ -1548,7 +1563,7 @@ function pageStaffOrders() {
         const person = {phone:r.customerPhone,email:r.customerEmail};
         const replies = state.requestReplies.filter((x) => x.request_id === r.id);
         return `<tr><td><b>${esc(r.customerName || '—')}</b><br><small>${esc(r.customerPhone || r.customerEmail || '—')}</small><br><small>يفضل: ${esc(({phone:'اتصال',whatsapp:'واتساب',email:'بريد',sms:'SMS'})[r.preferredContact] || '—')}</small>${contactCells(person)}</td>
-          <td>${esc(r.bikeName || '—')} ${esc(r.model || '')}<br><small>${esc(r.notes || '')}</small></td>
+          <td>${esc(r.bikeName || '—')} ${esc(r.model || '')}${r.requestedUnitCondition ? `<br><small>الوحدة: ${r.requestedUnitCondition === 'used' ? 'مستعملة' : 'جديدة'}${r.requestedUnitVin ? ` — VIN: ${esc(r.requestedUnitVin)}` : ''}</small>` : ''}<br><small>${esc(r.notes || '')}</small></td>
           <td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td>
           <td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td>
           <td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="request" data-record-id="${esc(r.id)}">رد / سجل الرد (${replies.length})</button>${replies.slice(0,2).map((reply) => `<div class="hint">${esc(reply.channel)}: ${esc(reply.reply_body.slice(0,110))}${reply.sent_at ? ' — تم الإرسال' : ' — ملاحظة داخلية'}</div>`).join('')}` : 'عرض فقط'}
@@ -1699,8 +1714,8 @@ function navigate(route) {
 }
 
 /* ---------- Buy Flow ---------- */
-function requireCustomerLogin(action, bikeId = null) {
-  const pending = { action, bikeId };
+function requireCustomerLogin(action, bikeId = null, unitId = null) {
+  const pending = { action, bikeId, unitId: action === 'buy' ? (unitId || null) : null };
   state.pendingAuthAction = pending;
   try { sessionStorage.setItem('ekm_pending_auth_action', JSON.stringify(pending)); } catch { /* Session storage may be unavailable. */ }
   toast('سجّل الدخول أو أنشئ حسابًا للمتابعة؛ سنعيدك إلى الإجراء الذي اخترته', 'info');
@@ -1732,24 +1747,37 @@ async function resumePendingAuthAction() {
   try { sessionStorage.removeItem('ekm_pending_auth_action'); } catch { /* Session storage may be unavailable. */ }
   if (!pending || currentUser()?.role !== 'customer') return;
   if (!['favorite', 'buy'].includes(pending.action) || typeof pending.bikeId !== 'string') return;
+  if (pending.action === 'favorite') {
+    if (!state.bikes.some((bike) => bike.id === pending.bikeId)) return;
+    await toggleFavorite(pending.bikeId);
+    return;
+  }
+  await Promise.all([loadMotorcycles(), loadStoreUnits()]);
   if (!state.bikes.some((bike) => bike.id === pending.bikeId)) return;
-  if (pending.action === 'favorite') await toggleFavorite(pending.bikeId);
-  if (pending.action === 'buy') handleBuy(pending.bikeId);
+  const unitId = typeof pending.unitId === 'string' && pending.unitId ? pending.unitId : null;
+  if (unitId && !(state.storeUnits || []).some((unit) => unit.unit_id === unitId && unit.motorcycle_id === pending.bikeId)) {
+    toast('الوحدة التي اخترتها لم تعد متاحة؛ حدّث المتجر واختر وحدة أخرى', 'error');
+    return;
+  }
+  handleBuy(pending.bikeId, unitId);
 }
 
-function handleBuy(bikeId) {
+function handleBuy(bikeId, unitId = null) {
   const u = currentUser();
-  if (!u) { requireCustomerLogin('buy', bikeId); return; }
+  if (!u) { requireCustomerLogin('buy', bikeId, unitId); return; }
   if (u.role !== 'customer') { toast('الشراء وطلبات العملاء متاحة لحسابات العملاء فقط', 'error'); return; }
   const bike = state.bikes.find((b) => b.id === bikeId);
   if (!bike) return toast('الدراجة غير موجودة', 'error');
-  const hasAvailableUnit = (state.storeUnits || []).some((unit) => unit.motorcycle_id === bikeId);
-  if (!hasAvailableUnit || bike.status !== 'available') return toast('هذه الوحدة لم تعد متاحة حالياً؛ حدّث الصفحة لاختيار وحدة أخرى', 'error');
+  const selectedUnit = unitId
+    ? (state.storeUnits || []).find((unit) => unit.unit_id === unitId && unit.motorcycle_id === bikeId)
+    : (state.storeUnits || []).find((unit) => unit.motorcycle_id === bikeId);
+  if (!selectedUnit || bike.status !== 'available') return toast('هذه الوحدة لم تعد متاحة حالياً؛ حدّث الصفحة لاختيار وحدة أخرى', 'error');
+  const conditionLabel = selectedUnit.unit_condition === 'used' ? 'مستعملة' : 'جديدة';
   openModal(`
-    <div class="modal-header"><h3><i class="fa-solid fa-cart-shopping"></i> طلب شراء ${esc(bike.name)}</h3>
+    <div class="modal-header"><h3><i class="fa-solid fa-cart-shopping"></i> طلب شراء ${esc(bike.name)} — ${conditionLabel}</h3>
       <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
     <p class="text-red mb-2" style="font-size:20px;font-weight:900">${money(bike.price)}</p>
-    <form id="quickBuyRequestForm" class="form-grid" data-bike-id="${esc(bike.id)}">
+    <form id="quickBuyRequestForm" class="form-grid" data-bike-id="${esc(bike.id)}" data-unit-id="${esc(selectedUnit.unit_id)}">
       <div class="field"><label>اسمك</label><input name="requester_name" required maxlength="120" value="${esc(u?.name || '')}"></div>
       <div class="form-row">
         <div class="field"><label>رقم الهاتف</label><input name="requester_phone" type="tel" maxlength="32" value="${esc(u?.phone || '')}"></div>
@@ -1761,8 +1789,8 @@ function handleBuy(bikeId) {
     </form>`);
 }
 
-async function confirmBuy(bikeId) {
-  handleBuy(bikeId);
+async function confirmBuy(bikeId, unitId = null) {
+  handleBuy(bikeId, unitId);
 }
 
 /* ---------- Event: Click Delegation ---------- */
@@ -1991,16 +2019,32 @@ document.addEventListener('click', async (e) => {
       .select('id,motorcycle_id,motorcycle_name,model_year,quantity,unit_price')
       .eq('sale_id', sale.id).order('created_at');
     if (error) { toast('تعذر تحميل بنود الفاتورة','error'); return; }
+    const saleItemIds = (saleItems || []).map(item => item.id);
+    const unitResult = saleItemIds.length
+      ? await supabase.from('sale_item_units').select('sale_item_id,vin_snapshot,engine_number_snapshot').in('sale_item_id', saleItemIds)
+      : {data:[],error:null};
+    if (unitResult.error) { toast('تعذر تحميل أرقام الشاسيه المرتبطة بالفاتورة','error'); return; }
+    const unitSnapshots = unitResult.data || [];
     const items = (saleItems || []).map(item => {
       const returned = state.saleReturnItems.filter(x => x.sale_item_id === item.id).reduce((n,x)=>n+Number(x.quantity),0);
-      return {...item, remaining: Number(item.quantity)-returned};
+      return {
+        ...item,
+        unitSnapshots: unitSnapshots.filter(unit => unit.sale_item_id === item.id),
+        remaining: Number(item.quantity)-returned
+      };
     }).filter(item => item.remaining > 0);
     if (!items.length) { toast('تم إرجاع كامل كميات هذه الفاتورة','info'); return; }
-    const rows = items.map(item => `<div class="sale-return-row form-row" data-sale-item-id="${esc(item.id)}">
+    const rows = items.map(item => {
+      const unitLabel = item.unitSnapshots.length
+        ? item.unitSnapshots.map(unit => `VIN: ${esc(unit.vin_snapshot)}${unit.engine_number_snapshot ? ` — موتور: ${esc(unit.engine_number_snapshot)}` : ''}`).join(' | ')
+        : 'فاتورة قديمة غير مرتبطة بأرقام شاسيه';
+      return `<div class="sale-return-row form-row" data-sale-item-id="${esc(item.id)}">
       <div class="field"><label>${esc(item.motorcycle_name)} — موديل ${esc(item.model_year || '—')} — المتبقي ${item.remaining}</label>
+      <small class="hint">${unitLabel}</small>
       <input name="quantity" type="number" min="0" max="${item.remaining}" value="0" required></div>
       <div class="field"><label>حالة القطعة</label><select name="disposition"><option value="restock">صالحة لإعادة البيع (إضافة للمخزون)</option><option value="damaged">تالفة / لا تعاد للمخزون</option></select></div>
-      <small class="hint">سعر الوحدة: ${money(item.unit_price)}</small></div>`).join('');
+      <small class="hint">سعر الوحدة: ${money(item.unit_price)}</small></div>`;
+    }).join('');
     openModal(`<div class="modal-header"><h3>مرتجع فاتورة ${esc(sale.invoice_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
       <p>العميل: <b>${esc(sale.customer_name)}</b> — إجمالي الفاتورة: ${money(sale.total)}</p>
       <p class="hint">تُخصم قيمة المرتجع من مديونية الفاتورة أولًا؛ لا ينشأ رصيد قابل للرد إلا إذا تجاوز ما دفعه العميل إجمالي الفاتورة بعد المرتجعات.</p>
@@ -2120,11 +2164,11 @@ document.addEventListener('click', async (e) => {
 
   /* Buy */
   const buyBtn = e.target.closest('[data-buy]');
-  if (buyBtn) { handleBuy(buyBtn.dataset.buy); return; }
+  if (buyBtn) { handleBuy(buyBtn.dataset.buy, buyBtn.dataset.unitId || null); return; }
   const confirmBtn = e.target.closest('[data-confirm-buy]');
   if (confirmBtn) { confirmBuy(confirmBtn.dataset.confirmBuy); return; }
   const loginAction = e.target.closest('[data-login-action]');
-  if (loginAction) { requireCustomerLogin(loginAction.dataset.loginAction, loginAction.dataset.bikeId || null); return; }
+  if (loginAction) { requireCustomerLogin(loginAction.dataset.loginAction, loginAction.dataset.bikeId || null, loginAction.dataset.unitId || null); return; }
 
   /* Details */
   const detailsBtn = e.target.closest('[data-details]');
@@ -2138,7 +2182,7 @@ document.addEventListener('click', async (e) => {
         <h3><i class="fa-solid fa-motorcycle"></i> ${esc(bike.name)}</h3>
         <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      ${img ? `<img src="${esc(img)}" alt="${esc(bike.name)}" style="width:100%;height:220px;object-fit:cover;border-radius:12px;margin-bottom:14px">` : ''}
+      ${img ? `<img src="${esc(safeImageUrl(img))}" alt="${esc(bike.name)}" style="width:100%;height:220px;object-fit:cover;border-radius:12px;margin-bottom:14px">` : ''}
       <p class="mb-1"><b>الموديل:</b> ${esc(bike.model)}</p>
       <p class="mb-1"><b>الفئة:</b> ${esc(bike.category)}</p>
       <p class="mb-1"><b>السعر:</b> <span class="text-red" style="font-weight:900">${money(bike.price)}</span></p>
@@ -2163,6 +2207,19 @@ document.addEventListener('click', async (e) => {
     if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تعديل الوحدة', 'error'); return; }
     const unit = (state.motorcycleUnits || []).find((item)=>item.id===editUnitButton.dataset.editUnit);
     if (unit) openModal(unitEditFormHTML(unit));
+    return;
+  }
+  const deleteUnitButton = e.target.closest('[data-delete-unit]');
+  if (deleteUnitButton) {
+    if ((!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) || !supabase) { toast('ليس لديك صلاحية حذف سجل الوحدة','error'); return; }
+    const vin = deleteUnitButton.dataset.unitVin || 'هذه الوحدة';
+    if (!confirm('هل تريد حذف سجل الشاسيه '+vin+' نهائيًا؟ لن يسمح النظام بالحذف إذا كانت الوحدة مرتبطة بفاتورة بيع أو استلام أو فاتورة مورد أو مرتجع أو أمر صيانة.')) return;
+    deleteUnitButton.disabled = true;
+    const {error} = await supabase.rpc('delete_motorcycle_unit',{p_unit_id:deleteUnitButton.dataset.deleteUnit});
+    if(error){deleteUnitButton.disabled=false;toast(error.message||'تعذر حذف سجل الوحدة','error');return;}
+    await Promise.all([loadMotorcycleUnits(),loadStoreUnits(),loadMotorcycles()]);
+    render();
+    toast('تم حذف سجل الوحدة وتحديث رصيد المخزون','success');
     return;
   }
   const deleteBike = e.target.closest('[data-delete-bike]');
@@ -2364,7 +2421,7 @@ document.addEventListener('submit', async (e) => {
   if (form.id === 'motorcycleUnitForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية تسجيل أرقام الهياكل','error'); return; }
     const fd=new FormData(form);
-    const {error}=await supabase.rpc('register_motorcycle_unit_with_engine_number',{
+    const {data:unitId,error}=await supabase.rpc('register_motorcycle_unit_with_engine_number',{
       p_motorcycle_id:fd.get('motorcycle_id'),
       p_vin:safeName(fd.get('vin')),
       p_engine_number:safeName(fd.get('engine_number'))||null,
@@ -2373,11 +2430,14 @@ document.addEventListener('submit', async (e) => {
       p_warranty_end:fd.get('warranty_end')||null,
       p_notes:safeName(fd.get('notes'))||null,
       p_odometer_reading:Number(fd.get('odometer_reading')||0),
-      p_unit_condition:String(fd.get('unit_condition')||'new')
+      p_unit_condition:String(fd.get('unit_condition')||'new'),
+      p_unit_cost:Number(fd.get('unit_cost'))
     });
     if(error){toast(error.message||'تعذر تسجيل الوحدة؛ لم يتم حفظ أي جزء من العملية','error');return;}
-    await Promise.all([loadMotorcycleUnits(),loadStoreUnits()]);
-    closeModal();render();toast('تم تسجيل الوحدة وبياناتها في عملية واحدة','success');return;
+    await Promise.all([loadMotorcycleUnits(),loadStoreUnits(),loadMotorcycles()]);
+    closeModal();render();
+    toast('تم تسجيل الدراجة في المعرض والمخزون، وأصبحت تظهر تلقائيًا في المتجر','success');
+    return;
   }
   if (form.id === 'motorcycleUnitEditForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تعديل الوحدة','error'); return; }
@@ -3092,8 +3152,11 @@ document.addEventListener('submit', async (e) => {
     if (name.length < 2 || (!phone && !email)) { toast('اكتب اسمك ورقم هاتف أو بريدًا إلكترونيًا واحدًا على الأقل', 'error'); return; }
     if ((preferred === 'email' && !email) || (preferred !== 'email' && !phone)) { toast('أدخل بيانات وسيلة التواصل التي اخترتها', 'error'); return; }
     const bike = form.id === 'quickBuyRequestForm' ? state.bikes.find((b) => b.id === form.dataset.bikeId) : null;
-    if (form.id === 'quickBuyRequestForm' && (!bike || bike.stock <= 0 || bike.status !== 'available')) {
-      toast('الدراجة لم تعد متاحة؛ حدّث الصفحة وحاول مرة أخرى', 'error'); return;
+    const requestedUnit = form.id === 'quickBuyRequestForm'
+      ? (state.storeUnits || []).find((unit) => unit.unit_id === form.dataset.unitId && unit.motorcycle_id === bike?.id)
+      : null;
+    if (form.id === 'quickBuyRequestForm' && (!bike || !requestedUnit || bike.status !== 'available')) {
+      toast('الوحدة التي اخترتها لم تعد متاحة؛ حدّث المتجر وحاول مرة أخرى', 'error'); return;
     }
     const { error } = await supabase.from('customer_requests').insert({
       client_user_id: u?.id || null,
@@ -3102,6 +3165,7 @@ document.addEventListener('submit', async (e) => {
       requester_email: email || null,
       preferred_contact: preferred,
       motorcycle_id: bike?.id || null,
+      motorcycle_unit_id: requestedUnit?.unit_id || null,
       requested_name: bike?.name || safeName(fd.get('bikeName')),
       requested_model_year: bike ? (Number(bike.model) || null) : (Number(fd.get('model')) || null),
       budget: bike ? bike.price : (Number(fd.get('budget')) || null),
@@ -3330,7 +3394,8 @@ async function loadMotorcycles() {
   let query = supabase.from('motorcycles')
     .select('id,name,model_year,category,price,stock,image_urls,status,is_demo')
     .order('created_at', { ascending: false });
-  if (!state.user || (state.user.role === 'customer') || (state.user.role === 'staff' && !hasAnyPermission('catalog_view', 'catalog_manage'))) query = query.eq('status', 'available');
+  // The physical units in the showroom are the source of truth. RLS exposes only
+  // models that have at least one real, available unit (plus authorized staff data).
   const { data, error } = await query;
   if (error) { console.error('Catalogue load failed', error); return; }
   state.bikes = (data || []).map((row) => ({
@@ -3399,7 +3464,7 @@ async function loadCustomerData() {
   const user = state.user;
   if (!user || !supabase) return;
   const [requestsResult, favoritesResult, salesResult] = await Promise.all([
-    supabase.from('customer_requests').select('id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at').eq('client_user_id', user.id).order('created_at', { ascending: false }),
+    supabase.from('customer_requests').select('id,motorcycle_id,motorcycle_unit_id,requested_unit_condition,requested_name,requested_model_year,budget,notes,status,created_at').eq('client_user_id', user.id).order('created_at', { ascending: false }),
     supabase.from('favorites').select('motorcycle_id').eq('user_id', user.id),
     supabase.from('sales').select('id,invoice_number,total,amount_paid,credit_applied,payment_status,created_at').eq('channel','showroom').eq('status','posted').order('created_at',{ascending:false}).limit(100)
   ]);
@@ -3430,7 +3495,7 @@ async function loadCustomerData() {
     balance_due: Math.max(0, Number(sale.total || 0) - Number(sale.amount_paid || 0) - Number(sale.credit_applied || 0) - (returnedBySale.get(sale.id)||0)),
     items: invoiceItems.filter((item) => item.sale_id === sale.id)
   }));
-  set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
+  set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',unitCondition:r.requested_unit_condition || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
   set(DB.ORDERS, []);
   set(DB.FAVS, { [user.id]: (favoritesResult.data || []).map((f) => f.motorcycle_id) });
 }
@@ -3605,7 +3670,7 @@ async function loadBusinessData() {
   if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
   if (state.user.role === 'staff' && !hasRequestAccess()) { set(DB.CUSTOM_REQS, []); state.contactMessages = []; return; }
   const canSeeContacts = hasPermission('customer_data_view') || hasRequestAccess();
-  const requestFields = 'id,client_user_id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at' +
+  const requestFields = 'id,client_user_id,motorcycle_id,motorcycle_unit_id,requested_unit_vin,requested_unit_condition,requested_name,requested_model_year,budget,notes,status,created_at' +
     (canSeeContacts ? ',requester_name,requester_phone,requester_email,preferred_contact' : '');
   const [requestResult, messageResult] = await Promise.all([
     supabase.from('customer_requests').select(requestFields).order('created_at', { ascending: false }).limit(200),
@@ -3621,7 +3686,7 @@ async function loadBusinessData() {
   const profiles = new Map((profileResult.data || []).map((p) => [p.id, p]));
   set(DB.CUSTOM_REQS, requests.map((r) => {
     const p = profiles.get(r.client_user_id) || {};
-    return {id:r.id,clientUserId:r.client_user_id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerName:r.requester_name || p.full_name || '',customerPhone:r.requester_phone || p.phone || '',customerEmail:r.requester_email || '',preferredContact:r.preferred_contact || 'phone',notes:r.notes || ''};
+    return {id:r.id,clientUserId:r.client_user_id,motorcycleId:r.motorcycle_id,requestedUnitId:r.motorcycle_unit_id || '',requestedUnitVin:r.requested_unit_vin || '',requestedUnitCondition:r.requested_unit_condition || '',bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerName:r.requester_name || p.full_name || '',customerPhone:r.requester_phone || p.phone || '',customerEmail:r.requester_email || '',preferredContact:r.preferred_contact || 'phone',notes:r.notes || ''};
   }));
   state.contactMessages = messageResult.data || [];
   const requestIds = requests.map((r) => r.id);
