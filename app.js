@@ -1432,7 +1432,7 @@ function pageManageBikes() {
     }).join('');
     return '<details class="bike-folder"><summary><span class="bike-folder-name"><i class="fa-solid fa-folder"></i> '+esc(b.name)+' <small>موديل '+esc(b.model)+'</small></span><span class="bike-folder-count">'+list.length+' وحدة · متاح '+available+'</span></summary>' +
       '<div class="bike-folder-body"><div class="bike-folder-summary"><span>الإجمالي: <b>'+list.length+'</b></span><span>متاح: <b>'+available+'</b></span><span>مباع: <b>'+sold+'</b></span><span>محجوز: <b>'+reserved+'</b></span><span>مستبعد: <b>'+retired+'</b></span></div>' +
-      '<div class="bike-folder-actions"><button class="btn btn-outline btn-sm" data-edit-bike="'+esc(b.id)+'"><i class="fa-solid fa-pen"></i> تعديل بيانات النوع</button>'+(!b.is_demo?'<button class="btn btn-primary btn-sm" data-add-unit-for="'+esc(b.id)+'"><i class="fa-solid fa-plus"></i> تسجيل دراجة فعلية</button>':'<span class="demo-data-label">نوع تجريبي — لا يقبل مخزونًا فعليًا</span>')+''+(b.is_demo?'<button class="btn btn-danger btn-sm" data-delete-bike="'+esc(b.id)+'" data-bike-name="'+esc(b.name)+'"><i class="fa-solid fa-trash"></i> حذف النوع التجريبي</button>':'')+'</div>' +
+      '<div class="bike-folder-actions"><button class="btn btn-outline btn-sm" data-edit-bike="'+esc(b.id)+'"><i class="fa-solid fa-pen"></i> تعديل بيانات النوع</button>'+(!b.is_demo?'<button class="btn btn-primary btn-sm" data-add-unit-for="'+esc(b.id)+'"><i class="fa-solid fa-plus"></i> تسجيل دراجة فعلية</button>':'<span class="demo-data-label">نوع تجريبي — لا يقبل مخزونًا فعليًا</span>')+''+(!b.is_demo?'<button class="btn btn-outline btn-sm" data-archive-bike="'+esc(b.id)+'" data-bike-name="'+esc(b.name)+'" '+(b.status==='unavailable'?'disabled':'')+'><i class="fa-solid fa-box-archive"></i> أرشفة وإخفاء</button>':'<button class="btn btn-danger btn-sm" data-delete-bike="'+esc(b.id)+'" data-bike-name="'+esc(b.name)+'"><i class="fa-solid fa-trash"></i> حذف النوع التجريبي</button>')+'</div>' +
       (rows || '<div class="empty">لا توجد وحدات مسجلة لهذا النوع بعد.</div>')+'</div></details>';
   }).join('');
   return '<h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> إدارة الدراجات والمخزون</h2>' +
@@ -1444,7 +1444,7 @@ function pageManageBikes() {
 
 function bikeFormHTML(bike) {
   const isEdit = !!bike;
-  const b = bike || { id: '', name: '', model: '', category: '', price: '', stock: 0, images: [], status: 'draft' };
+  const b = bike || { id: '', name: '', model: '', category: '', price: '', stock: 0, images: [], description: '', status: 'draft' };
   return `
     <div class="modal-header">
       <h3><i class="fa-solid fa-${isEdit ? 'pen' : 'plus'}"></i> ${isEdit ? 'تعديل' : 'إضافة'} دراجة</h3>
@@ -1469,8 +1469,9 @@ function bikeFormHTML(bike) {
           <option value="unavailable" ${b.status === 'unavailable' ? 'selected' : ''}>غير متاحة</option>
         </select></div>
       </div>
+      <div class="field"><label>وصف الدراجة ومواصفاتها</label><textarea name="description" rows="4" maxlength="10000">${esc(b.description || '')}</textarea><small class="hint">يظهر الوصف في تفاصيل الدراجة للعميل.</small></div>
       <div class="field">
-        <label>روابط الصور العامة (كل رابط في سطر)</label>
+        <label>روابط الصور العامة (كل رابط في سطر) — احذف الرابط لإزالة الصورة من الكتالوج</label>
         <textarea name="images" rows="4" placeholder="https://...">${esc((b.images || []).join('\n'))}</textarea>
       </div>
       <div class="field">
@@ -2186,6 +2187,7 @@ document.addEventListener('click', async (e) => {
       <p class="mb-1"><b>الموديل:</b> ${esc(bike.model)}</p>
       <p class="mb-1"><b>الفئة:</b> ${esc(bike.category)}</p>
       <p class="mb-1"><b>السعر:</b> <span class="text-red" style="font-weight:900">${money(bike.price)}</span></p>
+      ${bike.description ? `<div class="bike-description"><b>التفاصيل والمواصفات:</b><p>${esc(bike.description).replace(/\n/g, '<br>')}</p></div>` : ''}
       <p><b>الوحدة:</b> دراجة واحدة متاحة حالياً</p>
       <p><b>الحالة:</b> ${storeUnit?.unit_condition === 'used' ? 'مستعملة' : 'جديدة'}</p>
     `);
@@ -2222,6 +2224,21 @@ document.addEventListener('click', async (e) => {
     toast('تم حذف سجل الوحدة وتحديث رصيد المخزون','success');
     return;
   }
+  const archiveBike = e.target.closest('[data-archive-bike]');
+  if (archiveBike) {
+    if ((!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) || !supabase) { toast('ليس لديك صلاحية أرشفة الدراجات', 'error'); return; }
+    const bikeId = archiveBike.dataset.archiveBike;
+    const bikeName = archiveBike.dataset.bikeName || 'هذه الدراجة';
+    if (!confirm('سيتم إخفاء «' + bikeName + '» من المتجر مع الاحتفاظ بكل الوحدات والفواتير وحركات المخزون. يمكنك إعادة نشرها بتعديل حالتها إلى متاحة. هل تريد المتابعة؟')) return;
+    archiveBike.disabled = true;
+    const { error } = await supabase.from('motorcycles').update({ status: 'unavailable' }).eq('id', bikeId);
+    if (error) { archiveBike.disabled = false; toast(error.message || 'تعذرت أرشفة الدراجة', 'error'); return; }
+    await Promise.all([loadMotorcycles(), loadStoreUnits()]);
+    render();
+    toast('تمت أرشفة الدراجة وإخفاؤها من المتجر مع الاحتفاظ بسجلها', 'success');
+    return;
+  }
+
   const deleteBike = e.target.closest('[data-delete-bike]');
   if (deleteBike) {
     if ((!hasRole('admin','manager','owner') && !hasPermission('catalog_manage')) || !supabase) { toast('ليس لديك صلاحية حذف الدراجات', 'error'); return; }
@@ -3279,6 +3296,7 @@ document.addEventListener('submit', async (e) => {
       model_year: Number(fd.get('model')) || null,
       category: safeName(fd.get('category')),
       price: Number(fd.get('price')) || 0,
+      description: String(fd.get('description') || '').trim(),
       status: String(fd.get('status') || 'draft'),
       image_urls: images
     };
@@ -3392,7 +3410,7 @@ async function loadMotorcycleUnits() {
 async function loadMotorcycles() {
   if (!supabase) return;
   let query = supabase.from('motorcycles')
-    .select('id,name,model_year,category,price,stock,image_urls,status,is_demo')
+    .select('id,name,model_year,category,price,stock,image_urls,description,status,is_demo')
     .order('created_at', { ascending: false });
   // The physical units in the showroom are the source of truth. RLS exposes only
   // models that have at least one real, available unit (plus authorized staff data).
@@ -3400,7 +3418,7 @@ async function loadMotorcycles() {
   if (error) { console.error('Catalogue load failed', error); return; }
   state.bikes = (data || []).map((row) => ({
     id: row.id, name: row.name, model: String(row.model_year || ''), category: row.category,
-    price: Number(row.price), stock: row.stock, images: row.image_urls || [], status: row.status, is_demo: !!row.is_demo
+    price: Number(row.price), stock: row.stock, images: row.image_urls || [], description: row.description || '', status: row.status, is_demo: !!row.is_demo
   }));
   set(DB.BIKES, state.bikes);
 }
