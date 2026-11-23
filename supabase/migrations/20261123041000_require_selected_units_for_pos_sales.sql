@@ -49,7 +49,7 @@ begin
     raise exception 'بيانات أصناف الفاتورة غير صحيحة' using errcode='22023';
   end if;
 
-  select array_agg(value)
+  select array_agg(u.value)
     into all_ids
     from jsonb_array_elements(p_items) p,
          jsonb_array_elements_text(p.value->'unit_ids') u(value);
