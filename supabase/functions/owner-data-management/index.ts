@@ -80,13 +80,13 @@ Deno.serve(async (req: Request) => {
       if (body.confirmation !== "RESTORE BACKUP") return json({ error: "Typed confirmation does not match" }, 400);
       const backup = body.backup;
       if (!backup || backup.format !== "khayal-backup" || backup.version !== 1 ||
-          !backup.tables || typeof backup.tables !== "object") {
+          backup.project !== "ztkiavqmbswyxkmddtno" || !backup.tables || typeof backup.tables !== "object") {
         return json({ error: "Unsupported backup file" }, 400);
       }
       if (JSON.stringify(backup).length > 25 * 1024 * 1024) return json({ error: "Backup exceeds 25 MB limit" }, 413);
       const suppliedHash = backup.contentHash;
       const actualHash = await sha256(JSON.stringify(backup.tables));
-      if (suppliedHash && suppliedHash !== actualHash) return json({ error: "Backup integrity check failed" }, 400);
+      if (typeof suppliedHash !== "string" || suppliedHash !== actualHash) return json({ error: "Backup integrity check failed" }, 400);
       const { data, error } = await admin.rpc("owner_restore_operational_data", {
         p_owner_id: ownerId, p_backup: backup
       });
