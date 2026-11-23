@@ -30,13 +30,18 @@ Deno.serve(async (req) => {
   if (roleError || !(roles || []).some(({ role }) => ['employee','manager','owner','admin'].includes(role))) {
     return json({ error: 'Management catalog permission is required.' }, 403);
   }
+  const isOwner = (roles || []).some(({ role }) => role === 'owner');
   const { data: canManage, error: permissionError } = await supabase.rpc('has_employee_permission', { p_permission: 'catalog_manage' });
-  if (permissionError || canManage !== true) return json({ error: 'Management catalog permission is required.' }, 403);
+  if (!isOwner && (permissionError || canManage !== true)) {
+    return json({ error: 'Management catalog permission is required.' }, 403);
+  }
 
+  // Retry failed photo syncs after a five-minute cooldown instead of permanently skipping them.
+  const retryBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const { data: pending, error: listError } = await supabase.from('photo_assets')
     .select('id,motorcycle_id,telegram_file_id')
     .is('storage_path', null)
-    .is('sync_error', null)
+    .or(`sync_error.is.null,sync_attempted_at.is.null,sync_attempted_at.lt.${retryBefore}`)
     .order('created_at', { ascending: true })
     .limit(8);
   if (listError) return json({ error: 'Could not load pending Telegram photo records.' }, 500);
@@ -97,8 +102,7 @@ Deno.serve(async (req) => {
 
   const { count, error: countError } = await supabase.from('photo_assets')
     .select('id', { count: 'exact', head: true })
-    .is('storage_path', null)
-    .is('sync_error', null);
+    .is('storage_path', null);
   return json({
     synced_count: results.filter((item) => item.status === 'synced').length,
     failed_count: results.filter((item) => item.status === 'failed').length,
