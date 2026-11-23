@@ -1863,7 +1863,7 @@ document.addEventListener('click', async (e) => {
     if (rows.querySelectorAll('.pos-cart-row').length >= 20) { toast('الحد الأقصى 20 صنفًا في الفاتورة', 'error'); return; }
     const clone = first.cloneNode(true);
     clone.querySelectorAll('select').forEach(select => {
-      if (select.multiple) [...select.options].forEach(option => { option.selected = false; });
+      if (select.multiple) [...select.options].forEach(option => { option.selected = false; option.disabled = false; });
       else select.value = '';
     });
     const remove = clone.querySelector('[data-remove-pos-row]');
