@@ -36,16 +36,16 @@ do $$
 begin
   if exists (
     select 1 from public.motorcycle_units
-    where nullif(regexp_replace(upper(btrim(vin)), '\\s+', '', 'g'),'') is not null
-    group by regexp_replace(upper(btrim(vin)), '\\s+', '', 'g')
+    where nullif(regexp_replace(upper(btrim(vin)), '\s+', '', 'g'),'') is not null
+    group by regexp_replace(upper(btrim(vin)), '\s+', '', 'g')
     having count(*) > 1
   ) then
     raise exception 'Duplicate VIN values exist after case/whitespace normalization; reconcile them before applying this migration.';
   end if;
   if exists (
     select 1 from public.motorcycle_units
-    where nullif(regexp_replace(upper(btrim(engine_number)), '\\s+', '', 'g'),'') is not null
-    group by regexp_replace(upper(btrim(engine_number)), '\\s+', '', 'g')
+    where nullif(regexp_replace(upper(btrim(engine_number)), '\s+', '', 'g'),'') is not null
+    group by regexp_replace(upper(btrim(engine_number)), '\s+', '', 'g')
     having count(*) > 1
   ) then
     raise exception 'Duplicate engine numbers exist after case/whitespace normalization; reconcile them before applying this migration.';
@@ -53,9 +53,9 @@ begin
 end $$;
 
 create unique index if not exists motorcycle_units_vin_normalized_uidx
-  on public.motorcycle_units (regexp_replace(upper(btrim(vin)), '\\s+', '', 'g'));
+  on public.motorcycle_units (regexp_replace(upper(btrim(vin)), '\s+', '', 'g'));
 create unique index if not exists motorcycle_units_engine_normalized_uidx
-  on public.motorcycle_units (regexp_replace(upper(btrim(engine_number)), '\\s+', '', 'g'))
+  on public.motorcycle_units (regexp_replace(upper(btrim(engine_number)), '\s+', '', 'g'))
   where nullif(btrim(engine_number),'') is not null;
 
 create or replace function private.register_motorcycle_unit_with_engine_number(
@@ -78,8 +78,8 @@ declare
   v_id uuid;
   v_stock integer;
   v_registered integer;
-  v_vin text := regexp_replace(upper(btrim(coalesce(p_vin,''))), '\\s+', '', 'g');
-  v_engine text := nullif(regexp_replace(upper(btrim(coalesce(p_engine_number,''))), '\\s+', '', 'g'),'');
+  v_vin text := regexp_replace(upper(btrim(coalesce(p_vin,''))), '\s+', '', 'g');
+  v_engine text := nullif(regexp_replace(upper(btrim(coalesce(p_engine_number,''))), '\s+', '', 'g'),'');
   v_barcode text := nullif(btrim(coalesce(p_barcode,'')),'');
 begin
   if (select auth.uid()) is null
@@ -140,8 +140,8 @@ set search_path=''
 as $$
 declare
   v_unit public.motorcycle_units%rowtype;
-  v_vin text := regexp_replace(upper(btrim(coalesce(p_vin,''))), '\\s+', '', 'g');
-  v_engine text := nullif(regexp_replace(upper(btrim(coalesce(p_engine_number,''))), '\\s+', '', 'g'),'');
+  v_vin text := regexp_replace(upper(btrim(coalesce(p_vin,''))), '\s+', '', 'g');
+  v_engine text := nullif(regexp_replace(upper(btrim(coalesce(p_engine_number,''))), '\s+', '', 'g'),'');
 begin
   if (select auth.uid()) is null
      or (not private.can_manage_finance() and not public.has_employee_permission('catalog_manage')) then
