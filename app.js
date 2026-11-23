@@ -2864,7 +2864,7 @@ document.addEventListener('submit', async (e) => {
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد العملية', 'error'); return; }
     const due = Number(data.balance_due || 0);
-    const invoice = '<div class="invoice"><div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع وحدة محددة</p></div><div class="invoice-meta"><b>'+esc(data.invoice_number)+'</b><br><span>'+new Date().toLocaleString('ar-EG')+'</span></div></div><hr>'+
+    const invoice = '<div class="invoice"><div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع وحدة محددة</p></div><div class="invoice-meta"><b>'+esc(data.invoice_number)+'</b><br><span>'+new Date(data.created_at).toLocaleString('ar-EG')+'</span></div></div><hr>'+
       '<p><b>العميل:</b> '+esc(customerName)+'</p><p><b>الهاتف:</b> '+esc(customerPhone || '—')+'</p>'+
       '<div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>VIN</th><th>رقم الموتور</th><th>السعر</th></tr></thead><tbody><tr><td>'+esc(data.motorcycle_name)+'</td><td>'+esc(data.model_year||'—')+'</td><td>'+esc(data.vin||'—')+'</td><td>'+esc(data.engine_number||'—')+'</td><td>'+money(data.unit_price)+'</td></tr></tbody></table></div>'+
       '<p><b>الإجمالي:</b> '+money(data.total)+'</p><p><b>المدفوع:</b> '+money(data.amount_paid)+'</p><p><b>المتبقي:</b> '+money(due)+'</p><p><b>حالة الدفع:</b> '+(data.payment_status==='paid'?'مدفوعة':data.payment_status==='partial'?'مدفوعة جزئيًا':'غير مدفوعة')+'</p>'+
@@ -2932,7 +2932,7 @@ document.addEventListener('submit', async (e) => {
     ).join('');
     const invoice = `
       <div class="invoice">
-        <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع معرض</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date().toLocaleString('ar-EG')}</span></div></div>
+        <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع معرض</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date(data.created_at).toLocaleString('ar-EG')}</span></div></div>
         <hr><p><b>العميل:</b> ${esc(customerName)}</p><p><b>الهاتف:</b> ${esc(customerPhone || '—')}</p>
         <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>رقم الشاسيه</th><th>رقم الموتور</th><th>السعر</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
         <p><b>الإجمالي:</b> ${money(data.total)}</p><p><b>المدفوع:</b> ${money(data.amount_paid)}</p>
