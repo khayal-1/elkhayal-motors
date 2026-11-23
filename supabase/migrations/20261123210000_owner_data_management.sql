@@ -48,6 +48,8 @@ declare
   v_table text;
   v_rows jsonb;
   v_sql text;
+  v_columns text;
+  v_select_columns text;
   v_fk record;
   v_invalid boolean;
   v_inserted integer := 0;
@@ -102,9 +104,17 @@ begin
     end if;
 
     if jsonb_array_length(v_rows) = 0 then continue; end if;
+    select string_agg(format('%I', column_name), ', ' order by ordinal_position),
+           string_agg(format('r.%I', column_name), ', ' order by ordinal_position)
+      into v_columns, v_select_columns
+    from information_schema.columns
+    where table_schema='public' and table_name=v_table and is_generated='NEVER';
+    if v_columns is null then
+      raise exception 'No insertable columns found for table %', v_table;
+    end if;
     v_sql := format(
-      'insert into public.%I overriding system value select * from jsonb_populate_recordset(null::public.%I, $1)',
-      v_table, v_table
+      'insert into public.%I (%s) overriding system value select %s from jsonb_populate_recordset(null::public.%I, $1) as r',
+      v_table, v_columns, v_select_columns, v_table
     );
     execute v_sql using v_rows;
     get diagnostics v_count = row_count;
