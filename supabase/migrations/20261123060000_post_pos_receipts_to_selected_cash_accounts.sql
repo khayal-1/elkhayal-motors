@@ -158,19 +158,26 @@ returns jsonb
 language plpgsql
 security definer
 set search_path=''
-as $$
+as $
+declare
+  prior_payment public.payments%rowtype;
 begin
   if p_cash_account_id is null or not exists(
     select 1 from public.cash_accounts where id=p_cash_account_id and is_active
   ) then
     raise exception 'اختر حساب الخزينة أو البنك الذي استلم الدفعة' using errcode='22023';
   end if;
+  select * into prior_payment from public.payments
+   where idempotency_key=p_idempotency_key;
+  if found and prior_payment.cash_account_id is distinct from p_cash_account_id then
+    raise exception 'مفتاح إعادة المحاولة مرتبط بحساب خزينة مختلف؛ استخدم نفس الحساب الأصلي' using errcode='23505';
+  end if;
   perform set_config('ekm.cash_account_id',p_cash_account_id::text,true);
   return private.record_sale_payment_idempotent_impl(
     p_sale_id,p_amount,p_method,p_reference,p_idempotency_key
   );
 end;
-$$;
+$;
 revoke all on function private.record_sale_payment_idempotent_with_cash_impl(uuid,numeric,text,text,uuid,uuid) from public,anon;
 grant execute on function private.record_sale_payment_idempotent_with_cash_impl(uuid,numeric,text,text,uuid,uuid) to authenticated;
 
