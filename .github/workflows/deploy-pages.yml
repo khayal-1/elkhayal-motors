@@ -3,7 +3,7 @@ name: Deploy website to GitHub Pages
 on:
   push:
     branches:
-      - fix/supplier-bill-verification
+      - main
   workflow_dispatch:
 
 permissions:
