@@ -947,7 +947,7 @@ function pagePOS() {
           <td><span class="status-pill ${sale.payment_status}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
           <td>${money(sale.returnedAmount || 0)}</td>
           <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
-          <td>${Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} ${(state.customerCredits.find(c => c.customerId === sale.customer_id)?.balance || 0) > 0 && Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-apply-credit="${esc(sale.id)}">استخدام رصيد</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
+          <td><button class="btn btn-outline btn-sm" data-view-invoice="${esc(sale.id)}">عرض / طباعة</button> ${Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} ${(state.customerCredits.find(c => c.customerId === sale.customer_id)?.balance || 0) > 0 && Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-apply-credit="${esc(sale.id)}">استخدام رصيد</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد فواتير مسجلة بعد.</p></div>`}
     </div>
     <div class="panel">
@@ -2017,6 +2017,33 @@ document.addEventListener('click', async (e) => {
         <small class="hint">سيُخصم المبلغ من رصيد العميل ويُسجل كجزء من تسوية هذه الفاتورة، دون إنشاء دفعة نقدية.</small>
         <button class="btn btn-primary" type="submit">تأكيد استخدام الرصيد</button>
       </form>`);
+    return;
+  }
+
+  const viewInvoiceButton = e.target.closest('[data-view-invoice]');
+  if (viewInvoiceButton) {
+    if (!supabase) return;
+    viewInvoiceButton.disabled = true;
+    const {data,error}=await supabase.rpc('get_sale_invoice',{p_sale_id:viewInvoiceButton.dataset.viewInvoice});
+    viewInvoiceButton.disabled = false;
+    if(error){toast(error.message||'تعذر استرجاع الفاتورة المحفوظة','error');return;}
+    const invoiceRows=(data.items||[]).flatMap(item=>{
+      const units=item.units||[];
+      if(!units.length)return [`<tr><td>${esc(item.motorcycle_name)}</td><td>—</td><td>—</td><td>${item.quantity}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`];
+      return units.map(unit=>`<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(unit.vin||'—')}</td><td>${esc(unit.engine_number||'—')}</td><td>1</td><td>${money(item.unit_price)}</td><td>${money(item.unit_price)}</td></tr>`);
+    }).join('');
+    const paymentRows=(data.payments||[]).map(payment=>`<tr><td>${new Date(payment.paid_at).toLocaleString('ar-EG')}</td><td>${esc(payment.method)}</td><td>${esc(payment.reference||'—')}</td><td>${money(payment.amount)}</td></tr>`).join('');
+    const returned=(data.returns||[]).reduce((sum,item)=>sum+Number(item.total_amount||0),0);
+    const due=Math.max(0,Number(data.total||0)-Number(data.amount_paid||0)-Number(data.credit_applied||0)-returned);
+    const invoice=`<div class="invoice">
+      <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>نسخة محفوظة من فاتورة البيع</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date(data.created_at).toLocaleString('ar-EG')}</span></div></div>
+      <hr><p><b>العميل:</b> ${esc(data.customer_name||'عميل نقدي')}</p><p><b>الهاتف:</b> ${esc(data.customer_phone||'—')}</p>
+      <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>رقم الشاسيه</th><th>رقم الموتور</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
+      <p><b>الإجمالي:</b> ${money(data.total)}</p><p><b>المدفوع:</b> ${money(data.amount_paid)}</p><p><b>رصيد مستخدم:</b> ${money(data.credit_applied)}</p><p><b>قيمة المرتجعات:</b> ${money(returned)}</p><p><b>المتبقي:</b> ${money(due)}</p>
+      <h4>المدفوعات</h4><div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الطريقة</th><th>المرجع</th><th>المبلغ</th></tr></thead><tbody>${paymentRows||'<tr><td colspan="4">لا توجد دفعات</td></tr>'}</tbody></table></div>
+      <p class="text-center">هذه نسخة مسترجعة من السجل المحفوظ في النظام</p>
+    </div><div class="contact-actions no-print"><button class="btn btn-primary" id="printInvoiceBtn" type="button">طباعة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
+    openModal(invoice);
     return;
   }
 
