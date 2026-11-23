@@ -1016,9 +1016,9 @@ function pageCustomerRelations() {
 function pageInventoryTools() {
  const u=currentUser(),canFinance=hasRole('admin','manager','owner')||hasPermission('finance_manage'),canCatalog=canFinance||hasPermission('catalog_manage');
  if(!u||!canCatalog)return pageNoPermission();
- const bikes=state.bikes||[],costMap=new Map((state.inventoryCosts||[]).map(x=>[x.motorcycle_id,x]));
+ const allBikes=state.bikes||[],bikes=allBikes.filter(b=>!b.is_demo),realModelIds=new Set(bikes.map(b=>b.id)),realUnits=(state.motorcycleUnits||[]).filter(x=>!x.is_demo&&realModelIds.has(x.motorcycle_id)),costMap=new Map((state.inventoryCosts||[]).map(x=>[x.motorcycle_id,x]));
  const bikeOpts=bikes.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.name)+' — مخزون '+b.stock+'</option>').join('');
- const unitOpts=(state.motorcycleUnits||[]).filter(x=>x.unit_status!=='sold'&&x.unit_status!=='retired').map(x=>'<option value="'+esc(x.id)+'">'+esc(x.vin)+' — '+esc(x.motorcycles?.name||'')+'</option>').join('');
+ const unitOpts=realUnits.filter(x=>x.unit_status!=='sold'&&x.unit_status!=='retired').map(x=>'<option value="'+esc(x.id)+'">'+esc(x.vin)+' — '+esc(x.motorcycles?.name||'')+'</option>').join('');
  const warrantyOpts=(state.warranties||[]).filter(x=>x.status==='active'&&x.end_date>=new Date().toISOString().slice(0,10)).map(x=>'<option value="'+esc(x.id)+'">ضمان #'+x.warranty_number+' — '+esc(x.customer_name)+'</option>').join('');
  const employeeOpts=(state.employees||[]).filter(x=>x.employment_status==='active').map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name)+'</option>').join('');
  const saleOpts=(state.sales||[]).map(x=>'<option value="'+esc(x.id)+'">فاتورة '+esc(x.invoice_number)+' — '+esc(x.customer_name)+'</option>').join('');
@@ -1031,7 +1031,7 @@ function pageInventoryTools() {
  const reconciliationRows=reconciliation.map(x=>'<tr><td>'+esc(x.motorcycle_name)+'</td><td>'+x.model_stock+'</td><td>'+x.physical_units+'</td><td>'+x.difference+'</td><td>'+x.available_units+' متاح / '+x.reserved_units+' محجوز / '+x.service_units+' صيانة</td></tr>').join('');
 
  return '<h2 class="page-title"><i class="fa-solid fa-warehouse"></i> إدارة المخزون والجرد والضمان والصيانة</h2><p class="page-sub">تسجيل تكلفة المخزون الفعلية، حدود إعادة الطلب، أرقام الهياكل والباركود، الجرد الدوري مع قيد فروق المخزون، الضمان وأوامر الصيانة.</p>'+
- '<div class="stats-grid"><div class="stat-card"><div class="stat-label">طرازات المخزون</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">أرقام هياكل فعلية</div><div class="stat-value">'+(state.motorcycleUnits||[]).filter(x=>!x.is_demo).length+'</div></div><div class="stat-card"><div class="stat-label">وحدات ببيانات تجريبية</div><div class="stat-value">'+(state.motorcycleUnits||[]).filter(x=>x.is_demo).length+'</div></div><div class="stat-card"><div class="stat-label">تنبيهات إعادة الطلب</div><div class="stat-value">'+(state.reorderAlerts||[]).length+'</div></div><div class="stat-card"><div class="stat-label">أوامر صيانة مفتوحة</div><div class="stat-value">'+(state.serviceOrders||[]).filter(x=>!['completed','cancelled'].includes(x.status)).length+'</div></div></div>'+
+ '<div class="stats-grid"><div class="stat-card"><div class="stat-label">طرازات المخزون</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">أرقام هياكل فعلية</div><div class="stat-value">'+realUnits.length+'</div></div><div class="stat-card"><div class="stat-label">وحدات ببيانات تجريبية أو تابعة لطراز تجريبي</div><div class="stat-value">'+((state.motorcycleUnits||[]).length-realUnits.length)+'</div></div><div class="stat-card"><div class="stat-label">تنبيهات إعادة الطلب</div><div class="stat-value">'+(state.reorderAlerts||[]).length+'</div></div><div class="stat-card"><div class="stat-label">أوامر صيانة مفتوحة</div><div class="stat-value">'+(state.serviceOrders||[]).filter(x=>!['completed','cancelled'].includes(x.status)).length+'</div></div></div>'+
  '<div class="panel"><div class="panel-title">مطابقة رصيد الطراز مع الوحدات الفعلية</div><p class="hint">يجب أن يساوي رصيد الطراز عدد الوحدات المتاحة والمحجوزة وتحت الصيانة. سجلات الفروق القديمة تحتاج تسجيل أرقام الشاسيه أو مراجعة حركة مخزون قبل اعتماد الجرد أو البيع.</p><div class="table-wrap"><table><thead><tr><th>الطراز</th><th>رصيد الطراز</th><th>الوحدات المسجلة</th><th>الفرق</th><th>تفصيل الحالات</th></tr></thead><tbody>'+(reconciliationRows||'<tr><td colspan="5">لا توجد فروق بين الرصيد والوحدات المسجلة</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">تكلفة المخزون وحد إعادة الطلب</div><p class="hint">يُحدّث النظام متوسط تكلفة الوحدة المرجح تلقائيًا من استلامات الشراء بعد خصم مرتجعات المورد. يمكن للمحاسب تعديل التكلفة يدويًا عند وجود تسوية موثقة.</p><div class="table-wrap"><table><thead><tr><th>الدراجة</th><th>المخزون</th><th>متوسط التكلفة المرجح</th><th>حد الطلب</th><th>تحديث التكلفة / الحد</th></tr></thead><tbody>'+(costRows||'<tr><td colspan="5">لا توجد دراجات</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">إدارة وحدات الدراجات</div><p>أرقام الشاسيه والموتور وتفاصيل كل دراجة أصبحت داخل إدارة الدراجات. افتح مجلد النوع لإضافة الوحدات أو تعديل بياناتها وحالاتها.</p><button class="btn btn-outline" data-nav="manage-bikes">فتح إدارة الدراجات</button></div>'+
@@ -1409,10 +1409,11 @@ function pageManageBikes() {
   const demoUnits = units.length - realUnits.length;
   const availableUnits = realUnits.filter((x)=>x.unit_status==='available').length;
   const soldUnits = realUnits.filter((x)=>x.unit_status==='sold').length;
-  const publishedUnits = realUnits.filter((x)=>x.unit_status==='available').length;
+  const publishedUnitIds = new Set((state.storeUnits || []).map((x) => x.unit_id));
+  const publishedUnits = realUnits.filter((x) => publishedUnitIds.has(x.id)).length;
   const groups = bikes.map((b) => {
     const list = units.filter((x)=>x.motorcycle_id===b.id);
-    const available = list.filter((x)=>x.unit_status==='available' && !x.is_demo).length;
+    const available = list.filter((x)=>x.unit_status==='available' && !x.is_demo && !b.is_demo).length;
     const sold = list.filter((x)=>x.unit_status==='sold').length;
     const reserved = list.filter((x)=>x.unit_status==='reserved').length;
     const retired = list.filter((x)=>x.unit_status==='retired').length;
