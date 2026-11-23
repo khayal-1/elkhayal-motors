@@ -1375,7 +1375,8 @@ function unitStatusLabel(status) {
 function unitRegistrationFormHTML(motorcycleId) {
   const bike = (state.bikes || []).find((item) => item.id === motorcycleId);
   if (!bike) return '';
-  return '<div class="modal-header"><h3><i class="fa-solid fa-barcode"></i> إضافة وحدة إلى '+esc(bike.name)+'</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>' +
+  return '<div class="modal-header"><h3><i class="fa-solid fa-barcode"></i> تسجيل دراجة فعلية — '+esc(bike.name)+'</h3><button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>' +
+    '<p class="hint">تسجيل رقم الشاسيه يضيف وحدة فعلية إلى المخزون ويحدّث الرصيد بحركة تسوية موثقة.</p>' +
     '<form id="motorcycleUnitForm" class="form-grid"><input type="hidden" name="motorcycle_id" value="'+esc(bike.id)+'">' +
     '<div class="form-row"><div class="field"><label>رقم الشاسيه (VIN)</label><input name="vin" required maxlength="80"></div><div class="field"><label>رقم الموتور</label><input name="engine_number" maxlength="80"></div></div>' +
     '<div class="form-row"><div class="field"><label>الباركود</label><input name="barcode" maxlength="80"></div><div class="field"><label>عداد الكيلومترات</label><input name="odometer_reading" type="number" min="0" step="1" value="0" required></div></div>' +
@@ -1401,10 +1402,13 @@ function pageManageBikes() {
   if (u.role === 'staff' && !hasPermission('catalog_manage')) return pageNoPermission();
   const bikes = get(DB.BIKES) || [];
   const units = state.motorcycleUnits || [];
-  const totalUnits = units.length;
-  const availableUnits = units.filter((x)=>x.unit_status==='available' && !x.is_demo).length;
-  const soldUnits = units.filter((x)=>x.unit_status==='sold').length;
-  const publishedUnits = units.filter((x)=>x.is_published && x.unit_status==='available' && !x.is_demo && bikes.some(b=>b.id===x.motorcycle_id && b.status==='available')).length;
+  const isRealUnit = (unit) => !unit.is_demo && !bikes.find((bike)=>bike.id===unit.motorcycle_id)?.is_demo;
+  const realUnits = units.filter(isRealUnit);
+  const totalUnits = realUnits.length;
+  const demoUnits = units.length - realUnits.length;
+  const availableUnits = realUnits.filter((x)=>x.unit_status==='available').length;
+  const soldUnits = realUnits.filter((x)=>x.unit_status==='sold').length;
+  const publishedUnits = realUnits.filter((x)=>x.is_published && x.unit_status==='available' && bikes.some(b=>b.id===x.motorcycle_id && b.status==='available')).length;
   const groups = bikes.map((b) => {
     const list = units.filter((x)=>x.motorcycle_id===b.id);
     const available = list.filter((x)=>x.unit_status==='available' && !x.is_demo).length;
@@ -1413,7 +1417,7 @@ function pageManageBikes() {
     const retired = list.filter((x)=>x.unit_status==='retired').length;
     const rows = list.map((x) => {
       const visibleInStore = !!x.is_published && x.unit_status === 'available' && b.status === 'available';
-      const canPublish = !x.is_demo && !x.sale_item_id && ['available','retired'].includes(x.unit_status);
+      const canPublish = !x.is_demo && !b.is_demo && !x.sale_item_id && ['available','retired'].includes(x.unit_status);
       const canDelete = !x.sale_item_id && x.unit_status !== 'sold';
       return '<article class="unit-admin-card '+(x.is_demo?'demo-unit-row':'')+'">' +
         '<div class="unit-admin-main"><div><b>شاسيه: <span dir="ltr">'+esc(x.vin)+'</span></b><small>موتور: <span dir="ltr">'+esc(x.engine_number||'غير مسجل')+'</span></small></div>' +
@@ -1429,12 +1433,12 @@ function pageManageBikes() {
     }).join('');
     return '<details class="bike-folder"><summary><span class="bike-folder-name"><i class="fa-solid fa-folder"></i> '+esc(b.name)+' <small>موديل '+esc(b.model)+'</small></span><span class="bike-folder-count">'+list.length+' وحدة · متاح '+available+'</span></summary>' +
       '<div class="bike-folder-body"><div class="bike-folder-summary"><span>الإجمالي: <b>'+list.length+'</b></span><span>متاح: <b>'+available+'</b></span><span>مباع: <b>'+sold+'</b></span><span>محجوز: <b>'+reserved+'</b></span><span>مستبعد: <b>'+retired+'</b></span></div>' +
-      '<div class="bike-folder-actions"><button class="btn btn-outline btn-sm" data-edit-bike="'+esc(b.id)+'"><i class="fa-solid fa-pen"></i> تعديل بيانات النوع</button><button class="btn btn-primary btn-sm" data-add-unit-for="'+esc(b.id)+'"><i class="fa-solid fa-plus"></i> إضافة دراجة من هذا النوع</button>'+(b.is_demo?'<button class="btn btn-danger btn-sm" data-delete-bike="'+esc(b.id)+'" data-bike-name="'+esc(b.name)+'"><i class="fa-solid fa-trash"></i> حذف النوع التجريبي</button>':'')+'</div>' +
+      '<div class="bike-folder-actions"><button class="btn btn-outline btn-sm" data-edit-bike="'+esc(b.id)+'"><i class="fa-solid fa-pen"></i> تعديل بيانات النوع</button>'+(!b.is_demo?'<button class="btn btn-primary btn-sm" data-add-unit-for="'+esc(b.id)+'"><i class="fa-solid fa-plus"></i> تسجيل دراجة فعلية</button>':'<span class="demo-data-label">نوع تجريبي — لا يقبل مخزونًا فعليًا</span>')+''+(b.is_demo?'<button class="btn btn-danger btn-sm" data-delete-bike="'+esc(b.id)+'" data-bike-name="'+esc(b.name)+'"><i class="fa-solid fa-trash"></i> حذف النوع التجريبي</button>':'')+'</div>' +
       (rows || '<div class="empty">لا توجد وحدات مسجلة لهذا النوع بعد.</div>')+'</div></details>';
   }).join('');
   return '<h2 class="page-title"><i class="fa-solid fa-motorcycle"></i> إدارة الدراجات والمخزون</h2>' +
     '<p class="page-sub">كل مجلد يمثل نوعاً واحداً. افتح المجلد لرؤية كل دراجة فعلية وأرقامها وحالتها وتفاصيلها.</p>' +
-    '<div class="stats-grid"><div class="stat-card"><div class="stat-label">أنواع الدراجات</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">إجمالي الوحدات المسجلة</div><div class="stat-value">'+totalUnits+'</div></div><div class="stat-card"><div class="stat-label">وحدات متاحة للبيع</div><div class="stat-value">'+availableUnits+'</div></div><div class="stat-card"><div class="stat-label">معروضة على المتجر</div><div class="stat-value">'+publishedUnits+'</div></div><div class="stat-card"><div class="stat-label">وحدات مباعة</div><div class="stat-value">'+soldUnits+'</div></div></div>' +
+    '<div class="stats-grid"><div class="stat-card"><div class="stat-label">أنواع الدراجات</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">إجمالي الوحدات المسجلة</div><div class="stat-value">'+totalUnits+'</div></div><div class="stat-card"><div class="stat-label">وحدات متاحة للبيع</div><div class="stat-value">'+availableUnits+'</div></div><div class="stat-card"><div class="stat-label">معروضة على المتجر</div><div class="stat-value">'+publishedUnits+'</div></div><div class="stat-card"><div class="stat-label">وحدات مباعة</div><div class="stat-value">'+soldUnits+'</div></div><div class="stat-card"><div class="stat-label">سجلات تجريبية</div><div class="stat-value">'+demoUnits+'</div></div></div>' +
     '<div class="panel"><div class="bike-folder-toolbar"><button class="btn btn-primary" id="addBikeBtn"><i class="fa-solid fa-plus"></i> إضافة نوع دراجة</button><button class="btn btn-outline" id="syncTelegramPhotosBtn"><i class="fa-solid fa-rotate"></i> مزامنة الصور</button></div><p class="hint">انشر كل وحدة فعلية في المتجر أو أخفها منه بزر مستقل. حذف السجل متاح فقط للوحدات غير المرتبطة بمبيعات أو مستندات مخزون.</p>' +
     (groups || '<div class="empty">لا توجد أنواع دراجات مسجلة.</div>')+'</div>';
 }
