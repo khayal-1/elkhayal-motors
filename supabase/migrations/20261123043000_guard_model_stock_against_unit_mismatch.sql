@@ -78,7 +78,8 @@ begin
     '   perform set_config(''ekm.stock_movement_source'',''stocktake'',true); update public.motorcycles set stock=v_count where id=v_bike.id; perform set_config(''ekm.stock_movement_source'','''',true);'
   );
   if position('v_count<>(select count(*)' in v_definition)=0
-     or position('set_config(''ekm.stock_movement_source'',''stocktake''' in v_definition)=0 then
+     or position('set_config(''ekm.stock_movement_source'',''stocktake''' in v_definition)=0
+     or position('insert into public.stock_movements' in v_definition)>0 then
     raise exception 'Unable to harden stocktake function; expected source fragments were not found.';
   end if;
   execute v_definition;
