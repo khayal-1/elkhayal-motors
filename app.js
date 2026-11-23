@@ -950,7 +950,7 @@ function pagePOS() {
           <td><b>${esc(sale.invoice_number)}</b></td><td>${esc(sale.customer_name)}</td>
           <td>${money(sale.total)}</td><td>${money(sale.amount_paid)}</td><td>${money(sale.credit_applied || 0)}</td>
           <td>${money(Math.max(0, Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0)))}</td>
-          <td><span class="status-pill ${sale.payment_status}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
+          <td><span class="status-pill ${esc(sale.payment_status)}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
           <td>${money(sale.returnedAmount || 0)}</td>
           <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
           <td><button class="btn btn-outline btn-sm" data-view-invoice="${esc(sale.id)}">عرض / طباعة</button> ${Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} ${(state.customerCredits.find(c => c.customerId === sale.customer_id)?.balance || 0) > 0 && Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-apply-credit="${esc(sale.id)}">استخدام رصيد</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
