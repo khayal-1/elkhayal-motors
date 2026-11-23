@@ -199,7 +199,9 @@ begin
   ) returning id into v_item_id;
   perform set_config('ekm.sale_unit_id','',true);
 
+  perform set_config('ekm.stock_movement_source','sale',true);
   update public.motorcycles set stock=stock-1 where id=b.id;
+  perform set_config('ekm.stock_movement_source','',true);
   insert into public.stock_movements(
     motorcycle_id,movement_type,quantity_delta,reference_id,notes,created_by
   ) values(b.id,'sale',-1,v_sale_id,'بيع الوحدة '||u.vin||' ضمن فاتورة '||v_invoice,(select auth.uid()));
