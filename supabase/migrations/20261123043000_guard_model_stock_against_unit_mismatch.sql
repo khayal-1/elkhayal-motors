@@ -31,7 +31,7 @@ declare
   v_units integer;
 begin
   if new.stock is not distinct from old.stock then return new; end if;
-  if v_source not in ('sale','purchase_receipt','stocktake') then
+  if v_source not in ('sale','purchase_receipt','purchase_return','stocktake') then
     raise exception 'لا تعدّل مخزون الطراز مباشرة؛ استخدم استلامًا مسجلًا أو جردًا للوحدات ذات أرقام الشاسيه'
       using errcode='23514';
   end if;
