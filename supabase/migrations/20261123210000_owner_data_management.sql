@@ -20,7 +20,7 @@ begin
   from information_schema.tables
   where table_schema = 'public'
     and table_type = 'BASE TABLE'
-    and table_name not in ('profiles','user_roles','accounting_accounts','cash_accounts','finance_settings','tax_rates','audit_logs');
+    and table_name not in ('profiles','user_roles','employee_permissions','accounting_accounts','cash_accounts','finance_settings','tax_rates','audit_logs');
 
   if v_tables is not null then
     execute 'truncate table ' || v_tables || ' restart identity';
@@ -29,6 +29,7 @@ begin
   delete from public.user_roles
    where user_id <> p_owner_id or role <> 'owner'::public.app_role;
   delete from public.profiles where id <> p_owner_id;
+  delete from public.employee_permissions where user_id <> p_owner_id;
 
   return jsonb_build_object('ok', true, 'preserved', jsonb_build_array(
     'owner account', 'owner role', 'accounting_accounts', 'cash_accounts',
@@ -93,6 +94,9 @@ begin
       select coalesce(jsonb_agg(value), '[]'::jsonb) into v_rows
       from jsonb_array_elements(v_rows) where value->>'id' <> p_owner_id::text;
     elsif v_table = 'user_roles' then
+      select coalesce(jsonb_agg(value), '[]'::jsonb) into v_rows
+      from jsonb_array_elements(v_rows) where value->>'user_id' <> p_owner_id::text;
+    elsif v_table = 'employee_permissions' then
       select coalesce(jsonb_agg(value), '[]'::jsonb) into v_rows
       from jsonb_array_elements(v_rows) where value->>'user_id' <> p_owner_id::text;
     end if;
