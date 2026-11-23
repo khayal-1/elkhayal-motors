@@ -7,7 +7,7 @@ create table if not exists public.employee_permissions (
   permission_key text not null check (permission_key = any (array[
     'catalog_view','catalog_manage','requests_view','requests_manage',
     'customer_data_view','sales_manage','expenses_manage','accounting_view'
-  ]::text[]),
+  ]::text[])),
   granted_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   primary key(user_id,permission_key)
