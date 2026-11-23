@@ -2804,9 +2804,12 @@ document.addEventListener('submit', async (e) => {
     const amount = Number(fd.get('amount'));
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
+    // Keep the same key while this modal remains open: a lost response can be retried safely.
+    form.dataset.paymentIdempotencyKey ||= crypto.randomUUID();
     const { error } = await supabase.rpc('record_sale_payment', {
       p_sale_id: form.dataset.saleId, p_amount: amount, p_method: String(fd.get('method')),
-      p_reference: safeName(fd.get('reference')) || null
+      p_reference: safeName(fd.get('reference')) || null,
+      p_idempotency_key: form.dataset.paymentIdempotencyKey
     });
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل الدفعة', 'error'); return; }
