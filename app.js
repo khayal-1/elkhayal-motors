@@ -1930,12 +1930,20 @@ document.addEventListener('click', async (e) => {
     if (!order || !pendingItems.length) { toast('لا توجد كمية متبقية للاستلام', 'error'); return; }
     openModal(`<div class="modal-header"><h3>استلام أمر ${esc(order.order_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
       <form id="receivePurchaseForm" class="form-grid" data-order-id="${esc(order.id)}">
-        <div class="form-grid">${pendingItems.map(item=>{const remaining=Number(item.quantity_ordered)-Number(item.quantity_received);return `<div class="purchase-order-row form-row" data-item-id="${esc(item.id)}">
+        <div class="form-grid">${pendingItems.map(item=>{const remaining=Number(item.quantity_ordered)-Number(item.quantity_received);return `<div class="purchase-order-row" data-item-id="${esc(item.id)}">
           <div class="field"><label>${esc(item.motorcycle_name)} — المتبقي ${remaining}</label><input name="quantity" type="number" min="0" max="${remaining}" value="${remaining}" required></div>
+          <div class="form-grid">${Array.from({length:remaining},(_,index)=>`<div class="panel" data-unit-row>
+            <b>بيانات الدراجة رقم ${index+1}</b>
+            <div class="field"><label>رقم الشاسيه VIN</label><input name="vin" maxlength="80" autocomplete="off" placeholder="VIN إلزامي"></div>
+            <div class="field"><label>رقم الموتور</label><input name="engine_number" maxlength="80"></div>
+            <div class="form-row"><div class="field"><label>الباركود</label><input name="barcode" maxlength="80"></div><div class="field"><label>عداد الكيلومترات</label><input name="odometer_reading" type="number" min="0" value="0"></div></div>
+            <div class="field"><label>الحالة</label><select name="unit_condition"><option value="new">جديدة</option><option value="used">مستعملة</option></select></div>
+            <div class="form-row"><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date"></div></div>
+          </div>`).join('')}</div>
         </div>`}).join('')}</div>
         <div class="field"><label>ملاحظات الاستلام</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
-        <small class="hint">اكتب صفرًا للصنف الذي لم يصل في هذه الشحنة؛ ويمكن تسجيل الاستلام على دفعات.</small>
-        <button class="btn btn-primary" type="submit">تأكيد الاستلام وتحديث المخزون</button>
+        <small class="hint">أدخل رقم الشاسيه لكل دراجة مستلمة. تُنشأ سجلات الوحدات وتُحدّث الكمية وتكلفة الاستلام في معاملة واحدة. يمكن الاستلام على دفعات.</small>
+        <button class="btn btn-primary" type="submit">تأكيد الاستلام وربط أرقام الشاسيه</button>
       </form>`);
     return;
   }
@@ -2704,14 +2712,31 @@ document.addEventListener('submit', async (e) => {
     for (const row of rows) {
       const quantity=Number(row.querySelector('[name="quantity"]')?.value);
       if(!Number.isInteger(quantity)||quantity<0){toast('تحقق من كميات الاستلام؛ استخدم صفرًا للصنف غير المستلم','error');return;}
-      if(quantity>0)items.push({purchase_order_item_id:row.dataset.itemId,quantity});
+      if(quantity>0){
+        const unitRows=[...row.querySelectorAll('[data-unit-row]')].slice(0,quantity);
+        if(unitRows.length!==quantity){toast('عدد نماذج الوحدات لا يطابق كمية الاستلام','error');return;}
+        const units=[];
+        for(const unitRow of unitRows){
+          const value=name=>unitRow.querySelector(`[name="${name}"]`)?.value;
+          const vin=safeName(value('vin'));
+          const odometer=Number(value('odometer_reading')||0);
+          if(!vin||!Number.isInteger(odometer)||odometer<0){toast('أدخل رقم شاسيه صحيحًا وعداد كيلومترات غير سالب لكل وحدة','error');return;}
+          units.push({
+            vin,engine_number:safeName(value('engine_number'))||null,
+            barcode:safeName(value('barcode'))||null,
+            odometer_reading:odometer,unit_condition:String(value('unit_condition')||'new'),
+            warranty_start:value('warranty_start')||null,warranty_end:value('warranty_end')||null
+          });
+        }
+        items.push({purchase_order_item_id:row.dataset.itemId,units});
+      }
     }
     if(!items.length){toast('أدخل كمية مستلمة واحدة على الأقل','error');return;}
     const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
-    const {data,error}=await supabase.rpc('receive_supplier_purchase_order',{p_order_id:form.dataset.orderId,p_items:items,p_notes:safeName(fd.get('notes'))||null});
+    const {data,error}=await supabase.rpc('receive_supplier_purchase_order_units',{p_order_id:form.dataset.orderId,p_items:items,p_notes:safeName(fd.get('notes'))||null});
     if(submit)submit.disabled=false;
-    if(error){toast(error.message||'تعذر تسجيل الاستلام','error');return;}
-    closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast(`تم تسجيل الاستلام ${data.receipt_number} وزيادة المخزون بمقدار ${data.quantity_received}`,'success');return;
+    if(error){toast(error.message||'تعذر تسجيل الاستلام؛ لم يتم اعتماد أي جزء منه','error');return;}
+    closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast(`تم تسجيل الاستلام ${data.receipt_number} وربط ${data.quantity_received} وحدة بأرقام شاسيهها`,'success');return;
   }
 
   if (form.id === 'customerReplyForm') {
