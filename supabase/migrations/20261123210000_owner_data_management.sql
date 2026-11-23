@@ -51,6 +51,7 @@ declare
   v_invalid boolean;
   v_inserted integer := 0;
   v_count integer;
+  v_max_identity bigint;
   v_identity record;
 begin
   if p_owner_id is null or not exists (
@@ -143,9 +144,9 @@ begin
       and a.attidentity in ('a','d')
   loop
     v_sql := format('select max(%I) from %I.%I',v_identity.column_name,v_identity.schema_name,v_identity.table_name);
-    execute v_sql into v_count;
-    if v_count is not null then
-      perform setval(pg_get_serial_sequence(format('%I.%I',v_identity.schema_name,v_identity.table_name),v_identity.column_name), v_count, true);
+    execute v_sql into v_max_identity;
+    if v_max_identity is not null then
+      perform setval(pg_get_serial_sequence(format('%I.%I',v_identity.schema_name,v_identity.table_name),v_identity.column_name), v_max_identity, true);
     end if;
   end loop;
 
