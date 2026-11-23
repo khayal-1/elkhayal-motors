@@ -1,4 +1,5 @@
 import { supabase, supabaseConfigured, getCurrentProfile } from './src/supabase.js';
+import { esc, safeImageUrl } from './src/security.js';
 
 /* =========================================================
    El Khayal Motors — app.js (Full SPA)
@@ -184,9 +185,6 @@ function contactActionLinks(person, message = '') {
   if (email) links.push(`<a class="btn btn-outline btn-sm" href="mailto:${esc(email)}?subject=${encodeURIComponent('El Khayal Motors')}&body=${body}"><i class="fa-solid fa-envelope"></i> بريد</a>`);
   return links.join(' ');
 }
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-}[c]));
 
 const transientStore = new Map([
   [DB.USERS, []], [DB.BIKES, []], [DB.ORDERS, []], [DB.INVOICES, []],
@@ -350,7 +348,7 @@ function renderSidebar() {
   nav.innerHTML = groups.map((group) => {
     const isActive = group.items.some((item) => item.route === active);
     const links = group.items.map((item) => {
-      const badge = item.badge ? '<span class="badge">'+item.badge+'</span>' : '';
+      const badge = item.badge ? '<span class="badge">'+esc(item.badge)+'</span>' : '';
       return '<a class="sidebar-link '+(active===item.route?'active':'')+'" data-nav="'+esc(item.route)+'" role="button" tabindex="0"><i class="fa-solid '+esc(item.icon)+'"></i><span>'+esc(item.label)+'</span>'+badge+'</a>';
     }).join('');
     return '<details class="sidebar-group" '+(isActive?'open':'')+'><summary>'+esc(group.title)+'<i class="fa-solid fa-chevron-down"></i></summary><div class="sidebar-group-links">'+links+'</div></details>';
@@ -432,7 +430,7 @@ function productCard(b) {
   return `
     <article class="product-card" data-bike-id="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}">
       <div class="slider-wrap" data-slider data-idx="0">
-        ${first ? `<img src="${esc(first)}" alt="${esc(b.name)}" data-slide-img loading="lazy">` : `<div class="bike-image-placeholder" aria-hidden="true"><i class="fa-solid fa-motorcycle"></i></div>`}
+        ${first ? `<img src="${esc(safeImageUrl(first))}" alt="${esc(b.name)}" data-slide-img loading="lazy">` : `<div class="bike-image-placeholder" aria-hidden="true"><i class="fa-solid fa-motorcycle"></i></div>`}
         <span class="stock-tag ${stockClass}"><i class="fa-solid fa-circle"></i> ${stockText}</span>
         ${isCustomer || isGuest ? `<button class="fav-btn ${isFav ? 'active' : ''}" data-fav="${esc(b.id)}" aria-label="${isGuest ? 'سجل الدخول لإضافة للمفضلة' : 'إضافة للمفضلة'}"><i class="fa-${isFav ? 'solid' : 'regular'} fa-heart"></i></button>` : ''}
         <button class="slider-btn prev" data-slide="prev" aria-label="السابق"><i class="fa-solid fa-chevron-right"></i></button>
@@ -777,7 +775,7 @@ function renderVinUnitMatch(unit) {
   }
   const bike = unit.motorcycles || {};
   const available = unit.unit_status === 'available' && Number(bike.stock || 0) > 0;
-  const image = bike.image_urls?.[0] ? '<img class="vin-unit-image" src="'+esc(bike.image_urls[0])+'" alt="'+esc(bike.name)+'">' : '<div class="vin-unit-image vin-unit-placeholder"><i class="fa-solid fa-motorcycle"></i></div>';
+  const image = bike.image_urls?.[0] ? '<img class="vin-unit-image" src="'+esc(safeImageUrl(bike.image_urls[0]))+'" alt="'+esc(bike.name)+'">' : '<div class="vin-unit-image vin-unit-placeholder"><i class="fa-solid fa-motorcycle"></i></div>';
   target.innerHTML = '<div class="vin-unit-card">'+image+'<div class="vin-unit-details"><div class="contact-actions"><span class="status-badge '+(available?'success':'danger')+'">'+(available?'متاحة للبيع':'غير متاحة للبيع')+'</span><b>'+esc(bike.name||'طراز غير معروف')+'</b></div>'+
     '<div class="vin-unit-grid"><div><small>الموديل</small><b>'+esc(bike.model_year||'—')+'</b></div><div><small>الفئة</small><b>'+esc(bike.category||'—')+'</b></div><div><small>السعر</small><b>'+money(bike.price)+'</b></div><div><small>المخزون العام</small><b>'+Number(bike.stock||0)+'</b></div><div><small>رقم الشاسيه VIN</small><b>'+esc(unit.vin||'—')+'</b></div><div><small>رقم الموتور</small><b>'+esc(unit.engine_number||'—')+'</b></div><div><small>العداد</small><b>'+Number(unit.odometer_reading||0).toLocaleString('en-US')+' كم</b></div><div><small>حالة الدراجة</small><b>'+(unit.unit_condition==='used'?'مستعملة':'جديدة')+'</b></div><div><small>الباركود</small><b>'+esc(unit.barcode||'—')+'</b></div><div><small>حالة الوحدة</small><b>'+(unit.is_demo?'بيانات تجريبية — غير قابلة للبيع':esc(unit.unit_status))+'</b></div><div><small>الضمان</small><b>'+esc(unit.warranty_start||'—')+' – '+esc(unit.warranty_end||'—')+'</b></div></div>'+
     (bike.description?'<p>'+esc(bike.description)+'</p>':'')+'</div></div>'+
@@ -978,7 +976,7 @@ function pageSalesTools() {
  const bikeLines=bikes.map(b=>'<div class="form-row" data-quote-line="'+esc(b.id)+'"><div class="field"><label>'+esc(b.name)+' — المتاح '+b.stock+'</label><input type="number" name="quantity" min="0" max="'+b.stock+'" step="1" value="0"></div><div class="field"><label>سعر الوحدة</label><input type="number" name="unit_price" min="0" step="0.01" value="'+Number(b.price||0)+'"></div></div>').join('');
  const quoteRows=(state.salesQuotations||[]).map(q=>{
   const items=(state.salesQuotationItems||[]).filter(i=>i.quotation_id===q.id);
-  return '<tr><td>#'+q.quotation_number+'</td><td>'+esc(q.customer_name)+'</td><td>'+esc(q.customer_phone)+'</td><td>'+money(q.total_amount)+'</td><td>'+esc(q.valid_until)+'</td><td>'+esc(q.status)+'</td><td>'+(q.status==='draft'||q.status==='sent'?'<form id="quotationStatusForm" class="inline-form" data-quote-id="'+esc(q.id)+'"><select name="status"><option value="sent">إرسال</option><option value="accepted">اعتماد العميل</option><option value="cancelled">إلغاء</option></select><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':q.status==='accepted'?'<form id="convertQuotationForm" class="form-grid" data-quote-id="'+esc(q.id)+'"><input type="number" name="payment_amount" min="0" step="0.01" value="0" placeholder="دفعة مقدمة إن وجدت"><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select><button class="btn btn-primary btn-sm" type="submit">تحويل إلى فاتورة</button></form>':q.status==='converted'?'<a href="#" data-route="sales">فاتورة '+esc(q.sale_id||'')+'</a>':'—')+'</td></tr><tr><td colspan="7"><small>'+items.map(i=>esc(i.motorcycles?.name||'')+' × '+i.quantity+' = '+money(i.line_total)).join(' | ')+'</small></td></tr>';
+  return '<tr><td>#'+esc(q.quotation_number)+'</td><td>'+esc(q.customer_name)+'</td><td>'+esc(q.customer_phone)+'</td><td>'+money(q.total_amount)+'</td><td>'+esc(q.valid_until)+'</td><td>'+esc(q.status)+'</td><td>'+(q.status==='draft'||q.status==='sent'?'<form id="quotationStatusForm" class="inline-form" data-quote-id="'+esc(q.id)+'"><select name="status"><option value="sent">إرسال</option><option value="accepted">اعتماد العميل</option><option value="cancelled">إلغاء</option></select><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':q.status==='accepted'?'<form id="convertQuotationForm" class="form-grid" data-quote-id="'+esc(q.id)+'"><input type="number" name="payment_amount" min="0" step="0.01" value="0" placeholder="دفعة مقدمة إن وجدت"><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select><button class="btn btn-primary btn-sm" type="submit">تحويل إلى فاتورة</button></form>':q.status==='converted'?'<a href="#" data-route="sales">فاتورة '+esc(q.sale_id||'')+'</a>':'—')+'</td></tr><tr><td colspan="7"><small>'+items.map(i=>esc(i.motorcycles?.name||'')+' × '+i.quantity+' = '+money(i.line_total)).join(' | ')+'</small></td></tr>';
  }).join('');
  const deliveredIds=new Set((state.saleDeliveries||[]).map(d=>d.sale_id));
  const deliverySales=sales.filter(s=>s.status==='posted'&&!deliveredIds.has(s.id));
@@ -1322,7 +1320,7 @@ function pageInventory() {
             const st = b.stock <= 0 ? 'نفذ' : b.stock <= 2 ? 'منخفض' : 'متوفر';
             const img = (b.images && b.images[0]) || '';
             return `<tr>
-              <td><img class="mini-img" src="${esc(img)}" alt="" loading="lazy"></td>
+              <td><img class="mini-img" src="${esc(safeImageUrl(img))}" alt="" loading="lazy"></td>
               <td><b>${esc(b.name)}</b>${b.is_demo ? '<small class="demo-data-label">تجريبية</small>' : ''} </td>
               <td>${esc(b.model)}</td>
               <td>${esc(b.category)}</td>
@@ -2184,7 +2182,7 @@ document.addEventListener('click', async (e) => {
         <h3><i class="fa-solid fa-motorcycle"></i> ${esc(bike.name)}</h3>
         <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      ${img ? `<img src="${esc(img)}" alt="${esc(bike.name)}" style="width:100%;height:220px;object-fit:cover;border-radius:12px;margin-bottom:14px">` : ''}
+      ${img ? `<img src="${esc(safeImageUrl(img))}" alt="${esc(bike.name)}" style="width:100%;height:220px;object-fit:cover;border-radius:12px;margin-bottom:14px">` : ''}
       <p class="mb-1"><b>الموديل:</b> ${esc(bike.model)}</p>
       <p class="mb-1"><b>الفئة:</b> ${esc(bike.category)}</p>
       <p class="mb-1"><b>السعر:</b> <span class="text-red" style="font-weight:900">${money(bike.price)}</span></p>
