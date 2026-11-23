@@ -165,7 +165,7 @@ begin
     values(sale_id,paid_value,p_payment_method,nullif(btrim(coalesce(p_payment_reference,'')),''),(select auth.uid()));
   end if;
   return jsonb_build_object(
-    'id',sale_id,'sale_id',sale_id,'invoice_number',invoice_value,
+    'id',sale_id,'sale_id',sale_id,'created_at',now(),'invoice_number',invoice_value,
     'customer_id',customer_id,'customer_name',customer_name_value,
     'customer_phone',customer_phone_value,'total',total_value,'subtotal',total_value,
     'amount_paid',paid_value,'balance_due',total_value-paid_value,
