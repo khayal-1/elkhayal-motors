@@ -1924,9 +1924,17 @@ document.addEventListener('click', async (e) => {
     const bills=state.supplierBills.filter(b=>b.supplier_id===order.supplier_id&&(!b.purchase_order_id||b.purchase_order_id===order.id));
     if(!available.length){toast('لا توجد كميات مستلمة متبقية للإرجاع','info');return;}
     if(!bills.length){toast('سجّل فاتورة المورد واربطها بالمورد أو أمر التوريد قبل إنشاء إشعار الخصم','error');return;}
-    const rows=available.map(ri=>{const rem=Number(ri.quantity)-ri.returned;const po=order.items.find(it=>it.id===ri.purchase_order_item_id);return '<div data-receipt-item-id="'+esc(ri.id)+'"><label>'+esc(po?.motorcycle_name||'الصنف')+' — متاح '+rem+' — تكلفة '+money(ri.unit_cost)+'</label><input name=quantity type=number min=0 max='+rem+' value=0 required></div>';}).join('');
+    const receiptUnitsResult=await supabase.from('purchase_receipt_units')
+      .select('receipt_item_id,motorcycle_unit_id,motorcycle_units(vin,engine_number,unit_status)')
+      .in('receipt_item_id',available.map(ri=>ri.id));
+    if(receiptUnitsResult.error){toast('تعذر تحميل أرقام الوحدات المستلمة للمرتجع','error');return;}
+    const rows=available.map(ri=>{
+      const po=order.items.find(it=>it.id===ri.purchase_order_item_id);
+      const unitOptions=(receiptUnitsResult.data||[]).filter(x=>x.receipt_item_id===ri.id&&x.motorcycle_units?.unit_status==='available');
+      return '<div data-receipt-item-id="'+esc(ri.id)+'"><label>'+esc(po?.motorcycle_name||'الصنف')+' — وحدات متاحة للإرجاع '+unitOptions.length+' — تكلفة '+money(ri.unit_cost)+'</label><select name=unit_ids multiple size=4>'+unitOptions.map(x=>'<option value="'+esc(x.motorcycle_unit_id)+'">'+esc(x.motorcycle_units?.vin||'VIN غير متاح')+' — موتور '+esc(x.motorcycle_units?.engine_number||'—')+'</option>').join('')+'</select></div>';
+    }).join('');
     const opts=bills.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.bill_number)+' — الرصيد '+money(b.balanceDue)+'</option>').join('');
-    openModal('<div class=modal-header><h3>مرتجع مشتريات '+esc(order.order_number)+'</h3><button class=modal-close data-close-modal>×</button></div><form id=supplierReturnForm data-order-id="'+esc(order.id)+'"><label>فاتورة المورد</label><select name=supplier_bill_id required><option value="">اختر الفاتورة</option>'+opts+'</select>'+rows+'<label>ملاحظات</label><textarea name=notes maxlength=1000></textarea><button class=btn btn-primary type=submit>تأكيد المرتجع</button></form>'); return;
+    openModal('<div class=modal-header><h3>مرتجع مشتريات '+esc(order.order_number)+'</h3><button class=modal-close data-close-modal>×</button></div><form id=supplierReturnForm data-order-id="'+esc(order.id)+'"><label>فاتورة المورد</label><select name=supplier_bill_id required><option value="">اختر الفاتورة</option>'+opts+'</select>'+rows+'<small class=hint>حدد أرقام الشاسيه الفعلية التي ستُعاد للمورد؛ ستُخرج هذه الوحدات من المخزون وتُربط بإشعار الخصم.</small><label>ملاحظات</label><textarea name=notes maxlength=1000></textarea><button class=btn btn-primary type=submit>تأكيد المرتجع</button></form>'); return;
   }
   const receiveOrderButton = e.target.closest('[data-receive-order]');
   if (receiveOrderButton) {
@@ -2687,10 +2695,21 @@ document.addEventListener('submit', async (e) => {
 
   if(form.id==='supplierReturnForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية تسجيل مرتجعات الموردين','error');return;}
-    const fd=new FormData(form),items=[];for(const row of form.querySelectorAll('[data-receipt-item-id]')){const quantity=Number(row.querySelector('[name=quantity]').value||0);if(!Number.isInteger(quantity)||quantity<0){toast('أدخل كمية صحيحة','error');return;}if(quantity>0)items.push({purchase_receipt_item_id:row.dataset.receiptItemId,quantity});}
-    if(!items.length){toast('حدد كمية واحدة على الأقل','error');return;}const btn=form.querySelector('[type=submit]');if(btn)btn.disabled=true;
-    const {data,error}=await supabase.rpc('create_supplier_return',{p_purchase_order_id:form.dataset.orderId,p_supplier_bill_id:String(fd.get('supplier_bill_id')),p_items:items,p_notes:safeName(fd.get('notes'))||null});if(btn)btn.disabled=false;
-    if(error){toast(error.message||'تعذر تسجيل المرتجع','error');return;}closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast('تم تسجيل المرتجع رقم '+data.return_number+' بقيمة '+money(data.credit_amount),'success');return;
+    const fd=new FormData(form),items=[];
+    for(const row of form.querySelectorAll('[data-receipt-item-id]')){
+      const unitIds=[...(row.querySelector('[name=unit_ids]')?.selectedOptions||[])].map(option=>option.value);
+      if(unitIds.length)items.push({purchase_receipt_item_id:row.dataset.receiptItemId,unit_ids:unitIds});
+    }
+    if(!items.length){toast('حدد رقم شاسيه واحدًا على الأقل لإرجاعه','error');return;}
+    const btn=form.querySelector('[type=submit]');if(btn)btn.disabled=true;
+    const {data,error}=await supabase.rpc('create_supplier_return_for_units',{
+      p_purchase_order_id:form.dataset.orderId,p_supplier_bill_id:String(fd.get('supplier_bill_id')),
+      p_items:items,p_notes:safeName(fd.get('notes'))||null
+    });
+    if(btn)btn.disabled=false;
+    if(error){toast(error.message||'تعذر تسجيل المرتجع؛ لم يتم إخراج أي وحدة','error');return;}
+    closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);
+    render();toast('تم تسجيل المرتجع رقم '+data.return_number+' وربط '+items.reduce((n,x)=>n+x.unit_ids.length,0)+' وحدة فعلية بالمورد','success');return;
   }
   if(form.id==='supplierBillForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية إدارة فواتير الموردين','error');return;}
