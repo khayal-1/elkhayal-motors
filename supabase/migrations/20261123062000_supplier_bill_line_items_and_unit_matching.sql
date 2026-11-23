@@ -166,7 +166,7 @@ create or replace function public.create_supplier_bill(
 ) returns public.supplier_bills
 language plpgsql
 security definer
-set search_path='public,pg_temp'
+set search_path=''
 as $$
 declare
   v_bill public.supplier_bills;
@@ -203,8 +203,10 @@ begin
       raise exception 'أمر التوريد لا يتبع هذا المورد أو أنه ملغى' using errcode='23503';
     end if;
   end if;
-  if jsonb_typeof(p_items) is distinct from 'array'
-     or jsonb_array_length(p_items)<1 or jsonb_array_length(p_items)>100 then
+  if jsonb_typeof(p_items) is distinct from 'array' then
+    raise exception 'يجب إرسال بنود الفاتورة في قائمة صحيحة' using errcode='22023';
+  end if;
+  if jsonb_array_length(p_items)<1 or jsonb_array_length(p_items)>100 then
     raise exception 'يجب إضافة بند واحد على الأقل إلى فاتورة المورد' using errcode='22023';
   end if;
 
