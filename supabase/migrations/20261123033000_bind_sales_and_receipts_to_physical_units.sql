@@ -212,7 +212,7 @@ begin
   end if;
 
   return jsonb_build_object(
-    'id',v_sale_id,'sale_id',v_sale_id,'sale_item_id',v_item_id,
+    'id',v_sale_id,'sale_id',v_sale_id,'sale_item_id',v_item_id,'created_at',now(),
     'invoice_number',v_invoice,'customer_id',v_customer_id,
     'customer_name',v_customer_name,'customer_phone',v_customer_phone,
     'motorcycle_id',b.id,'motorcycle_name',b.name,'model_year',b.model_year,
