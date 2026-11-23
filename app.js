@@ -894,8 +894,9 @@ function pageVinScanner() {
 
 function pagePOS() {
   const u = currentUser();
-  if (!u || u.role !== 'admin') return pageNoPermission();
-  const available = state.bikes.filter((bike) => bike.status === 'available' && bike.stock > 0);
+  if (!canUseVinScanner()) return pageNoPermission();
+  const availableUnits = (state.motorcycleUnits || []).filter(unit => unit.unit_status === 'available' && !unit.is_demo);
+  const available = state.bikes.filter(bike => bike.status === 'available' && availableUnits.some(unit => unit.motorcycle_id === bike.id));
   const sales = state.sales || [];
   return `
     <h2 class="page-title"><i class="fa-solid fa-cash-register"></i> نقطة البيع POS</h2>
@@ -913,16 +914,18 @@ function pagePOS() {
           <label>أصناف الفاتورة</label>
           <div id="posCartRows">
             <div class="form-row pos-cart-row">
-              <div class="field"><label>الدراجة</label><select name="motorcycle_id" required>
+              <div class="field"><label>طراز الدراجة</label><select name="motorcycle_id" required>
                 <option value="">اختر الدراجة</option>
-                ${available.map((bike) => `<option value="${esc(bike.id)}">${esc(bike.name)} — ${esc(bike.model)} — ${money(bike.price)} (المتاح: ${bike.stock})</option>`).join('')}
+                ${available.map((bike) => `<option value="${esc(bike.id)}">${esc(bike.name)} — ${esc(bike.model)} — ${money(bike.price)}</option>`).join('')}
               </select></div>
-              <div class="field"><label>الكمية</label><input name="quantity" type="number" min="1" max="100" value="1" required></div>
+              <div class="field"><label>الوحدات الفعلية — اختر أرقام الشاسيه</label><select name="unit_ids" multiple size="4" required>
+                ${availableUnits.map(unit => {const bike=state.bikes.find(item=>item.id===unit.motorcycle_id);return `<option value="${esc(unit.id)}" data-motorcycle-id="${esc(unit.motorcycle_id)}">${esc(bike?.name||'دراجة')} — ${esc(unit.vin)}</option>`;}).join('')}
+              </select><small class="hint">يجب اختيار رقم شاسيه لكل دراجة مباعة.</small></div>
               <div class="field"><label>إجراء</label><button class="btn btn-outline btn-sm" type="button" data-remove-pos-row disabled>حذف الصنف</button></div>
             </div>
           </div>
           <button class="btn btn-outline btn-sm" type="button" id="addPosItemBtn"><i class="fa-solid fa-plus"></i> إضافة صنف آخر</button>
-          <small class="hint">يمكن إضافة عدة دراجات مختلفة إلى الفاتورة نفسها؛ تُراجع الكميات مرة أخرى داخل قاعدة البيانات قبل الخصم.</small>
+          <small class="hint">اختر طراز الدراجة ثم أرقام الشاسيه الفعلية لكل وحدة. لا يعتمد البيع على كمية تقديرية.</small>
         </div>
         <div class="form-row">
           <div class="field"><label for="posPaymentAmount">المبلغ المدفوع الآن (ج.م)</label><input id="posPaymentAmount" name="payment_amount" type="number" min="0" step="0.01" value="0" required><small class="hint">يمكن تسجيل دفعة جزئية أو إصدار الفاتورة دون تحصيل.</small></div>
@@ -1659,7 +1662,7 @@ function navigate(route) {
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
   if (route === 'manage-bikes' && state.user) Promise.all([loadMotorcycles(),loadMotorcycleUnits()]).then(render);
   if (route === 'staff' && state.user?.role === 'admin') loadStaffDirectory().then(render);
-  if (route === 'pos') loadSalesData().then(render);
+  if (route === 'pos') Promise.all([loadSalesData(),loadMotorcycles(),loadMotorcycleUnits()]).then(render);
   if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData()]).then(render);
   if (route === 'home') Promise.all([loadMotorcycles(),loadStoreUnits()]).then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
@@ -1859,8 +1862,10 @@ document.addEventListener('click', async (e) => {
     if (!rows || !first) return;
     if (rows.querySelectorAll('.pos-cart-row').length >= 20) { toast('الحد الأقصى 20 صنفًا في الفاتورة', 'error'); return; }
     const clone = first.cloneNode(true);
-    clone.querySelector('select').value = '';
-    clone.querySelector('input[name="quantity"]').value = '1';
+    clone.querySelectorAll('select').forEach(select => {
+      if (select.multiple) [...select.options].forEach(option => { option.selected = false; });
+      else select.value = '';
+    });
     const remove = clone.querySelector('[data-remove-pos-row]');
     if (remove) remove.disabled = false;
     rows.appendChild(clone);
@@ -2874,50 +2879,63 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'posSaleForm') {
-    if (!hasRole('admin') || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
     const fd = new FormData(form);
     const rows = [...form.querySelectorAll('.pos-cart-row')];
     const items = [];
     const seen = new Set();
+    const seenUnits = new Set();
     for (const row of rows) {
       const motorcycleId = row.querySelector('[name="motorcycle_id"]')?.value;
-      const quantity = Number(row.querySelector('[name="quantity"]')?.value);
       const bike = state.bikes.find((item) => item.id === motorcycleId);
-      if (!bike || !Number.isInteger(quantity) || quantity < 1 || quantity > bike.stock) {
-        toast('تحقق من كل دراجة والكمية المتاحة لها', 'error'); return;
+      const unitSelect = row.querySelector('[name="unit_ids"]');
+      const unitIds = [...(unitSelect?.selectedOptions || [])].map(option => option.value);
+      if (!bike || !unitIds.length || unitIds.length > bike.stock) {
+        toast('اختر طرازًا ووحدة فعلية واحدة على الأقل لكل سطر', 'error'); return;
       }
-      if (seen.has(bike.id)) { toast('لا تكرر الدراجة في أكثر من سطر؛ اجمع الكمية في سطر واحد', 'error'); return; }
+      if (seen.has(bike.id)) { toast('لا تكرر الطراز في أكثر من سطر؛ اجمع وحداته في سطر واحد', 'error'); return; }
       seen.add(bike.id);
-      items.push({ motorcycle_id: bike.id, quantity, bike });
+      for (const option of [...(unitSelect?.selectedOptions || [])]) {
+        if (option.dataset.motorcycleId !== bike.id || seenUnits.has(option.value)) {
+          toast('تأكد أن كل رقم شاسيه يتبع الطراز المختار ولم يُستخدم في سطر آخر', 'error'); return;
+        }
+        seenUnits.add(option.value);
+      }
+      items.push({ motorcycle_id: bike.id, unit_ids: unitIds, bike });
     }
-    if (!items.length) { toast('أضف صنفًا واحدًا على الأقل', 'error'); return; }
-    const subtotal = items.reduce((sum, item) => sum + item.bike.price * item.quantity, 0);
+    if (!items.length) { toast('أضف صنفًا واحدًا على الأقل وحدد أرقام شاسيهه', 'error'); return; }
+    const subtotal = items.reduce((sum, item) => sum + item.bike.price * item.unit_ids.length, 0);
     const paymentAmount = Number(fd.get('payment_amount'));
     if (!Number.isFinite(paymentAmount) || paymentAmount < 0 || paymentAmount > subtotal) {
       toast('قيمة الدفعة غير صحيحة أو أكبر من إجمالي الفاتورة', 'error'); return;
     }
+    const selectedAccount = form.querySelector('select[name="customer_user_id"] option:checked');
+    const customerName = safeName(fd.get('customer_name')) || selectedAccount?.dataset.name || 'عميل نقدي';
+    const customerPhone = safeName(fd.get('customer_phone')) || selectedAccount?.dataset.phone || '';
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
-    const { data, error } = await supabase.rpc('create_showroom_sale_for_customer', {
+    const { data, error } = await supabase.rpc('create_showroom_sale_with_units', {
       p_customer_user_id: String(fd.get('customer_user_id') || '') || null,
-      p_customer_name: safeName(fd.get('customer_name')) || null,
-      p_customer_phone: safeName(fd.get('customer_phone')) || null,
-      p_items: items.map(({ motorcycle_id, quantity, bike }) => ({ motorcycle_id: bike.id, quantity })),
+      p_customer_name: customerName,
+      p_customer_phone: customerPhone,
+      p_items: items.map(({ motorcycle_id, unit_ids }) => ({ motorcycle_id, unit_ids })),
       p_payment_amount: paymentAmount,
       p_payment_method: paymentAmount > 0 ? String(fd.get('payment_method')) : null,
       p_payment_reference: safeName(fd.get('payment_reference')) || null,
       p_notes: safeName(fd.get('notes')) || null
     });
     if (submit) submit.disabled = false;
-    if (error) { toast(error.message || 'تعذر تسجيل البيع', 'error'); return; }
-    await Promise.all([loadMotorcycles(), loadSalesData()]);
-    const customerName = safeName(fd.get('customer_name')) || 'عميل نقدي';
-    const invoiceRows = items.map(({bike,quantity}) => `<tr><td>${esc(bike.name)} — ${esc(bike.model)}</td><td>${quantity}</td><td>${money(bike.price)}</td><td>${money(bike.price * quantity)}</td></tr>`).join('');
+    if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد أي وحدة', 'error'); return; }
+    await Promise.all([loadMotorcycles(), loadMotorcycleUnits(), loadSalesData()]);
+    const invoiceRows = items.flatMap(({bike,unit_ids}) => unit_ids.map(unitId => {
+      const unit = state.motorcycleUnits.find(item => item.id === unitId);
+      return `<tr><td>${esc(bike.name)} — ${esc(bike.model)}</td><td>${esc(unit?.vin || '—')}</td><td>${esc(unit?.engine_number || '—')}</td><td>${money(bike.price)}</td></tr>`;
+    })).join('');
     const invoice = `
       <div class="invoice">
         <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع معرض</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date().toLocaleString('ar-EG')}</span></div></div>
         <hr><p><b>العميل:</b> ${esc(customerName)}</p><p><b>الهاتف:</b> ${esc(fd.get('customer_phone') || '—')}</p>
-        <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>رقم الشاسيه</th><th>رقم الموتور</th><th>السعر</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
         <p><b>الإجمالي:</b> ${money(data.total)}</p><p><b>المدفوع:</b> ${money(data.amount_paid)}</p>
         <p><b>المتبقي:</b> ${money(data.balance_due)}</p><p><b>حالة الدفع:</b> ${data.payment_status === 'paid' ? 'مدفوعة' : data.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</p>
         <p class="text-center">شكرًا لثقتكم في El Khayal Motors</p>
@@ -3187,7 +3205,7 @@ async function loadStoreUnits() {
 }
 
 async function loadMotorcycleUnits() {
-  if (!supabase || !state.user || !(hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage'))) return;
+  if (!supabase || !state.user || !(hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage'))) return;
   const { data, error } = await supabase.from('motorcycle_units')
     .select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)')
     .order('registered_at',{ascending:false}).limit(500);
