@@ -684,8 +684,12 @@ function pageCustomerInvoices() {
       const status = invoice.payment_status === 'paid' ? 'مدفوعة' : invoice.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة';
       return `<details class="panel customer-invoice">
         <summary><b>${esc(invoice.invoice_number)}</b> — ${new Date(invoice.created_at).toLocaleDateString('ar-EG')} — ${money(invoice.total)} <span class="status-pill ${esc(invoice.payment_status)}">${status}</span></summary>
-        <div class="table-wrap mt-2"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
-        <tbody>${invoice.items.map(item => `<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(item.model_year || '—')}</td><td>${Number(item.quantity)}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`).join('')}</tbody></table></div>
+        <div class="table-wrap mt-2"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>رقم الشاسيه</th><th>رقم الموتور</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+        <tbody>${invoice.items.map(item => {
+          const units=item.sale_item_units||[];
+          const ids=units.length?units.map(unit=>`<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(item.model_year||'—')}</td><td>${esc(unit.vin_snapshot||'—')}</td><td>${esc(unit.engine_number_snapshot||'—')}</td><td>1</td><td>${money(item.unit_price)}</td><td>${money(item.unit_price)}</td></tr>`).join(''):`<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(item.model_year||'—')}</td><td>—</td><td>—</td><td>${Number(item.quantity)}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`;
+          return ids;
+        }).join('')}</tbody></table></div>
         <div class="invoice-totals"><p><b>إجمالي الفاتورة:</b> ${money(invoice.total)}</p><p><b>المدفوع:</b> ${money(invoice.amount_paid)}</p><p><b>الرصيد المستخدم:</b> ${money(invoice.credit_applied)}</p><p><b>المتبقي:</b> ${money(invoice.balance_due)}</p></div>
         <div class="contact-actions mt-2 no-print"><button class="btn btn-primary btn-sm" type="button" data-print-customer-invoice><i class="fa-solid fa-print"></i> طباعة هذه الفاتورة</button></div>
       </details>`;
@@ -3357,7 +3361,7 @@ async function loadCustomerData() {
   const saleIds = sales.map((sale) => sale.id);
   const [itemsResult,returnsResult] = await Promise.all([
     saleIds.length
-      ? supabase.from('sale_items').select('sale_id,motorcycle_name,model_year,quantity,unit_price,line_total').in('sale_id', saleIds).order('created_at',{ascending:true})
+      ? supabase.from('sale_items').select('sale_id,motorcycle_name,model_year,quantity,unit_price,line_total,sale_item_units(vin_snapshot,engine_number_snapshot)').in('sale_id', saleIds).order('created_at',{ascending:true})
       : Promise.resolve({data:[],error:null}),
     saleIds.length
       ? supabase.from('sale_returns').select('sale_id,total_amount').in('sale_id',saleIds)
