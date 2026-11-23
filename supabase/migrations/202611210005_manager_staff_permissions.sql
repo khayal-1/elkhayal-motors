@@ -19,6 +19,7 @@ alter table public.employee_permissions enable row level security;
 revoke all on public.employee_permissions from anon,authenticated;
 grant select on public.employee_permissions to authenticated;
 
+drop policy if exists employee_permissions_read on public.employee_permissions;
 drop policy if exists employee_permissions_read_self_or_manager on public.employee_permissions;
 create policy employee_permissions_read_self_or_manager
 on public.employee_permissions
