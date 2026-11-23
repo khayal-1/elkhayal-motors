@@ -158,7 +158,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path=''
-as $
+as $$
 declare
   prior_payment public.payments%rowtype;
 begin
@@ -177,7 +177,7 @@ begin
     p_sale_id,p_amount,p_method,p_reference,p_idempotency_key
   );
 end;
-$;
+$$;
 revoke all on function private.record_sale_payment_idempotent_with_cash_impl(uuid,numeric,text,text,uuid,uuid) from public,anon;
 grant execute on function private.record_sale_payment_idempotent_with_cash_impl(uuid,numeric,text,text,uuid,uuid) to authenticated;
 
