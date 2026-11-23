@@ -76,7 +76,7 @@ begin
   for v_table, v_rows in
     select key, value from jsonb_each(p_backup->'tables')
   loop
-    if v_table in ('profiles','user_roles','accounting_accounts','cash_accounts','finance_settings','tax_rates','audit_logs') then
+    if v_table in ('accounting_accounts','cash_accounts','finance_settings','tax_rates','audit_logs') then
       continue;
     end if;
     if not exists (
