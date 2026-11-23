@@ -137,7 +137,7 @@ begin
     join lateral unnest(con.conkey, con.confkey) with ordinality as key_col(child_attnum,parent_attnum,ord) on true
     join pg_attribute child_col on child_col.attrelid=child.oid and child_col.attnum=key_col.child_attnum
     join pg_attribute parent_col on parent_col.attrelid=parent.oid and parent_col.attnum=key_col.parent_attnum
-    where con.contype='f' and child_ns.nspname='public' and parent_ns.nspname='public'
+    where con.contype='f' and child_ns.nspname='public' and parent_ns.nspname in ('public','auth')
     group by child_ns.nspname,child.relname,parent_ns.nspname,parent.relname,con.oid
   loop
     v_sql := format(
