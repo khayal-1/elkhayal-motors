@@ -148,7 +148,7 @@ begin
     raise exception 'غير مصرح بتعديل بيانات الوحدة' using errcode='42501';
   end if;
   if p_unit_id is null or v_vin=''
-     or p_unit_status not in ('available','reserved','sold','service','retired')
+     or p_unit_status not in ('available','reserved','sold','service')
      or p_odometer_reading is null or p_odometer_reading<0
      or coalesce(p_unit_condition,'') not in ('new','used')
      or (p_warranty_end is not null and p_warranty_start is not null and p_warranty_end<p_warranty_start) then
