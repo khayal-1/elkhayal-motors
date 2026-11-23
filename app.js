@@ -48,12 +48,14 @@ const state = {
   suppliers: [],
   purchaseOrders: [],
   supplierBills: [],
+  supplierBillItems: [],
   supplierPayments: [],
   supplierReturns: [],
   supplierReturnItems: [],
   financeAccounts: [],
   financeAllAccounts: [],
   cashAccounts: [],
+  salesCashAccounts: [],
   cashBalances: [],
   trialBalance: [],
   expenses: [],
@@ -97,6 +99,7 @@ const state = {
   payrollPayments: [],
   inventoryCosts: [],
   motorcycleUnits: [],
+  inventoryReconciliation: [],
   storeUnits: [],
   stocktakeBatches: [],
   stocktakeLines: [],
@@ -684,8 +687,12 @@ function pageCustomerInvoices() {
       const status = invoice.payment_status === 'paid' ? 'مدفوعة' : invoice.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة';
       return `<details class="panel customer-invoice">
         <summary><b>${esc(invoice.invoice_number)}</b> — ${new Date(invoice.created_at).toLocaleDateString('ar-EG')} — ${money(invoice.total)} <span class="status-pill ${esc(invoice.payment_status)}">${status}</span></summary>
-        <div class="table-wrap mt-2"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
-        <tbody>${invoice.items.map(item => `<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(item.model_year || '—')}</td><td>${Number(item.quantity)}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`).join('')}</tbody></table></div>
+        <div class="table-wrap mt-2"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>رقم الشاسيه</th><th>رقم الموتور</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+        <tbody>${invoice.items.map(item => {
+          const units=item.sale_item_units||[];
+          const ids=units.length?units.map(unit=>`<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(item.model_year||'—')}</td><td>${esc(unit.vin_snapshot||'—')}</td><td>${esc(unit.engine_number_snapshot||'—')}</td><td>1</td><td>${money(item.unit_price)}</td><td>${money(item.unit_price)}</td></tr>`).join(''):`<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(item.model_year||'—')}</td><td>—</td><td>—</td><td>${Number(item.quantity)}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`;
+          return ids;
+        }).join('')}</tbody></table></div>
         <div class="invoice-totals"><p><b>إجمالي الفاتورة:</b> ${money(invoice.total)}</p><p><b>المدفوع:</b> ${money(invoice.amount_paid)}</p><p><b>الرصيد المستخدم:</b> ${money(invoice.credit_applied)}</p><p><b>المتبقي:</b> ${money(invoice.balance_due)}</p></div>
         <div class="contact-actions mt-2 no-print"><button class="btn btn-primary btn-sm" type="button" data-print-customer-invoice><i class="fa-solid fa-print"></i> طباعة هذه الفاتورة</button></div>
       </details>`;
@@ -776,7 +783,7 @@ function renderVinUnitMatch(unit) {
     (bike.description?'<p>'+esc(bike.description)+'</p>':'')+'</div></div>'+
     (available?'<form id="vinScannerSaleForm" class="vin-sale-form form-grid" data-unit-id="'+esc(unit.id)+'"><h3><i class="fa-solid fa-cash-register"></i> بيع هذه الوحدة</h3>'+
       '<div class="form-row"><div class="field"><label>حساب العميل (اختياري)</label><select name="customer_user_id"><option value="">عميل نقدي / بدون ربط</option>'+((state.registeredCustomers||[]).map(c=>'<option value="'+esc(c.user_id)+'" data-name="'+esc(c.display_name)+'" data-phone="'+esc(c.phone||'')+'">'+esc(c.display_name)+' — '+esc(c.phone||'بدون هاتف')+'</option>').join(''))+'</select></div><div class="field"><label>اسم العميل</label><input name="customer_name" maxlength="120" placeholder="عميل نقدي"></div><div class="field"><label>هاتف العميل</label><input name="customer_phone" type="tel" maxlength="32"></div></div>'+
-      '<div class="form-row"><div class="field"><label>المبلغ المدفوع الآن (ج.م)</label><input name="payment_amount" type="number" min="0" max="'+Number(bike.price||0)+'" step="0.01" value="'+Number(bike.price||0)+'" required></div><div class="field"><label>طريقة الدفع</label><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div></div>'+
+      '<div class="form-row"><div class="field"><label>المبلغ المدفوع الآن (ج.م)</label><input name="payment_amount" type="number" min="0" max="'+Number(bike.price||0)+'" step="0.01" value="'+Number(bike.price||0)+'" required></div><div class="field"><label>طريقة الدفع</label><select name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div><div class="field"><label>استلمت الدفعة في</label><select name="cash_account_id"><option value="">اختر الخزينة / البنك</option>'+((state.salesCashAccounts||[]).map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' — '+esc(a.account_kind==='bank'?'بنك':'خزينة')+'</option>').join(''))+'</select></div></div>'+
       '<div class="field"><label>مرجع الدفع (اختياري)</label><input name="payment_reference" maxlength="120"></div><div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="500"></textarea></div>'+
       '<button class="btn btn-primary btn-block" type="submit"><i class="fa-solid fa-file-invoice"></i> تأكيد البيع وإصدار الفاتورة</button></form>':'<div class="hint">لا يمكن بيع الوحدة من هنا لأنها مباعة أو محجوزة أو غير متاحة أو أن مخزون الطراز غير كافٍ.</div>');
 }
@@ -894,8 +901,9 @@ function pageVinScanner() {
 
 function pagePOS() {
   const u = currentUser();
-  if (!u || u.role !== 'admin') return pageNoPermission();
-  const available = state.bikes.filter((bike) => bike.status === 'available' && bike.stock > 0);
+  if (!canUseVinScanner()) return pageNoPermission();
+  const availableUnits = (state.motorcycleUnits || []).filter(unit => unit.unit_status === 'available' && !unit.is_demo);
+  const available = state.bikes.filter(bike => bike.status === 'available' && availableUnits.some(unit => unit.motorcycle_id === bike.id));
   const sales = state.sales || [];
   return `
     <h2 class="page-title"><i class="fa-solid fa-cash-register"></i> نقطة البيع POS</h2>
@@ -913,20 +921,23 @@ function pagePOS() {
           <label>أصناف الفاتورة</label>
           <div id="posCartRows">
             <div class="form-row pos-cart-row">
-              <div class="field"><label>الدراجة</label><select name="motorcycle_id" required>
+              <div class="field"><label>طراز الدراجة</label><select name="motorcycle_id" required>
                 <option value="">اختر الدراجة</option>
-                ${available.map((bike) => `<option value="${esc(bike.id)}">${esc(bike.name)} — ${esc(bike.model)} — ${money(bike.price)} (المتاح: ${bike.stock})</option>`).join('')}
+                ${available.map((bike) => `<option value="${esc(bike.id)}">${esc(bike.name)} — ${esc(bike.model)} — ${money(bike.price)}</option>`).join('')}
               </select></div>
-              <div class="field"><label>الكمية</label><input name="quantity" type="number" min="1" max="100" value="1" required></div>
+              <div class="field"><label>الوحدات الفعلية — اختر أرقام الشاسيه</label><select name="unit_ids" multiple size="4" required>
+                ${availableUnits.map(unit => {const bike=state.bikes.find(item=>item.id===unit.motorcycle_id);return `<option value="${esc(unit.id)}" data-motorcycle-id="${esc(unit.motorcycle_id)}">${esc(bike?.name||'دراجة')} — ${esc(unit.vin)}</option>`;}).join('')}
+              </select><small class="hint">يجب اختيار رقم شاسيه لكل دراجة مباعة.</small></div>
               <div class="field"><label>إجراء</label><button class="btn btn-outline btn-sm" type="button" data-remove-pos-row disabled>حذف الصنف</button></div>
             </div>
           </div>
           <button class="btn btn-outline btn-sm" type="button" id="addPosItemBtn"><i class="fa-solid fa-plus"></i> إضافة صنف آخر</button>
-          <small class="hint">يمكن إضافة عدة دراجات مختلفة إلى الفاتورة نفسها؛ تُراجع الكميات مرة أخرى داخل قاعدة البيانات قبل الخصم.</small>
+          <small class="hint">اختر طراز الدراجة ثم أرقام الشاسيه الفعلية لكل وحدة. لا يعتمد البيع على كمية تقديرية.</small>
         </div>
         <div class="form-row">
           <div class="field"><label for="posPaymentAmount">المبلغ المدفوع الآن (ج.م)</label><input id="posPaymentAmount" name="payment_amount" type="number" min="0" step="0.01" value="0" required><small class="hint">يمكن تسجيل دفعة جزئية أو إصدار الفاتورة دون تحصيل.</small></div>
           <div class="field"><label for="posPaymentMethod">طريقة الدفع</label><select id="posPaymentMethod" name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div>
+          <div class="field"><label>الخزينة / البنك المستلم</label><select name="cash_account_id"><option value="">اختر الحساب عند تحصيل دفعة</option>${(state.salesCashAccounts||[]).map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' — '+esc(a.account_kind==='bank'?'بنك':'خزينة')+'</option>').join('')}</select></div>
         </div>
         <div class="field"><label for="posPaymentReference">مرجع الدفع (اختياري)</label><input id="posPaymentReference" name="payment_reference" maxlength="120"></div>
         <div class="field"><label for="posNotes">ملاحظات (اختياري)</label><textarea id="posNotes" name="notes" rows="2" maxlength="1000"></textarea></div>
@@ -944,7 +955,7 @@ function pagePOS() {
           <td><span class="status-pill ${sale.payment_status}">${sale.payment_status === 'paid' ? 'مدفوعة' : sale.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</span></td>
           <td>${money(sale.returnedAmount || 0)}</td>
           <td>${new Date(sale.created_at).toLocaleDateString('ar-EG')}</td>
-          <td>${Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} ${(state.customerCredits.find(c => c.customerId === sale.customer_id)?.balance || 0) > 0 && Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-apply-credit="${esc(sale.id)}">استخدام رصيد</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
+          <td><button class="btn btn-outline btn-sm" data-view-invoice="${esc(sale.id)}">عرض / طباعة</button> ${Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-collect-payment="${esc(sale.id)}">تحصيل دفعة</button>` : ''} ${(state.customerCredits.find(c => c.customerId === sale.customer_id)?.balance || 0) > 0 && Number(sale.total) - Number(sale.amount_paid) - Number(sale.credit_applied || 0) - Number(sale.returnedAmount || 0) > 0 ? `<button class="btn btn-outline btn-sm" data-apply-credit="${esc(sale.id)}">استخدام رصيد</button>` : ''} <button class="btn btn-outline btn-sm" data-return-sale="${esc(sale.id)}">مرتجع</button></td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty"><i class="fa-solid fa-inbox"></i><p>لا توجد فواتير مسجلة بعد.</p></div>`}
     </div>
     <div class="panel">
@@ -1016,8 +1027,12 @@ function pageInventoryTools() {
  const warrantyRows=(state.warranties||[]).map(x=>'<tr><td>#'+x.warranty_number+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc(x.customer_phone)+'</td><td>'+esc(x.start_date)+' – '+esc(x.end_date)+'</td><td>'+esc(x.status)+'</td></tr>').join('');
  const serviceRows=(state.serviceOrders||[]).map(x=>'<tr><td>#'+x.service_number+'</td><td>'+esc(x.motorcycles?.name||'—')+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc(x.customer_phone)+'</td><td>'+esc(x.issue_description)+'</td><td>'+money(x.estimated_cost)+'</td><td>'+esc(x.status)+'</td><td>'+(canCatalog&&!['completed','cancelled'].includes(x.status)?'<form id="serviceStatusForm" class="inline-form" data-order-id="'+esc(x.id)+'"><select name="status"><option value="in_progress">قيد العمل</option><option value="waiting_parts">بانتظار قطع غيار</option><option value="completed">مكتمل</option><option value="cancelled">ملغي</option></select><input name="actual_cost" type="number" min="0" step="0.01" placeholder="التكلفة الفعلية"><input name="diagnosis" placeholder="التشخيص"><button class="btn btn-outline btn-sm" type="submit">تحديث</button></form>':'—')+'</td></tr>').join('');
  const reorderRows=(state.reorderAlerts||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+x.stock+'</td><td>'+x.reorder_level+'</td><td>'+money(x.unit_cost)+'</td><td>'+money(x.stock_value)+'</td></tr>').join('');
+ const reconciliation=(state.inventoryReconciliation||[]).filter(x=>Number(x.difference)!==0);
+ const reconciliationRows=reconciliation.map(x=>'<tr><td>'+esc(x.motorcycle_name)+'</td><td>'+x.model_stock+'</td><td>'+x.physical_units+'</td><td>'+x.difference+'</td><td>'+x.available_units+' متاح / '+x.reserved_units+' محجوز / '+x.service_units+' صيانة</td></tr>').join('');
+
  return '<h2 class="page-title"><i class="fa-solid fa-warehouse"></i> إدارة المخزون والجرد والضمان والصيانة</h2><p class="page-sub">تسجيل تكلفة المخزون الفعلية، حدود إعادة الطلب، أرقام الهياكل والباركود، الجرد الدوري مع قيد فروق المخزون، الضمان وأوامر الصيانة.</p>'+
  '<div class="stats-grid"><div class="stat-card"><div class="stat-label">طرازات المخزون</div><div class="stat-value">'+bikes.length+'</div></div><div class="stat-card"><div class="stat-label">أرقام هياكل فعلية</div><div class="stat-value">'+(state.motorcycleUnits||[]).filter(x=>!x.is_demo).length+'</div></div><div class="stat-card"><div class="stat-label">وحدات ببيانات تجريبية</div><div class="stat-value">'+(state.motorcycleUnits||[]).filter(x=>x.is_demo).length+'</div></div><div class="stat-card"><div class="stat-label">تنبيهات إعادة الطلب</div><div class="stat-value">'+(state.reorderAlerts||[]).length+'</div></div><div class="stat-card"><div class="stat-label">أوامر صيانة مفتوحة</div><div class="stat-value">'+(state.serviceOrders||[]).filter(x=>!['completed','cancelled'].includes(x.status)).length+'</div></div></div>'+
+ '<div class="panel"><div class="panel-title">مطابقة رصيد الطراز مع الوحدات الفعلية</div><p class="hint">يجب أن يساوي رصيد الطراز عدد الوحدات المتاحة والمحجوزة وتحت الصيانة. سجلات الفروق القديمة تحتاج تسجيل أرقام الشاسيه أو مراجعة حركة مخزون قبل اعتماد الجرد أو البيع.</p><div class="table-wrap"><table><thead><tr><th>الطراز</th><th>رصيد الطراز</th><th>الوحدات المسجلة</th><th>الفرق</th><th>تفصيل الحالات</th></tr></thead><tbody>'+(reconciliationRows||'<tr><td colspan="5">لا توجد فروق بين الرصيد والوحدات المسجلة</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">تكلفة المخزون وحد إعادة الطلب</div><p class="hint">يُحدّث النظام متوسط تكلفة الوحدة المرجح تلقائيًا من استلامات الشراء بعد خصم مرتجعات المورد. يمكن للمحاسب تعديل التكلفة يدويًا عند وجود تسوية موثقة.</p><div class="table-wrap"><table><thead><tr><th>الدراجة</th><th>المخزون</th><th>متوسط التكلفة المرجح</th><th>حد الطلب</th><th>تحديث التكلفة / الحد</th></tr></thead><tbody>'+(costRows||'<tr><td colspan="5">لا توجد دراجات</td></tr>')+'</tbody></table></div></div>'+
  '<div class="panel"><div class="panel-title">إدارة وحدات الدراجات</div><p>أرقام الشاسيه والموتور وتفاصيل كل دراجة أصبحت داخل إدارة الدراجات. افتح مجلد النوع لإضافة الوحدات أو تعديل بياناتها وحالاتها.</p><button class="btn btn-outline" data-nav="manage-bikes">فتح إدارة الدراجات</button></div>'+
  '<div class="panel"><div class="panel-title">الجرد الفعلي وتسوية فروق المخزون</div><p class="hint">أدخل العدد المعدود لكل طراز. تُسجل فروق الكمية في حركات المخزون، وتُرحّل القيمة إلى حساب المخزون وفروق الجرد باستخدام تكلفة الوحدة المسجلة. لا تُنشأ قيود إذا لم يوجد فرق.</p><form id="stocktakeForm" class="form-grid"><div class="form-row"><div class="field"><label>تاريخ الجرد</label><input name="stocktake_date" type="date" required></div><div class="field"><label>ملاحظات</label><input name="notes" maxlength="180"></div></div>'+bikes.map(b=>'<div class="form-row" data-stocktake-line="'+esc(b.id)+'"><div class="field"><label>'+esc(b.name)+' — الدفتري '+b.stock+'</label><input type="number" name="counted_quantity" min="0" step="1" value="'+b.stock+'" required></div><div class="field"><label>تكلفة الوحدة</label><input disabled value="'+(costMap.get(b.id)?.unit_cost??'غير محددة')+'"></div></div>').join('')+'<button class="btn btn-primary" type="submit" '+(!bikes.length?'disabled':'')+'>ترحيل الجرد الفعلي</button></form><div class="table-wrap mt-2"><table><thead><tr><th>الجرد</th><th>التاريخ</th><th>ملاحظات</th><th>زيادة</th><th>عجز</th><th>قيد اليومية</th></tr></thead><tbody>'+(batchRows||'<tr><td colspan="6">لا توجد عمليات جرد</td></tr>')+'</tbody></table></div></div>'+
@@ -1239,11 +1254,20 @@ function pageSuppliers() {
           <div class="field"><label>تاريخ الاستحقاق (اختياري)</label><input name="due_date" type="date"></div>
         </div>
         <div class="form-row">
-          <div class="field"><label>القيمة الإجمالية (ج.م)</label><input name="total_amount" type="number" min="0.01" step="0.01" required></div>
-          <div class="field"><label>ربط بأمر توريد (اختياري)</label><select name="purchase_order_id"><option value="">بدون ربط</option>${state.purchaseOrders.filter(o=>o.status!=='cancelled').map(o=>'<option value="'+esc(o.id)+'">'+esc(o.order_number)+' — '+esc(o.supplierName)+'</option>').join('')}</select></div>
+          <div class="field"><label>أمر التوريد المرتبط</label><select id="supplierBillPurchaseOrder" name="purchase_order_id"><option value="">بدون أمر توريد — بند مباشر فقط</option>${state.purchaseOrders.filter(o=>o.status!=='cancelled').map(o=>'<option value="'+esc(o.id)+'">'+esc(o.order_number)+' — '+esc(o.supplierName)+'</option>').join('')}</select></div>
+          <div class="field"><label>إجمالي الفاتورة (ج.م)</label><input name="total_amount" type="number" min="0.01" step="0.01" readonly required></div>
+        </div>
+        <div class="panel-subtitle">بنود الاستلام المرتبطة بأمر التوريد</div>
+        <div id="supplierBillLines" class="form-grid"><small class="hint">اختر أمر التوريد لعرض بنود الاستلام والوحدات التي لم تُفوتر بعد.</small></div>
+        <div class="supplier-bill-direct-line">
+          <label><input type="checkbox" name="direct_line_enabled"> إضافة بند مباشر (رسوم أو فرق غير مرتبط بوحدة مستلمة)</label>
+          <div class="form-row">
+            <div class="field"><label>وصف البند المباشر</label><input name="direct_description" maxlength="500" disabled></div>
+            <div class="field"><label>قيمة البند (ج.م)</label><input name="direct_amount" type="number" min="0.01" step="0.01" disabled></div>
+          </div>
         </div>
         <div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
-        <small class="hint">تسجيل الفاتورة لا يغيّر المخزون. تُحسب المديونية من قيمة الفاتورة والمدفوعات الفعلية فقط.</small>
+        <small class="hint">يجب أن يساوي إجمالي الفاتورة مجموع البنود. كل كمية مخزون تُربط بوحدات فعلية من الاستلام، ولا يمكن فوترة الوحدة مرتين.</small>
         <button class="btn btn-primary" type="submit">حفظ فاتورة المورد</button>
       </form>` : '<div class="empty">أضف موردًا أولًا.</div>'}
     </div>
@@ -1421,7 +1445,7 @@ function bikeFormHTML(bike) {
         <div class="field"><label>السعر</label><input type="number" name="price" required min="0" value="${esc(b.price)}"></div>
       </div>
       <div class="form-row">
-        <div class="field"><label>المخزون</label><input type="number" name="stock" required min="0" value="${esc(b.stock)}"></div>
+        <div class="field"><label>الرصيد الفعلي (يُحسب من أرقام الشاسيه)</label><input type="number" name="stock" min="0" value="${esc(b.stock)}" readonly><small class="hint">يُحدّث الرصيد تلقائيًا من استلام الوحدات وحركات البيع والمرتجعات والجرد المعتمد.</small></div>
         <div class="field"><label>حالة العرض</label><select name="status">
           <option value="draft" ${b.status === 'draft' ? 'selected' : ''}>مسودة</option>
           <option value="available" ${b.status === 'available' ? 'selected' : ''}>متاحة</option>
@@ -1659,8 +1683,8 @@ function navigate(route) {
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
   if (route === 'manage-bikes' && state.user) Promise.all([loadMotorcycles(),loadMotorcycleUnits()]).then(render);
   if (route === 'staff' && state.user?.role === 'admin') loadStaffDirectory().then(render);
-  if (route === 'pos') loadSalesData().then(render);
-  if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData()]).then(render);
+  if (route === 'pos') Promise.all([loadSalesData(),loadMotorcycles(),loadMotorcycleUnits(),loadSalesCashAccounts()]).then(render);
+  if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData(),loadSalesCashAccounts()]).then(render);
   if (route === 'home') Promise.all([loadMotorcycles(),loadStoreUnits()]).then(render);
   if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
@@ -1859,8 +1883,10 @@ document.addEventListener('click', async (e) => {
     if (!rows || !first) return;
     if (rows.querySelectorAll('.pos-cart-row').length >= 20) { toast('الحد الأقصى 20 صنفًا في الفاتورة', 'error'); return; }
     const clone = first.cloneNode(true);
-    clone.querySelector('select').value = '';
-    clone.querySelector('input[name="quantity"]').value = '1';
+    clone.querySelectorAll('select').forEach(select => {
+      if (select.multiple) [...select.options].forEach(option => { option.selected = false; option.disabled = false; });
+      else select.value = '';
+    });
     const remove = clone.querySelector('[data-remove-pos-row]');
     if (remove) remove.disabled = false;
     rows.appendChild(clone);
@@ -1919,9 +1945,17 @@ document.addEventListener('click', async (e) => {
     const bills=state.supplierBills.filter(b=>b.supplier_id===order.supplier_id&&(!b.purchase_order_id||b.purchase_order_id===order.id));
     if(!available.length){toast('لا توجد كميات مستلمة متبقية للإرجاع','info');return;}
     if(!bills.length){toast('سجّل فاتورة المورد واربطها بالمورد أو أمر التوريد قبل إنشاء إشعار الخصم','error');return;}
-    const rows=available.map(ri=>{const rem=Number(ri.quantity)-ri.returned;const po=order.items.find(it=>it.id===ri.purchase_order_item_id);return '<div data-receipt-item-id="'+esc(ri.id)+'"><label>'+esc(po?.motorcycle_name||'الصنف')+' — متاح '+rem+' — تكلفة '+money(ri.unit_cost)+'</label><input name=quantity type=number min=0 max='+rem+' value=0 required></div>';}).join('');
+    const receiptUnitsResult=await supabase.from('purchase_receipt_units')
+      .select('receipt_item_id,motorcycle_unit_id,motorcycle_units(vin,engine_number,unit_status)')
+      .in('receipt_item_id',available.map(ri=>ri.id));
+    if(receiptUnitsResult.error){toast('تعذر تحميل أرقام الوحدات المستلمة للمرتجع','error');return;}
+    const rows=available.map(ri=>{
+      const po=order.items.find(it=>it.id===ri.purchase_order_item_id);
+      const unitOptions=(receiptUnitsResult.data||[]).filter(x=>x.receipt_item_id===ri.id&&x.motorcycle_units?.unit_status==='available');
+      return '<div data-receipt-item-id="'+esc(ri.id)+'"><label>'+esc(po?.motorcycle_name||'الصنف')+' — وحدات متاحة للإرجاع '+unitOptions.length+' — تكلفة '+money(ri.unit_cost)+'</label><select name=unit_ids multiple size=4>'+unitOptions.map(x=>'<option value="'+esc(x.motorcycle_unit_id)+'">'+esc(x.motorcycle_units?.vin||'VIN غير متاح')+' — موتور '+esc(x.motorcycle_units?.engine_number||'—')+'</option>').join('')+'</select></div>';
+    }).join('');
     const opts=bills.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.bill_number)+' — الرصيد '+money(b.balanceDue)+'</option>').join('');
-    openModal('<div class=modal-header><h3>مرتجع مشتريات '+esc(order.order_number)+'</h3><button class=modal-close data-close-modal>×</button></div><form id=supplierReturnForm data-order-id="'+esc(order.id)+'"><label>فاتورة المورد</label><select name=supplier_bill_id required><option value="">اختر الفاتورة</option>'+opts+'</select>'+rows+'<label>ملاحظات</label><textarea name=notes maxlength=1000></textarea><button class=btn btn-primary type=submit>تأكيد المرتجع</button></form>'); return;
+    openModal('<div class=modal-header><h3>مرتجع مشتريات '+esc(order.order_number)+'</h3><button class=modal-close data-close-modal>×</button></div><form id=supplierReturnForm data-order-id="'+esc(order.id)+'"><label>فاتورة المورد</label><select name=supplier_bill_id required><option value="">اختر الفاتورة</option>'+opts+'</select>'+rows+'<small class=hint>حدد أرقام الشاسيه الفعلية التي ستُعاد للمورد؛ ستُخرج هذه الوحدات من المخزون وتُربط بإشعار الخصم.</small><label>ملاحظات</label><textarea name=notes maxlength=1000></textarea><button class=btn btn-primary type=submit>تأكيد المرتجع</button></form>'); return;
   }
   const receiveOrderButton = e.target.closest('[data-receive-order]');
   if (receiveOrderButton) {
@@ -1930,19 +1964,27 @@ document.addEventListener('click', async (e) => {
     if (!order || !pendingItems.length) { toast('لا توجد كمية متبقية للاستلام', 'error'); return; }
     openModal(`<div class="modal-header"><h3>استلام أمر ${esc(order.order_number)}</h3><button class="modal-close" data-close-modal>×</button></div>
       <form id="receivePurchaseForm" class="form-grid" data-order-id="${esc(order.id)}">
-        <div class="form-grid">${pendingItems.map(item=>{const remaining=Number(item.quantity_ordered)-Number(item.quantity_received);return `<div class="purchase-order-row form-row" data-item-id="${esc(item.id)}">
+        <div class="form-grid">${pendingItems.map(item=>{const remaining=Number(item.quantity_ordered)-Number(item.quantity_received);return `<div class="purchase-order-row" data-item-id="${esc(item.id)}">
           <div class="field"><label>${esc(item.motorcycle_name)} — المتبقي ${remaining}</label><input name="quantity" type="number" min="0" max="${remaining}" value="${remaining}" required></div>
+          <div class="form-grid">${Array.from({length:remaining},(_,index)=>`<div class="panel" data-unit-row>
+            <b>بيانات الدراجة رقم ${index+1}</b>
+            <div class="field"><label>رقم الشاسيه VIN</label><input name="vin" maxlength="80" autocomplete="off" placeholder="VIN إلزامي"></div>
+            <div class="field"><label>رقم الموتور</label><input name="engine_number" maxlength="80"></div>
+            <div class="form-row"><div class="field"><label>الباركود</label><input name="barcode" maxlength="80"></div><div class="field"><label>عداد الكيلومترات</label><input name="odometer_reading" type="number" min="0" value="0"></div></div>
+            <div class="field"><label>الحالة</label><select name="unit_condition"><option value="new">جديدة</option><option value="used">مستعملة</option></select></div>
+            <div class="form-row"><div class="field"><label>بداية الضمان</label><input name="warranty_start" type="date"></div><div class="field"><label>نهاية الضمان</label><input name="warranty_end" type="date"></div></div>
+          </div>`).join('')}</div>
         </div>`}).join('')}</div>
         <div class="field"><label>ملاحظات الاستلام</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
-        <small class="hint">اكتب صفرًا للصنف الذي لم يصل في هذه الشحنة؛ ويمكن تسجيل الاستلام على دفعات.</small>
-        <button class="btn btn-primary" type="submit">تأكيد الاستلام وتحديث المخزون</button>
+        <small class="hint">أدخل رقم الشاسيه لكل دراجة مستلمة. تُنشأ سجلات الوحدات وتُحدّث الكمية وتكلفة الاستلام في معاملة واحدة. يمكن الاستلام على دفعات.</small>
+        <button class="btn btn-primary" type="submit">تأكيد الاستلام وربط أرقام الشاسيه</button>
       </form>`);
     return;
   }
 
   const returnSaleButton = e.target.closest('[data-return-sale]');
   if (returnSaleButton) {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
     const sale = state.sales.find(s => s.id === returnSaleButton.dataset.returnSale);
     if (!sale) return;
     const { data: saleItems, error } = await supabase.from('sale_items')
@@ -1988,7 +2030,7 @@ document.addEventListener('click', async (e) => {
 
   const applyCredit = e.target.closest('[data-apply-credit]');
   if (applyCredit) {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
     const sale = state.sales.find(x=>x.id===applyCredit.dataset.applyCredit);
     const credit = sale && state.customerCredits.find(x=>x.customerId===sale.customer_id);
     if (!sale || !credit || credit.balance<=0) return;
@@ -2007,6 +2049,33 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const viewInvoiceButton = e.target.closest('[data-view-invoice]');
+  if (viewInvoiceButton) {
+    if (!supabase) return;
+    viewInvoiceButton.disabled = true;
+    const {data,error}=await supabase.rpc('get_sale_invoice',{p_sale_id:viewInvoiceButton.dataset.viewInvoice});
+    viewInvoiceButton.disabled = false;
+    if(error){toast(error.message||'تعذر استرجاع الفاتورة المحفوظة','error');return;}
+    const invoiceRows=(data.items||[]).flatMap(item=>{
+      const units=item.units||[];
+      if(!units.length)return [`<tr><td>${esc(item.motorcycle_name)}</td><td>—</td><td>—</td><td>${item.quantity}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`];
+      return units.map(unit=>`<tr><td>${esc(item.motorcycle_name)}</td><td>${esc(unit.vin||'—')}</td><td>${esc(unit.engine_number||'—')}</td><td>1</td><td>${money(item.unit_price)}</td><td>${money(item.unit_price)}</td></tr>`);
+    }).join('');
+    const paymentRows=(data.payments||[]).map(payment=>`<tr><td>${new Date(payment.paid_at).toLocaleString('ar-EG')}</td><td>${esc(payment.method)}</td><td>${esc(payment.reference||'—')}</td><td>${money(payment.amount)}</td></tr>`).join('');
+    const returned=(data.returns||[]).reduce((sum,item)=>sum+Number(item.total_amount||0),0);
+    const due=Math.max(0,Number(data.total||0)-Number(data.amount_paid||0)-Number(data.credit_applied||0)-returned);
+    const invoice=`<div class="invoice">
+      <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>نسخة محفوظة من فاتورة البيع</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date(data.created_at).toLocaleString('ar-EG')}</span></div></div>
+      <hr><p><b>العميل:</b> ${esc(data.customer_name||'عميل نقدي')}</p><p><b>الهاتف:</b> ${esc(data.customer_phone||'—')}</p>
+      <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>رقم الشاسيه</th><th>رقم الموتور</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
+      <p><b>الإجمالي:</b> ${money(data.total)}</p><p><b>المدفوع:</b> ${money(data.amount_paid)}</p><p><b>رصيد مستخدم:</b> ${money(data.credit_applied)}</p><p><b>قيمة المرتجعات:</b> ${money(returned)}</p><p><b>المتبقي:</b> ${money(due)}</p>
+      <h4>المدفوعات</h4><div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الطريقة</th><th>المرجع</th><th>المبلغ</th></tr></thead><tbody>${paymentRows||'<tr><td colspan="4">لا توجد دفعات</td></tr>'}</tbody></table></div>
+      <p class="text-center">هذه نسخة مسترجعة من السجل المحفوظ في النظام</p>
+    </div><div class="contact-actions no-print"><button class="btn btn-primary" id="printInvoiceBtn" type="button">طباعة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
+    openModal(invoice);
+    return;
+  }
+
   const collectPayment = e.target.closest('[data-collect-payment]');
   if (collectPayment) {
     const sale = state.sales.find((item) => item.id === collectPayment.dataset.collectPayment);
@@ -2017,6 +2086,7 @@ document.addEventListener('click', async (e) => {
       <form id="collectPaymentForm" class="form-grid" data-sale-id="${esc(sale.id)}">
         <div class="field"><label for="collectAmount">قيمة الدفعة</label><input id="collectAmount" name="amount" type="number" min="0.01" max="${balance}" step="0.01" required></div>
         <div class="field"><label for="collectMethod">طريقة الدفع</label><select id="collectMethod" name="method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div>
+        <div class="field"><label>استلمت الدفعة في</label><select name="cash_account_id" required><option value="">اختر الخزينة / البنك</option>${(state.salesCashAccounts||[]).map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' — '+esc(a.account_kind==='bank'?'بنك':'خزينة')+'</option>').join('')}</select></div>
         <div class="field"><label for="collectReference">مرجع الدفع (اختياري)</label><input id="collectReference" name="reference" maxlength="120"></div>
         <button class="btn btn-primary" type="submit">حفظ الدفعة</button>
       </form>`);
@@ -2293,11 +2363,21 @@ document.addEventListener('submit', async (e) => {
   }
   if (form.id === 'motorcycleUnitForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('finance_manage') && !hasPermission('catalog_manage')) { toast('ليس لديك صلاحية تسجيل أرقام الهياكل','error'); return; }
-    const fd=new FormData(form); const {data:unitId,error}=await supabase.rpc('register_motorcycle_unit_with_engine_number',{p_motorcycle_id:fd.get('motorcycle_id'),p_vin:safeName(fd.get('vin')),p_engine_number:safeName(fd.get('engine_number')),p_barcode:safeName(fd.get('barcode'))||null,p_warranty_start:fd.get('warranty_start')||null,p_warranty_end:fd.get('warranty_end')||null,p_notes:safeName(fd.get('notes'))||null});
-    if(error){toast(error.message||'تعذر تسجيل رقم الهيكل','error');return;}
-    const unitResult=await supabase.rpc('update_motorcycle_unit_details',{p_unit_id:unitId,p_vin:safeName(fd.get('vin')),p_engine_number:safeName(fd.get('engine_number')),p_barcode:safeName(fd.get('barcode')),p_unit_status:'available',p_odometer_reading:Number(fd.get('odometer_reading')||0),p_unit_condition:String(fd.get('unit_condition')||'new'),p_warranty_start:fd.get('warranty_start')||null,p_warranty_end:fd.get('warranty_end')||null,p_notes:safeName(fd.get('notes'))||null});
-    if(unitResult.error){toast('تم إنشاء سجل الوحدة لكن تعذر حفظ بعض تفاصيلها: '+unitResult.error.message,'error');return;}
-    await Promise.all([loadMotorcycleUnits(),loadStoreUnits()]);closeModal();render();toast('تم تسجيل الوحدة وربطها بهذا النوع','success');return;
+    const fd=new FormData(form);
+    const {error}=await supabase.rpc('register_motorcycle_unit_with_engine_number',{
+      p_motorcycle_id:fd.get('motorcycle_id'),
+      p_vin:safeName(fd.get('vin')),
+      p_engine_number:safeName(fd.get('engine_number'))||null,
+      p_barcode:safeName(fd.get('barcode'))||null,
+      p_warranty_start:fd.get('warranty_start')||null,
+      p_warranty_end:fd.get('warranty_end')||null,
+      p_notes:safeName(fd.get('notes'))||null,
+      p_odometer_reading:Number(fd.get('odometer_reading')||0),
+      p_unit_condition:String(fd.get('unit_condition')||'new')
+    });
+    if(error){toast(error.message||'تعذر تسجيل الوحدة؛ لم يتم حفظ أي جزء من العملية','error');return;}
+    await Promise.all([loadMotorcycleUnits(),loadStoreUnits()]);
+    closeModal();render();toast('تم تسجيل الوحدة وبياناتها في عملية واحدة','success');return;
   }
   if (form.id === 'motorcycleUnitEditForm') {
     if (!hasRole('admin','manager','owner') && !hasPermission('catalog_manage') && !hasPermission('finance_manage')) { toast('ليس لديك صلاحية تعديل الوحدة','error'); return; }
@@ -2614,7 +2694,7 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'saleReturnForm') {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية تسجيل مرتجعات المبيعات','error'); return; }
     const fd = new FormData(form), items = [];
     for (const row of form.querySelectorAll('[data-sale-item-id]')) {
       const quantity = Number(row.querySelector('[name=quantity]').value || 0);
@@ -2637,20 +2717,52 @@ document.addEventListener('submit', async (e) => {
 
   if(form.id==='supplierReturnForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية تسجيل مرتجعات الموردين','error');return;}
-    const fd=new FormData(form),items=[];for(const row of form.querySelectorAll('[data-receipt-item-id]')){const quantity=Number(row.querySelector('[name=quantity]').value||0);if(!Number.isInteger(quantity)||quantity<0){toast('أدخل كمية صحيحة','error');return;}if(quantity>0)items.push({purchase_receipt_item_id:row.dataset.receiptItemId,quantity});}
-    if(!items.length){toast('حدد كمية واحدة على الأقل','error');return;}const btn=form.querySelector('[type=submit]');if(btn)btn.disabled=true;
-    const {data,error}=await supabase.rpc('create_supplier_return',{p_purchase_order_id:form.dataset.orderId,p_supplier_bill_id:String(fd.get('supplier_bill_id')),p_items:items,p_notes:safeName(fd.get('notes'))||null});if(btn)btn.disabled=false;
-    if(error){toast(error.message||'تعذر تسجيل المرتجع','error');return;}closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast('تم تسجيل المرتجع رقم '+data.return_number+' بقيمة '+money(data.credit_amount),'success');return;
+    const fd=new FormData(form),items=[];
+    for(const row of form.querySelectorAll('[data-receipt-item-id]')){
+      const unitIds=[...(row.querySelector('[name=unit_ids]')?.selectedOptions||[])].map(option=>option.value);
+      if(unitIds.length)items.push({purchase_receipt_item_id:row.dataset.receiptItemId,unit_ids:unitIds});
+    }
+    if(!items.length){toast('حدد رقم شاسيه واحدًا على الأقل لإرجاعه','error');return;}
+    const btn=form.querySelector('[type=submit]');if(btn)btn.disabled=true;
+    const {data,error}=await supabase.rpc('create_supplier_return_for_units',{
+      p_purchase_order_id:form.dataset.orderId,p_supplier_bill_id:String(fd.get('supplier_bill_id')),
+      p_items:items,p_notes:safeName(fd.get('notes'))||null
+    });
+    if(btn)btn.disabled=false;
+    if(error){toast(error.message||'تعذر تسجيل المرتجع؛ لم يتم إخراج أي وحدة','error');return;}
+    closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);
+    render();toast('تم تسجيل المرتجع رقم '+data.return_number+' وربط '+items.reduce((n,x)=>n+x.unit_ids.length,0)+' وحدة فعلية بالمورد','success');return;
   }
   if(form.id==='supplierBillForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية إدارة فواتير الموردين','error');return;}
-    const fd=new FormData(form),amount=Number(fd.get('total_amount'));
-    if(!Number.isFinite(amount)||amount<=0){toast('أدخل قيمة فاتورة صحيحة','error');return;}
+    const fd=new FormData(form),items=[];
+    for(const row of form.querySelectorAll('.supplier-bill-line')){
+      if(!row.querySelector('[name="selected"]')?.checked)continue;
+      const quantity=Number(row.querySelector('[name="quantity"]')?.value);
+      const unitCost=Number(row.querySelector('[name="unit_cost"]')?.value);
+      const max=Number(row.querySelector('[name="quantity"]')?.max||0);
+      if(!Number.isInteger(quantity)||quantity<1||quantity>max||!Number.isFinite(unitCost)||unitCost<0){
+        toast('تحقق من الكمية وسعر الوحدة في بنود الفاتورة المحددة','error');return;
+      }
+      items.push({line_type:'inventory',purchase_receipt_item_id:row.dataset.receiptItemId,quantity,unit_cost:unitCost});
+    }
+    if(fd.get('direct_line_enabled')==='on'){
+      const directAmount=Number(fd.get('direct_amount'));
+      const description=safeName(fd.get('direct_description'));
+      if(!description||!Number.isFinite(directAmount)||directAmount<=0){toast('أدخل وصفًا وقيمة صحيحة للبند المباشر','error');return;}
+      items.push({line_type:'direct',description,quantity:1,unit_cost:Number(directAmount.toFixed(2))});
+    }
+    if(!items.length){toast('اختر بند استلام واحدًا على الأقل أو أضف بندًا مباشرًا','error');return;}
+    const amount=Math.round(items.reduce((n,item)=>n+Math.round(Number(item.quantity)*Number(item.unit_cost)*100)/100,0)*100)/100;
     const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
-    const {error}=await supabase.rpc('create_supplier_bill',{p_supplier_id:String(fd.get('supplier_id')),p_bill_number:safeName(fd.get('bill_number')),p_total_amount:amount,p_bill_date:String(fd.get('bill_date')),p_due_date:fd.get('due_date')||null,p_purchase_order_id:fd.get('purchase_order_id')||null,p_notes:safeName(fd.get('notes'))||null});
+    const {error}=await supabase.rpc('create_supplier_bill',{
+      p_supplier_id:String(fd.get('supplier_id')),p_bill_number:safeName(fd.get('bill_number')),
+      p_total_amount:amount,p_bill_date:String(fd.get('bill_date')),p_due_date:fd.get('due_date')||null,
+      p_purchase_order_id:fd.get('purchase_order_id')||null,p_notes:safeName(fd.get('notes'))||null,p_items:items
+    });
     if(submit)submit.disabled=false;
-    if(error){toast(error.message||'تعذر حفظ فاتورة المورد','error');return;}
-    await loadPurchasingData();render();toast('تم حفظ فاتورة المورد وتحديث رصيده','success');return;
+    if(error){toast(error.message||'تعذر حفظ فاتورة المورد؛ لم يتم تسجيل أي بند أو قيد جزئي','error');return;}
+    await loadPurchasingData();render();toast('تم حفظ الفاتورة وبنودها وربط الوحدات المستلمة دون تكرار','success');return;
   }
   if(form.id==='supplierPaymentForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية تسجيل مدفوعات الموردين','error');return;}
@@ -2694,14 +2806,31 @@ document.addEventListener('submit', async (e) => {
     for (const row of rows) {
       const quantity=Number(row.querySelector('[name="quantity"]')?.value);
       if(!Number.isInteger(quantity)||quantity<0){toast('تحقق من كميات الاستلام؛ استخدم صفرًا للصنف غير المستلم','error');return;}
-      if(quantity>0)items.push({purchase_order_item_id:row.dataset.itemId,quantity});
+      if(quantity>0){
+        const unitRows=[...row.querySelectorAll('[data-unit-row]')].slice(0,quantity);
+        if(unitRows.length!==quantity){toast('عدد نماذج الوحدات لا يطابق كمية الاستلام','error');return;}
+        const units=[];
+        for(const unitRow of unitRows){
+          const value=name=>unitRow.querySelector(`[name="${name}"]`)?.value;
+          const vin=safeName(value('vin'));
+          const odometer=Number(value('odometer_reading')||0);
+          if(!vin||!Number.isInteger(odometer)||odometer<0){toast('أدخل رقم شاسيه صحيحًا وعداد كيلومترات غير سالب لكل وحدة','error');return;}
+          units.push({
+            vin,engine_number:safeName(value('engine_number'))||null,
+            barcode:safeName(value('barcode'))||null,
+            odometer_reading:odometer,unit_condition:String(value('unit_condition')||'new'),
+            warranty_start:value('warranty_start')||null,warranty_end:value('warranty_end')||null
+          });
+        }
+        items.push({purchase_order_item_id:row.dataset.itemId,units});
+      }
     }
     if(!items.length){toast('أدخل كمية مستلمة واحدة على الأقل','error');return;}
     const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
-    const {data,error}=await supabase.rpc('receive_supplier_purchase_order',{p_order_id:form.dataset.orderId,p_items:items,p_notes:safeName(fd.get('notes'))||null});
+    const {data,error}=await supabase.rpc('receive_supplier_purchase_order_units',{p_order_id:form.dataset.orderId,p_items:items,p_notes:safeName(fd.get('notes'))||null});
     if(submit)submit.disabled=false;
-    if(error){toast(error.message||'تعذر تسجيل الاستلام','error');return;}
-    closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast(`تم تسجيل الاستلام ${data.receipt_number} وزيادة المخزون بمقدار ${data.quantity_received}`,'success');return;
+    if(error){toast(error.message||'تعذر تسجيل الاستلام؛ لم يتم اعتماد أي جزء منه','error');return;}
+    closeModal();await Promise.all([loadPurchasingData(),loadMotorcycles()]);render();toast(`تم تسجيل الاستلام ${data.receipt_number} وربط ${data.quantity_received} وحدة بأرقام شاسيهها`,'success');return;
   }
 
   if (form.id === 'customerReplyForm') {
@@ -2749,7 +2878,7 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'applyCustomerCreditForm') {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية استخدام أرصدة العملاء','error'); return; }
     const fd = new FormData(form), amount = Number(fd.get('amount')), max = Number(form.dataset.max);
     if (!Number.isFinite(amount) || amount<=0 || amount>max) { toast('قيمة استخدام الرصيد غير صحيحة','error'); return; }
     const submit = form.querySelector('button[type="submit"]'); if (submit) submit.disabled = true;
@@ -2764,14 +2893,18 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'collectPaymentForm') {
-    if (!hasRole('admin') || !supabase) { toast('ليس لديك صلاحية تحصيل المدفوعات', 'error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('ليس لديك صلاحية تحصيل المدفوعات', 'error'); return; }
     const fd = new FormData(form);
     const amount = Number(fd.get('amount'));
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
+    // Keep the same key while this modal remains open: a lost response can be retried safely.
+    form.dataset.paymentIdempotencyKey ||= crypto.randomUUID();
     const { error } = await supabase.rpc('record_sale_payment', {
       p_sale_id: form.dataset.saleId, p_amount: amount, p_method: String(fd.get('method')),
-      p_reference: safeName(fd.get('reference')) || null
+      p_reference: safeName(fd.get('reference')) || null,
+      p_idempotency_key: form.dataset.paymentIdempotencyKey,
+      p_cash_account_id: String(fd.get('cash_account_id'))
     });
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل الدفعة', 'error'); return; }
@@ -2803,9 +2936,11 @@ document.addEventListener('submit', async (e) => {
     const customerPhone = safeName(fd.get('customer_phone')) || selectedAccount?.dataset.phone || '';
     const amount = Number(fd.get('payment_amount'));
     const bike = lastScannedUnit?.motorcycles;
+    const cashAccountId=String(fd.get('cash_account_id')||'');
     if (!lastScannedUnit || lastScannedUnit.id !== form.dataset.unitId || !bike || !Number.isFinite(amount) || amount < 0 || amount > Number(bike.price)) {
       toast('بيانات الوحدة أو الدفعة غير صحيحة؛ أعد البحث عن الوحدة', 'error'); return;
     }
+    if(amount>0&&!cashAccountId){toast('حدد الخزينة أو البنك الذي استلم الدفعة','error');return;}
     const submit = form.querySelector('[type="submit"]');
     if (submit) submit.disabled = true;
     const { data, error } = await supabase.rpc('create_showroom_sale_for_unit', {
@@ -2816,12 +2951,13 @@ document.addEventListener('submit', async (e) => {
       p_payment_amount: amount,
       p_payment_method: amount > 0 ? String(fd.get('payment_method')) : null,
       p_payment_reference: safeName(fd.get('payment_reference')) || null,
-      p_notes: safeName(fd.get('notes')) || null
+      p_notes: safeName(fd.get('notes')) || null,
+      p_cash_account_id: cashAccountId || null
     });
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد العملية', 'error'); return; }
     const due = Number(data.balance_due || 0);
-    const invoice = '<div class="invoice"><div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع وحدة محددة</p></div><div class="invoice-meta"><b>'+esc(data.invoice_number)+'</b><br><span>'+new Date().toLocaleString('ar-EG')+'</span></div></div><hr>'+
+    const invoice = '<div class="invoice"><div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع وحدة محددة</p></div><div class="invoice-meta"><b>'+esc(data.invoice_number)+'</b><br><span>'+new Date(data.created_at).toLocaleString('ar-EG')+'</span></div></div><hr>'+
       '<p><b>العميل:</b> '+esc(customerName)+'</p><p><b>الهاتف:</b> '+esc(customerPhone || '—')+'</p>'+
       '<div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الموديل</th><th>VIN</th><th>رقم الموتور</th><th>السعر</th></tr></thead><tbody><tr><td>'+esc(data.motorcycle_name)+'</td><td>'+esc(data.model_year||'—')+'</td><td>'+esc(data.vin||'—')+'</td><td>'+esc(data.engine_number||'—')+'</td><td>'+money(data.unit_price)+'</td></tr></tbody></table></div>'+
       '<p><b>الإجمالي:</b> '+money(data.total)+'</p><p><b>المدفوع:</b> '+money(data.amount_paid)+'</p><p><b>المتبقي:</b> '+money(due)+'</p><p><b>حالة الدفع:</b> '+(data.payment_status==='paid'?'مدفوعة':data.payment_status==='partial'?'مدفوعة جزئيًا':'غير مدفوعة')+'</p>'+
@@ -2836,55 +2972,70 @@ document.addEventListener('submit', async (e) => {
   }
 
   if (form.id === 'posSaleForm') {
-    if (!hasRole('admin') || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
+    if (!canUseVinScanner() || !supabase) { toast('نقطة البيع غير متاحة لهذا الحساب', 'error'); return; }
     const fd = new FormData(form);
     const rows = [...form.querySelectorAll('.pos-cart-row')];
     const items = [];
     const seen = new Set();
+    const seenUnits = new Set();
     for (const row of rows) {
       const motorcycleId = row.querySelector('[name="motorcycle_id"]')?.value;
-      const quantity = Number(row.querySelector('[name="quantity"]')?.value);
       const bike = state.bikes.find((item) => item.id === motorcycleId);
-      if (!bike || !Number.isInteger(quantity) || quantity < 1 || quantity > bike.stock) {
-        toast('تحقق من كل دراجة والكمية المتاحة لها', 'error'); return;
+      const unitSelect = row.querySelector('[name="unit_ids"]');
+      const unitIds = [...(unitSelect?.selectedOptions || [])].map(option => option.value);
+      if (!bike || !unitIds.length || unitIds.length > bike.stock) {
+        toast('اختر طرازًا ووحدة فعلية واحدة على الأقل لكل سطر', 'error'); return;
       }
-      if (seen.has(bike.id)) { toast('لا تكرر الدراجة في أكثر من سطر؛ اجمع الكمية في سطر واحد', 'error'); return; }
+      if (seen.has(bike.id)) { toast('لا تكرر الطراز في أكثر من سطر؛ اجمع وحداته في سطر واحد', 'error'); return; }
       seen.add(bike.id);
-      items.push({ motorcycle_id: bike.id, quantity, bike });
+      for (const option of [...(unitSelect?.selectedOptions || [])]) {
+        if (option.dataset.motorcycleId !== bike.id || seenUnits.has(option.value)) {
+          toast('تأكد أن كل رقم شاسيه يتبع الطراز المختار ولم يُستخدم في سطر آخر', 'error'); return;
+        }
+        seenUnits.add(option.value);
+      }
+      items.push({ motorcycle_id: bike.id, unit_ids: unitIds, bike });
     }
-    if (!items.length) { toast('أضف صنفًا واحدًا على الأقل', 'error'); return; }
-    const subtotal = items.reduce((sum, item) => sum + item.bike.price * item.quantity, 0);
+    if (!items.length) { toast('أضف صنفًا واحدًا على الأقل وحدد أرقام شاسيهه', 'error'); return; }
+    const subtotal = items.reduce((sum, item) => sum + item.bike.price * item.unit_ids.length, 0);
     const paymentAmount = Number(fd.get('payment_amount'));
+    const cashAccountId=String(fd.get('cash_account_id')||'');
     if (!Number.isFinite(paymentAmount) || paymentAmount < 0 || paymentAmount > subtotal) {
       toast('قيمة الدفعة غير صحيحة أو أكبر من إجمالي الفاتورة', 'error'); return;
     }
+    if(paymentAmount>0&&!cashAccountId){toast('حدد الخزينة أو البنك الذي استلم الدفعة','error');return;}
+    const selectedAccount = form.querySelector('select[name="customer_user_id"] option:checked');
+    const customerName = safeName(fd.get('customer_name')) || selectedAccount?.dataset.name || 'عميل نقدي';
+    const customerPhone = safeName(fd.get('customer_phone')) || selectedAccount?.dataset.phone || '';
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
-    const { data, error } = await supabase.rpc('create_showroom_sale_for_customer', {
+    const { data, error } = await supabase.rpc('create_showroom_sale_with_units', {
       p_customer_user_id: String(fd.get('customer_user_id') || '') || null,
-      p_customer_name: safeName(fd.get('customer_name')) || null,
-      p_customer_phone: safeName(fd.get('customer_phone')) || null,
-      p_items: items.map(({ motorcycle_id, quantity, bike }) => ({ motorcycle_id: bike.id, quantity })),
+      p_customer_name: customerName,
+      p_customer_phone: customerPhone,
+      p_items: items.map(({ motorcycle_id, unit_ids }) => ({ motorcycle_id, unit_ids })),
       p_payment_amount: paymentAmount,
       p_payment_method: paymentAmount > 0 ? String(fd.get('payment_method')) : null,
       p_payment_reference: safeName(fd.get('payment_reference')) || null,
-      p_notes: safeName(fd.get('notes')) || null
+      p_notes: safeName(fd.get('notes')) || null,
+      p_cash_account_id: paymentAmount > 0 ? cashAccountId : null
     });
     if (submit) submit.disabled = false;
-    if (error) { toast(error.message || 'تعذر تسجيل البيع', 'error'); return; }
-    await Promise.all([loadMotorcycles(), loadSalesData()]);
-    const customerName = safeName(fd.get('customer_name')) || 'عميل نقدي';
-    const invoiceRows = items.map(({bike,quantity}) => `<tr><td>${esc(bike.name)} — ${esc(bike.model)}</td><td>${quantity}</td><td>${money(bike.price)}</td><td>${money(bike.price * quantity)}</td></tr>`).join('');
+    if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد أي وحدة', 'error'); return; }
+    await Promise.all([loadMotorcycles(), loadMotorcycleUnits(), loadSalesData()]);
+    const invoiceRows = (data.units || []).map(unit =>
+      `<tr><td>${esc(unit.motorcycle_name)} — ${esc(unit.model_year || '—')}</td><td>${esc(unit.vin || '—')}</td><td>${esc(unit.engine_number || '—')}</td><td>${money(unit.unit_price)}</td></tr>`
+    ).join('');
     const invoice = `
       <div class="invoice">
-        <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع معرض</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date().toLocaleString('ar-EG')}</span></div></div>
-        <hr><p><b>العميل:</b> ${esc(customerName)}</p><p><b>الهاتف:</b> ${esc(fd.get('customer_phone') || '—')}</p>
-        <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
+        <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع معرض</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date(data.created_at).toLocaleString('ar-EG')}</span></div></div>
+        <hr><p><b>العميل:</b> ${esc(customerName)}</p><p><b>الهاتف:</b> ${esc(customerPhone || '—')}</p>
+        <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>رقم الشاسيه</th><th>رقم الموتور</th><th>السعر</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
         <p><b>الإجمالي:</b> ${money(data.total)}</p><p><b>المدفوع:</b> ${money(data.amount_paid)}</p>
         <p><b>المتبقي:</b> ${money(data.balance_due)}</p><p><b>حالة الدفع:</b> ${data.payment_status === 'paid' ? 'مدفوعة' : data.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</p>
         <p class="text-center">شكرًا لثقتكم في El Khayal Motors</p>
       </div>
-      <div class="contact-actions no-print invoice-actions"><button class="btn btn-primary" id="printInvoiceBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" id="sendInvoiceWhatsAppBtn" type="button" data-phone="${esc(fd.get('customer_phone') || '')}" data-invoice="${esc(data.invoice_number)}" data-customer="${esc(customerName)}" data-total="${esc(data.total)}" data-paid="${esc(data.amount_paid)}" data-due="${esc(data.balance_due)}" data-items="${esc(items.map(({bike,quantity}) => bike.name + ' ' + bike.model + ' × ' + quantity + ' = ' + money(bike.price * quantity)).join(' | '))}"><i class="fa-brands fa-whatsapp"></i> إرسال الفاتورة عبر واتساب</button><button class="btn btn-outline" id="shareInvoiceBtn" type="button"><i class="fa-solid fa-share-nodes"></i> مشاركة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
+      <div class="contact-actions no-print invoice-actions"><button class="btn btn-primary" id="printInvoiceBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" id="sendInvoiceWhatsAppBtn" type="button" data-phone="${esc(customerPhone || '')}" data-invoice="${esc(data.invoice_number)}" data-customer="${esc(customerName)}" data-total="${esc(data.total)}" data-paid="${esc(data.amount_paid)}" data-due="${esc(data.balance_due)}" data-items="${esc((data.units || []).map(unit => unit.motorcycle_name + ' — VIN ' + unit.vin + ' — موتور ' + (unit.engine_number || '—')).join(' | '))}"><i class="fa-brands fa-whatsapp"></i> إرسال الفاتورة عبر واتساب</button><button class="btn btn-outline" id="shareInvoiceBtn" type="button"><i class="fa-solid fa-share-nodes"></i> مشاركة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
     openModal(invoice);
     render();
     toast('تم تسجيل البيع وتحديث المخزون وإصدار الفاتورة', 'success');
@@ -3064,13 +3215,12 @@ document.addEventListener('submit', async (e) => {
       model_year: Number(fd.get('model')) || null,
       category: safeName(fd.get('category')),
       price: Number(fd.get('price')) || 0,
-      stock: Number(fd.get('stock')) || 0,
       status: String(fd.get('status') || 'draft'),
       image_urls: images
     };
     const result = id
       ? await supabase.from('motorcycles').update(values).eq('id', id).select('id').single()
-      : await supabase.from('motorcycles').insert(values).select('id').single();
+      : await supabase.from('motorcycles').insert({ ...values, stock: 0 }).select('id').single();
     if (result.error) { toast(result.error.message, 'error'); return; }
 
     const savedId = result.data.id;
@@ -3106,6 +3256,7 @@ document.addEventListener('submit', async (e) => {
 
 /* ---------- Event: Input / Change ---------- */
 document.addEventListener('input', (e) => {
+  if(e.target.closest('#supplierBillForm')) updateSupplierBillTotal(e.target.closest('#supplierBillForm'));
   if (e.target.id === 'searchInput') {
     state.search = e.target.value;
     const grid = $('#productsGrid');
@@ -3119,8 +3270,20 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if(e.target.id==='supplierBillPurchaseOrder') renderSupplierBillLines(e.target.value);
+  if(e.target.closest('#supplierBillForm')) updateSupplierBillTotal(e.target.closest('#supplierBillForm'));
   if (e.target.id === 'filterCat') { state.filterCat = e.target.value; render(); }
   if (e.target.id === 'filterPrice') { state.filterPrice = e.target.value; render(); }
+  if (e.target.matches('.pos-cart-row select[name="motorcycle_id"]')) {
+    const row=e.target.closest('.pos-cart-row');
+    const unitSelect=row?.querySelector('select[name="unit_ids"]');
+    if(unitSelect){
+      [...unitSelect.options].forEach(option=>{
+        option.selected=false;
+        option.disabled=!!e.target.value && option.dataset.motorcycleId!==e.target.value;
+      });
+    }
+  }
   if (e.target.id === 'posCustomerAccount') {
     const option = e.target.selectedOptions?.[0];
     const name = document.getElementById('posCustomerName');
@@ -3149,12 +3312,17 @@ async function loadStoreUnits() {
 }
 
 async function loadMotorcycleUnits() {
-  if (!supabase || !state.user || !(hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage'))) return;
-  const { data, error } = await supabase.from('motorcycle_units')
-    .select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)')
-    .order('registered_at',{ascending:false}).limit(500);
-  if (error) { console.error('Motorcycle units load failed',error); toast('تعذر تحميل وحدات الدراجات','error'); return; }
-  state.motorcycleUnits = data || [];
+  if (!supabase || !state.user || !(hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage'))) return;
+  const allUnits=[];
+  for(let from=0; ; from+=500){
+    const {data,error}=await supabase.from('motorcycle_units')
+      .select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)')
+      .order('registered_at',{ascending:false}).range(from,from+499);
+    if(error){console.error('Motorcycle units load failed',error);toast('تعذر تحميل وحدات الدراجات','error');return;}
+    allUnits.push(...(data||[]));
+    if(!data||data.length<500)break;
+  }
+  state.motorcycleUnits=allUnits;
 }
 
 async function loadMotorcycles() {
@@ -3240,17 +3408,26 @@ async function loadCustomerData() {
   if (salesResult.error) console.error('Customer invoice history load failed', salesResult.error);
   const sales = salesResult.data || [];
   const saleIds = sales.map((sale) => sale.id);
-  const itemsResult = saleIds.length
-    ? await supabase.from('sale_items').select('sale_id,motorcycle_name,model_year,quantity,unit_price,line_total').in('sale_id', saleIds).order('created_at',{ascending:true})
-    : {data:[],error:null};
+  const [itemsResult,returnsResult] = await Promise.all([
+    saleIds.length
+      ? supabase.from('sale_items').select('sale_id,motorcycle_name,model_year,quantity,unit_price,line_total,sale_item_units(vin_snapshot,engine_number_snapshot)').in('sale_id', saleIds).order('created_at',{ascending:true})
+      : Promise.resolve({data:[],error:null}),
+    saleIds.length
+      ? supabase.from('sale_returns').select('sale_id,total_amount').in('sale_id',saleIds)
+      : Promise.resolve({data:[],error:null})
+  ]);
   if (itemsResult.error) console.error('Customer invoice items load failed', itemsResult.error);
+  if (returnsResult.error) console.error('Customer invoice returns load failed', returnsResult.error);
   const invoiceItems = itemsResult.data || [];
+  const returnedBySale = new Map();
+  for(const returned of returnsResult.data||[]) returnedBySale.set(returned.sale_id,(returnedBySale.get(returned.sale_id)||0)+Number(returned.total_amount||0));
   state.customerInvoices = sales.map((sale) => ({
     ...sale,
     total: Number(sale.total || 0),
     amount_paid: Number(sale.amount_paid || 0),
     credit_applied: Number(sale.credit_applied || 0),
-    balance_due: Math.max(0, Number(sale.total || 0) - Number(sale.amount_paid || 0) - Number(sale.credit_applied || 0)),
+    returned_amount: returnedBySale.get(sale.id)||0,
+    balance_due: Math.max(0, Number(sale.total || 0) - Number(sale.amount_paid || 0) - Number(sale.credit_applied || 0) - (returnedBySale.get(sale.id)||0)),
     items: invoiceItems.filter((item) => item.sale_id === sale.id)
   }));
   set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
@@ -3289,19 +3466,25 @@ async function loadCRMData() {
 
 async function loadInventoryData() {
  const u=currentUser();if(!u||!supabase||!(hasRole('admin','manager','owner')||hasPermission('catalog_manage')||hasPermission('finance_manage')))return;
- const [costs,units,batches,lines,warranties,orders,alerts]=await Promise.all([
+ const [costs,batches,lines,warranties,orders,alerts,reconciliation]=await Promise.all([
   supabase.from('motorcycle_inventory_costs').select('*'),
-  supabase.from('motorcycle_units').select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)').order('registered_at',{ascending:false}).limit(500),
   supabase.from('stocktake_batches').select('*').order('stocktake_date',{ascending:false}).limit(100),
   supabase.from('stocktake_lines').select('*,motorcycles(name)').limit(1000),
   supabase.from('warranties').select('*,motorcycles(name)').order('created_at',{ascending:false}).limit(300),
   supabase.from('service_orders').select('*,motorcycles(name),employees(full_name,employee_code)').order('opened_at',{ascending:false}).limit(300),
-  supabase.from('inventory_reorder_alerts').select('*').order('stock')
+  supabase.from('inventory_reorder_alerts').select('*').order('stock'),
+  supabase.from('inventory_unit_reconciliation').select('*').order('difference',{ascending:false})
  ]);
- const results=[costs,units,batches,lines,warranties,orders,alerts],failed=results.find(x=>x.error);
+ const results=[costs,batches,lines,warranties,orders,alerts,reconciliation],failed=results.find(x=>x.error);
  if(failed){console.error('Inventory data load failed',failed.error);toast('تعذر تحميل بيانات الجرد والصيانة: '+failed.error.message,'error');return;}
- state.inventoryCosts=costs.data||[];state.motorcycleUnits=units.data||[];state.stocktakeBatches=batches.data||[];state.stocktakeLines=lines.data||[];
- state.warranties=warranties.data||[];state.serviceOrders=orders.data||[];state.reorderAlerts=alerts.data||[];
+ const allUnits=[];
+ for(let from=0;;from+=500){
+  const {data,error}=await supabase.from('motorcycle_units').select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)').order('registered_at',{ascending:false}).range(from,from+499);
+  if(error){console.error('Inventory units page failed',error);toast('تعذر تحميل جميع وحدات المخزون','error');return;}
+  allUnits.push(...(data||[]));if(!data||data.length<500)break;
+ }
+ state.inventoryCosts=costs.data||[];state.motorcycleUnits=allUnits;state.stocktakeBatches=batches.data||[];state.stocktakeLines=lines.data||[];
+ state.warranties=warranties.data||[];state.serviceOrders=orders.data||[];state.reorderAlerts=alerts.data||[];state.inventoryReconciliation=reconciliation.data||[];
 }
 
 async function loadHRData() {
@@ -3324,6 +3507,13 @@ async function loadHRData() {
   state.employees=employees.data||[];state.attendanceRecords=attendance.data||[];state.employeeLeaveRequests=leaves.data||[];
   state.employeeCustody=custody.data||[];state.employeeAdvances=advances.data||[];state.salesCommissions=commissions.data||[];
   state.payrollRuns=runs.data||[];state.payrollItems=items.data||[];state.payrollPayments=payments.data||[];
+}
+
+async function loadSalesCashAccounts() {
+  if (!currentUser() || !supabase || !(hasRole('admin','manager','owner') || hasPermission('sales_manage'))) return;
+  const {data,error}=await supabase.rpc('get_sales_cash_accounts');
+  if(error){console.error('Sales cash accounts load failed',error);toast('تعذر تحميل حسابات التحصيل','error');return;}
+  state.salesCashAccounts=data||[];
 }
 
 async function loadFinanceData() {
@@ -3446,9 +3636,67 @@ async function loadBusinessData() {
   state.contactReplies = contactReplies.data || [];
 }
 
+
+async function loadPurchasingRows(table, columns, key, values) {
+  if(!values?.length)return {data:[],error:null};
+  const rows=[];
+  for(let offset=0;;offset+=1000){
+    const result=await supabase.from(table).select(columns).in(key,values).range(offset,offset+999);
+    if(result.error)return {data:null,error:result.error};
+    rows.push(...(result.data||[]));
+    if((result.data||[]).length<1000)break;
+  }
+  return {data:rows,error:null};
+}
+
+function renderSupplierBillLines(orderId) {
+  const container=$('#supplierBillLines');
+  if(!container)return;
+  const order=state.purchaseOrders.find(o=>o.id===orderId);
+  const lines=(order?.receiptItems||[]).filter(item=>Number(item.available_to_bill||0)>0);
+  if(!orderId){container.innerHTML='<small class="hint">اختر أمر التوريد لعرض بنود الاستلام.</small>';updateSupplierBillTotal($('#supplierBillForm'));return;}
+  if(!lines.length){container.innerHTML='<div class="empty">لا توجد وحدات مستلمة غير مفوترة في أمر التوريد المحدد.</div>';updateSupplierBillTotal($('#supplierBillForm'));return;}
+  container.innerHTML=lines.map(item=>{
+    const bike=state.bikes.find(b=>b.id===item.motorcycle_id);
+    const description=bike?.name||item.motorcycle_name||'صنف مستلم';
+    const max=Number(item.available_to_bill);
+    return `<div class="supplier-bill-line panel" data-receipt-item-id="${esc(item.id)}">
+      <label><input type="checkbox" name="selected" value="${esc(item.id)}"> <b>${esc(description)}</b> — استلام ${esc(item.receipt_number)} — المتاح للفوترة ${max}</label>
+      <div class="form-row">
+        <div class="field"><label>الكمية المفوترة</label><input name="quantity" type="number" min="1" max="${max}" value="${max}" disabled></div>
+        <div class="field"><label>سعر الوحدة في الفاتورة (ج.م)</label><input name="unit_cost" type="number" min="0" step="0.01" value="${Number(item.unit_cost||0).toFixed(2)}" disabled></div>
+      </div>
+      <small class="hint">تكلفة الاستلام المسجلة: ${money(item.unit_cost)} لكل وحدة. أي فرق سعر سيظهر كفرق تكلفة في القيد المحاسبي.</small>
+    </div>`;
+  }).join('');
+  updateSupplierBillTotal($('#supplierBillForm'));
+}
+
+function updateSupplierBillTotal(form) {
+  if(!form)return;
+  let total=0;
+  for(const row of form.querySelectorAll('.supplier-bill-line')){
+    const checkbox=row.querySelector('[name="selected"]');
+    const quantity=row.querySelector('[name="quantity"]');
+    const cost=row.querySelector('[name="unit_cost"]');
+    const enabled=!!checkbox?.checked;
+    if(quantity)quantity.disabled=!enabled;
+    if(cost)cost.disabled=!enabled;
+    if(enabled)total+=Math.round(Number(quantity.value||0)*Number(cost.value||0)*100)/100;
+  }
+  const direct=form.querySelector('[name="direct_line_enabled"]')?.checked;
+  const directAmount=form.querySelector('[name="direct_amount"]');
+  const directDescription=form.querySelector('[name="direct_description"]');
+  if(directAmount)directAmount.disabled=!direct;
+  if(directDescription)directDescription.disabled=!direct;
+  if(direct)total+=Number(directAmount?.value||0);
+  const totalInput=form.querySelector('[name="total_amount"]');
+  if(totalInput)totalInput.value=total>0?total.toFixed(2):'';
+}
+
 async function loadPurchasingData() {
   if (!state.user || state.user.role !== 'admin' || !supabase) {
-    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[]; return;
+    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierBillItems=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[]; return;
   }
   const [supplierResult,orderResult,billResult,paymentResult,returnResult,advanceAllocationResult]=await Promise.all([
     supabase.from('suppliers').select('id,name,phone,email,address,tax_id,is_active').order('name'),
@@ -3462,6 +3710,10 @@ async function loadPurchasingData() {
     if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
   }
   state.suppliers=supplierResult.data||[];
+  const billIds=(billResult.data||[]).map(b=>b.id);
+  const billItemsResult=await loadPurchasingRows('supplier_bill_items','id,supplier_bill_id,line_number,line_type,purchase_receipt_item_id,description,quantity,unit_cost,line_total','supplier_bill_id',billIds);
+  if(billItemsResult.error){toast('تعذر تحميل تفاصيل فواتير الموردين','error');console.error(billItemsResult.error);return;}
+  state.supplierBillItems=billItemsResult.data||[];
   state.supplierPayments=paymentResult.data||[];
   state.supplierReturns=returnResult.data||[];
   state.supplierAdvanceAllocations=advanceAllocationResult.data||[];
@@ -3492,11 +3744,28 @@ async function loadPurchasingData() {
     :{data:[],error:null};
   if(receiptItemsResult.error){toast('تعذر تحميل بنود الاستلام','error');console.error(receiptItemsResult.error);return;}
   const receiptItems=receiptItemsResult.data||[];
+  const billItemIds=state.supplierBillItems.map(line=>line.id);
+  const returnItemIds=state.supplierReturnItems.map(line=>line.id);
+  const [receiptUnitsResult,billedUnitsResult,returnedUnitsResult]=await Promise.all([
+    loadPurchasingRows('purchase_receipt_units','receipt_item_id,motorcycle_unit_id','receipt_id',receiptIds),
+    loadPurchasingRows('supplier_bill_item_units','motorcycle_unit_id','supplier_bill_item_id',billItemIds),
+    loadPurchasingRows('supplier_return_units','motorcycle_unit_id','supplier_return_item_id',returnItemIds)
+  ]);
+  for(const [result,label] of [[receiptUnitsResult,'وحدات الاستلام'],[billedUnitsResult,'الوحدات المفوترة'],[returnedUnitsResult,'الوحدات المرتجعة']]){
+    if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
+  }
+  const billedUnitIds=new Set((billedUnitsResult.data||[]).map(row=>row.motorcycle_unit_id));
+  const returnedUnitIds=new Set((returnedUnitsResult.data||[]).map(row=>row.motorcycle_unit_id));
   state.purchaseOrders=(orderResult.data||[]).map(o=>({...o,
     supplierName:state.suppliers.find(s=>s.id===o.supplier_id)?.name||'—',
     items:(itemsResult.data||[]).filter(i=>i.purchase_order_id===o.id),
     receipts:(receiptResult.data||[]).filter(r=>r.purchase_order_id===o.id),
-    receiptItems:receiptItems.filter(ri=>(receiptResult.data||[]).some(r=>r.id===ri.receipt_id&&r.purchase_order_id===o.id))
+    receiptItems:receiptItems.filter(ri=>(receiptResult.data||[]).some(r=>r.id===ri.receipt_id&&r.purchase_order_id===o.id)).map(ri=>{
+      const receipt=(receiptResult.data||[]).find(r=>r.id===ri.receipt_id);
+      const billed=state.supplierBillItems.filter(line=>line.purchase_receipt_item_id===ri.id).reduce((n,line)=>n+Number(line.quantity||0),0);
+      const available=receiptUnitsResult.data.filter(unit=>unit.receipt_item_id===ri.id&&!billedUnitIds.has(unit.motorcycle_unit_id)&&!returnedUnitIds.has(unit.motorcycle_unit_id)).length;
+      return {...ri,receipt_number:receipt?.receipt_number||'—',billed_quantity:billed,available_to_bill:available};
+    })
   }));
 }
 async function loadStaffDirectory() {
