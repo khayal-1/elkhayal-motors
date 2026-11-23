@@ -936,6 +936,7 @@ function pagePOS() {
         <div class="form-row">
           <div class="field"><label for="posPaymentAmount">المبلغ المدفوع الآن (ج.م)</label><input id="posPaymentAmount" name="payment_amount" type="number" min="0" step="0.01" value="0" required><small class="hint">يمكن تسجيل دفعة جزئية أو إصدار الفاتورة دون تحصيل.</small></div>
           <div class="field"><label for="posPaymentMethod">طريقة الدفع</label><select id="posPaymentMethod" name="payment_method"><option value="cash">نقدي</option><option value="bank_transfer">تحويل بنكي</option><option value="card">بطاقة</option><option value="other">أخرى</option></select></div>
+          <div class="field"><label>الخزينة / البنك المستلم</label><select name="cash_account_id"><option value="">اختر الحساب عند تحصيل دفعة</option>${(state.salesCashAccounts||[]).map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' — '+esc(a.account_kind==='bank'?'بنك':'خزينة')+'</option>').join('')}</select></div>
         </div>
         <div class="field"><label for="posPaymentReference">مرجع الدفع (اختياري)</label><input id="posPaymentReference" name="payment_reference" maxlength="120"></div>
         <div class="field"><label for="posNotes">ملاحظات (اختياري)</label><textarea id="posNotes" name="notes" rows="2" maxlength="1000"></textarea></div>
