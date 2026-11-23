@@ -97,6 +97,7 @@ const state = {
   payrollPayments: [],
   inventoryCosts: [],
   motorcycleUnits: [],
+  inventoryReconciliation: [],
   storeUnits: [],
   stocktakeBatches: [],
   stocktakeLines: [],
@@ -3417,19 +3418,25 @@ async function loadCRMData() {
 
 async function loadInventoryData() {
  const u=currentUser();if(!u||!supabase||!(hasRole('admin','manager','owner')||hasPermission('catalog_manage')||hasPermission('finance_manage')))return;
- const [costs,units,batches,lines,warranties,orders,alerts]=await Promise.all([
+ const [costs,batches,lines,warranties,orders,alerts,reconciliation]=await Promise.all([
   supabase.from('motorcycle_inventory_costs').select('*'),
-  supabase.from('motorcycle_units').select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)').order('registered_at',{ascending:false}).limit(500),
   supabase.from('stocktake_batches').select('*').order('stocktake_date',{ascending:false}).limit(100),
   supabase.from('stocktake_lines').select('*,motorcycles(name)').limit(1000),
   supabase.from('warranties').select('*,motorcycles(name)').order('created_at',{ascending:false}).limit(300),
   supabase.from('service_orders').select('*,motorcycles(name),employees(full_name,employee_code)').order('opened_at',{ascending:false}).limit(300),
-  supabase.from('inventory_reorder_alerts').select('*').order('stock')
+  supabase.from('inventory_reorder_alerts').select('*').order('stock'),
+  supabase.from('inventory_unit_reconciliation').select('*').order('difference',{ascending:false})
  ]);
- const results=[costs,units,batches,lines,warranties,orders,alerts],failed=results.find(x=>x.error);
+ const results=[costs,batches,lines,warranties,orders,alerts,reconciliation],failed=results.find(x=>x.error);
  if(failed){console.error('Inventory data load failed',failed.error);toast('تعذر تحميل بيانات الجرد والصيانة: '+failed.error.message,'error');return;}
- state.inventoryCosts=costs.data||[];state.motorcycleUnits=units.data||[];state.stocktakeBatches=batches.data||[];state.stocktakeLines=lines.data||[];
- state.warranties=warranties.data||[];state.serviceOrders=orders.data||[];state.reorderAlerts=alerts.data||[];
+ const allUnits=[];
+ for(let from=0;;from+=500){
+  const {data,error}=await supabase.from('motorcycle_units').select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)').order('registered_at',{ascending:false}).range(from,from+499);
+  if(error){console.error('Inventory units page failed',error);toast('تعذر تحميل جميع وحدات المخزون','error');return;}
+  allUnits.push(...(data||[]));if(!data||data.length<500)break;
+ }
+ state.inventoryCosts=costs.data||[];state.motorcycleUnits=allUnits;state.stocktakeBatches=batches.data||[];state.stocktakeLines=lines.data||[];
+ state.warranties=warranties.data||[];state.serviceOrders=orders.data||[];state.reorderAlerts=alerts.data||[];state.inventoryReconciliation=reconciliation.data||[];
 }
 
 async function loadHRData() {
