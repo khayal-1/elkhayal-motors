@@ -8,13 +8,13 @@ select
   m.id as motorcycle_id,
   m.name as motorcycle_name,
   m.stock as model_stock,
-  count(u.id) filter (where u.unit_status in ('available','reserved','service'))::integer as physical_units,
-  (m.stock-count(u.id) filter (where u.unit_status in ('available','reserved','service')))::integer as difference,
-  count(u.id) filter (where u.unit_status='available')::integer as available_units,
-  count(u.id) filter (where u.unit_status='reserved')::integer as reserved_units,
-  count(u.id) filter (where u.unit_status='service')::integer as service_units,
-  count(u.id) filter (where u.unit_status='sold')::integer as sold_units,
-  count(u.id) filter (where u.unit_status='retired')::integer as retired_units
+  (count(u.id) filter (where u.unit_status in ('available','reserved','service')))::integer as physical_units,
+  (m.stock-(count(u.id) filter (where u.unit_status in ('available','reserved','service'))))::integer as difference,
+  (count(u.id) filter (where u.unit_status='available'))::integer as available_units,
+  (count(u.id) filter (where u.unit_status='reserved'))::integer as reserved_units,
+  (count(u.id) filter (where u.unit_status='service'))::integer as service_units,
+  (count(u.id) filter (where u.unit_status='sold'))::integer as sold_units,
+  (count(u.id) filter (where u.unit_status='retired'))::integer as retired_units
 from public.motorcycles m
 left join public.motorcycle_units u on u.motorcycle_id=m.id
 group by m.id,m.name,m.stock;
@@ -77,8 +77,9 @@ begin
     '   update public.motorcycles set stock=v_count where id=v_bike.id;',
     '   perform set_config(''ekm.stock_movement_source'',''stocktake'',true); update public.motorcycles set stock=v_count where id=v_bike.id; perform set_config(''ekm.stock_movement_source'','''',true);'
   );
-  if position('stocktake' in v_definition)=0 then
-    raise exception 'Unable to harden stocktake function; expected source fragment was not found.';
+  if position('v_count<>(select count(*)' in v_definition)=0
+     or position('set_config(''ekm.stock_movement_source'',''stocktake''' in v_definition)=0 then
+    raise exception 'Unable to harden stocktake function; expected source fragments were not found.';
   end if;
   execute v_definition;
 end;
