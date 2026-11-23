@@ -126,20 +126,15 @@ begin
       update public.motorcycle_units set unit_status='retired' where id=unit_id;
     end loop;
 
-    perform set_config('ekm.stock_movement_source','sale',true);
+    perform set_config('ekm.stock_movement_source','purchase_return',true);
+    perform set_config('ekm.stock_movement_reference',return_id::text,true);
     update public.motorcycles set stock=stock-qty
      where id=receipt_item.motorcycle_id and stock>=qty;
     if not found then
       raise exception 'الرصيد المسجل لا يكفي لإرجاع الوحدات المحددة للمورد' using errcode='23514';
     end if;
     perform set_config('ekm.stock_movement_source','',true);
-    insert into public.stock_movements(
-      motorcycle_id,movement_type,quantity_delta,reference_id,notes,created_by
-    ) values(
-      receipt_item.motorcycle_id,'adjustment',-qty,return_id,
-      'إرجاع وحدات محددة للمورد ضمن إشعار الخصم رقم '||return_number,
-      (select auth.uid())
-    );
+    perform set_config('ekm.stock_movement_reference','',true);
 
     total_credit:=total_credit+(qty*receipt_item.unit_cost);
     item_count:=item_count+1;
