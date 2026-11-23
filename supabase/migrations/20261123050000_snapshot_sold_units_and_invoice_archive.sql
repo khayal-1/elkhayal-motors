@@ -3,11 +3,12 @@ begin;
 create table if not exists public.sale_item_units (
   id uuid primary key default gen_random_uuid(),
   sale_item_id uuid not null references public.sale_items(id) on delete restrict,
-  motorcycle_unit_id uuid not null unique references public.motorcycle_units(id) on delete restrict,
+  motorcycle_unit_id uuid not null references public.motorcycle_units(id) on delete restrict,
   vin_snapshot text not null,
   engine_number_snapshot text,
   unit_cost numeric(14,2) check(unit_cost is null or unit_cost>=0),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique(sale_item_id,motorcycle_unit_id)
 );
 create index if not exists sale_item_units_sale_item_idx on public.sale_item_units(sale_item_id);
 alter table public.sale_item_units enable row level security;
@@ -23,7 +24,7 @@ insert into public.sale_item_units(
 select u.sale_item_id,u.id,u.vin,u.engine_number,u.unit_cost
 from public.motorcycle_units u
 where u.sale_item_id is not null
-on conflict(motorcycle_unit_id) do nothing;
+on conflict(sale_item_id,motorcycle_unit_id) do nothing;
 
 create or replace function private.prevent_sold_unit_identity_edits()
 returns trigger
@@ -32,7 +33,7 @@ security definer
 set search_path=''
 as $$
 begin
-  if old.sale_item_id is not null
+  if exists(select 1 from public.sale_item_units where motorcycle_unit_id=old.id)
      and (new.vin is distinct from old.vin or new.engine_number is distinct from old.engine_number) then
     raise exception 'لا يمكن تغيير رقم الشاسيه أو رقم الموتور بعد ربط الوحدة بفاتورة بيع؛ احتفظ ببيانات البيع التاريخية كما هي'
       using errcode='23514';
@@ -94,7 +95,7 @@ begin
   select new.id,u.id,u.vin,u.engine_number,coalesce(u.unit_cost,new.unit_cost)
     from public.motorcycle_units u
    where u.sale_item_id=new.id
-  on conflict(motorcycle_unit_id) do nothing;
+  on conflict(sale_item_id,motorcycle_unit_id) do nothing;
 
   select coalesce(sum(siu.unit_cost),new.unit_cost*new.quantity)
     into v_cost_total
