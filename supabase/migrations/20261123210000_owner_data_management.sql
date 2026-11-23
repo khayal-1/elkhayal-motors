@@ -62,8 +62,11 @@ begin
   end if;
   if jsonb_typeof(p_backup) <> 'object'
      or p_backup->>'format' <> 'khayal-backup'
-     or (p_backup->>'version')::integer <> 1
-     or jsonb_typeof(p_backup->'tables') <> 'object' then
+     or coalesce((p_backup->>'version')::integer, 0) <> 1
+     or jsonb_typeof(p_backup->'tables') <> 'object'
+     or jsonb_object_length(p_backup->'tables') <> (
+       select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'
+     ) then
     raise exception 'Unsupported or invalid backup format';
   end if;
 
