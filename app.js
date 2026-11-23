@@ -446,7 +446,7 @@ function productCard(b) {
         <div class="unit-condition-tag">${b.unit_condition === 'used' ? 'مستعملة' : 'جديدة'}</div>
         <div class="product-price">${money(b.price)}</div>
         <div class="product-actions">
-          ${isCustomer ? `<button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> طلب شراء</button>` : isGuest ? `<button class="btn btn-primary btn-sm" data-login-action="buy" data-bike-id="${esc(b.id)}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> تسجيل الدخول للشراء</button>` : ''}
+          ${isCustomer ? `<button class="btn btn-primary btn-sm" data-buy="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> طلب شراء</button>` : isGuest ? `<button class="btn btn-primary btn-sm" data-login-action="buy" data-bike-id="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}" ${b.stock <= 0 ? 'disabled' : ''}><i class="fa-solid fa-cart-shopping"></i> تسجيل الدخول للشراء</button>` : ''}
           <button class="btn btn-outline btn-sm" data-details="${esc(b.id)}" data-unit-id="${esc(b.unit_id || '')}">
             <i class="fa-solid fa-eye"></i> تفاصيل
           </button>
@@ -666,7 +666,7 @@ function pageOrders() {
           <thead><tr><th>الدراجة</th><th>الميزانية</th><th>الحالة</th><th>التاريخ</th></tr></thead>
           <tbody>${orders.map((o) => `
             <tr>
-              <td>${esc(o.bikeName)}</td>
+              <td>${esc(o.bikeName)}${o.unitCondition ? `<br><small>${o.unitCondition === 'used' ? 'مستعملة' : 'جديدة'}</small>` : ''}</td>
               <td style="color:var(--red);font-weight:700">${money(o.budget)}</td>
               <td><span class="status-pill ${o.status}">${esc(requestStatusLabel(o.status))}</span></td>
               <td>${new Date(o.createdAt).toLocaleDateString('ar-EG')}</td>
@@ -1563,7 +1563,7 @@ function pageStaffOrders() {
         const person = {phone:r.customerPhone,email:r.customerEmail};
         const replies = state.requestReplies.filter((x) => x.request_id === r.id);
         return `<tr><td><b>${esc(r.customerName || '—')}</b><br><small>${esc(r.customerPhone || r.customerEmail || '—')}</small><br><small>يفضل: ${esc(({phone:'اتصال',whatsapp:'واتساب',email:'بريد',sms:'SMS'})[r.preferredContact] || '—')}</small>${contactCells(person)}</td>
-          <td>${esc(r.bikeName || '—')} ${esc(r.model || '')}<br><small>${esc(r.notes || '')}</small></td>
+          <td>${esc(r.bikeName || '—')} ${esc(r.model || '')}${r.requestedUnitCondition ? `<br><small>الوحدة: ${r.requestedUnitCondition === 'used' ? 'مستعملة' : 'جديدة'}${r.requestedUnitVin ? ` — VIN: ${esc(r.requestedUnitVin)}` : ''}</small>` : ''}<br><small>${esc(r.notes || '')}</small></td>
           <td>${money(r.budget)}</td><td><span class="status-pill ${esc(r.status)}">${esc(requestStatusLabel(r.status))}</span></td>
           <td>${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ar-EG') : '—'}</td>
           <td>${canManage ? `<button class="btn btn-primary btn-sm" data-open-reply="request" data-record-id="${esc(r.id)}">رد / سجل الرد (${replies.length})</button>${replies.slice(0,2).map((reply) => `<div class="hint">${esc(reply.channel)}: ${esc(reply.reply_body.slice(0,110))}${reply.sent_at ? ' — تم الإرسال' : ' — ملاحظة داخلية'}</div>`).join('')}` : 'عرض فقط'}
@@ -1714,8 +1714,8 @@ function navigate(route) {
 }
 
 /* ---------- Buy Flow ---------- */
-function requireCustomerLogin(action, bikeId = null) {
-  const pending = { action, bikeId };
+function requireCustomerLogin(action, bikeId = null, unitId = null) {
+  const pending = { action, bikeId, unitId: action === 'buy' ? (unitId || null) : null };
   state.pendingAuthAction = pending;
   try { sessionStorage.setItem('ekm_pending_auth_action', JSON.stringify(pending)); } catch { /* Session storage may be unavailable. */ }
   toast('سجّل الدخول أو أنشئ حسابًا للمتابعة؛ سنعيدك إلى الإجراء الذي اخترته', 'info');
@@ -1747,24 +1747,37 @@ async function resumePendingAuthAction() {
   try { sessionStorage.removeItem('ekm_pending_auth_action'); } catch { /* Session storage may be unavailable. */ }
   if (!pending || currentUser()?.role !== 'customer') return;
   if (!['favorite', 'buy'].includes(pending.action) || typeof pending.bikeId !== 'string') return;
+  if (pending.action === 'favorite') {
+    if (!state.bikes.some((bike) => bike.id === pending.bikeId)) return;
+    await toggleFavorite(pending.bikeId);
+    return;
+  }
+  await Promise.all([loadMotorcycles(), loadStoreUnits()]);
   if (!state.bikes.some((bike) => bike.id === pending.bikeId)) return;
-  if (pending.action === 'favorite') await toggleFavorite(pending.bikeId);
-  if (pending.action === 'buy') handleBuy(pending.bikeId);
+  const unitId = typeof pending.unitId === 'string' && pending.unitId ? pending.unitId : null;
+  if (unitId && !(state.storeUnits || []).some((unit) => unit.unit_id === unitId && unit.motorcycle_id === pending.bikeId)) {
+    toast('الوحدة التي اخترتها لم تعد متاحة؛ حدّث المتجر واختر وحدة أخرى', 'error');
+    return;
+  }
+  handleBuy(pending.bikeId, unitId);
 }
 
-function handleBuy(bikeId) {
+function handleBuy(bikeId, unitId = null) {
   const u = currentUser();
-  if (!u) { requireCustomerLogin('buy', bikeId); return; }
+  if (!u) { requireCustomerLogin('buy', bikeId, unitId); return; }
   if (u.role !== 'customer') { toast('الشراء وطلبات العملاء متاحة لحسابات العملاء فقط', 'error'); return; }
   const bike = state.bikes.find((b) => b.id === bikeId);
   if (!bike) return toast('الدراجة غير موجودة', 'error');
-  const hasAvailableUnit = (state.storeUnits || []).some((unit) => unit.motorcycle_id === bikeId);
-  if (!hasAvailableUnit || bike.status !== 'available') return toast('هذه الوحدة لم تعد متاحة حالياً؛ حدّث الصفحة لاختيار وحدة أخرى', 'error');
+  const selectedUnit = unitId
+    ? (state.storeUnits || []).find((unit) => unit.unit_id === unitId && unit.motorcycle_id === bikeId)
+    : (state.storeUnits || []).find((unit) => unit.motorcycle_id === bikeId);
+  if (!selectedUnit || bike.status !== 'available') return toast('هذه الوحدة لم تعد متاحة حالياً؛ حدّث الصفحة لاختيار وحدة أخرى', 'error');
+  const conditionLabel = selectedUnit.unit_condition === 'used' ? 'مستعملة' : 'جديدة';
   openModal(`
-    <div class="modal-header"><h3><i class="fa-solid fa-cart-shopping"></i> طلب شراء ${esc(bike.name)}</h3>
+    <div class="modal-header"><h3><i class="fa-solid fa-cart-shopping"></i> طلب شراء ${esc(bike.name)} — ${conditionLabel}</h3>
       <button class="modal-close" data-close-modal aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button></div>
     <p class="text-red mb-2" style="font-size:20px;font-weight:900">${money(bike.price)}</p>
-    <form id="quickBuyRequestForm" class="form-grid" data-bike-id="${esc(bike.id)}">
+    <form id="quickBuyRequestForm" class="form-grid" data-bike-id="${esc(bike.id)}" data-unit-id="${esc(selectedUnit.unit_id)}">
       <div class="field"><label>اسمك</label><input name="requester_name" required maxlength="120" value="${esc(u?.name || '')}"></div>
       <div class="form-row">
         <div class="field"><label>رقم الهاتف</label><input name="requester_phone" type="tel" maxlength="32" value="${esc(u?.phone || '')}"></div>
@@ -1776,8 +1789,8 @@ function handleBuy(bikeId) {
     </form>`);
 }
 
-async function confirmBuy(bikeId) {
-  handleBuy(bikeId);
+async function confirmBuy(bikeId, unitId = null) {
+  handleBuy(bikeId, unitId);
 }
 
 /* ---------- Event: Click Delegation ---------- */
@@ -2135,11 +2148,11 @@ document.addEventListener('click', async (e) => {
 
   /* Buy */
   const buyBtn = e.target.closest('[data-buy]');
-  if (buyBtn) { handleBuy(buyBtn.dataset.buy); return; }
+  if (buyBtn) { handleBuy(buyBtn.dataset.buy, buyBtn.dataset.unitId || null); return; }
   const confirmBtn = e.target.closest('[data-confirm-buy]');
   if (confirmBtn) { confirmBuy(confirmBtn.dataset.confirmBuy); return; }
   const loginAction = e.target.closest('[data-login-action]');
-  if (loginAction) { requireCustomerLogin(loginAction.dataset.loginAction, loginAction.dataset.bikeId || null); return; }
+  if (loginAction) { requireCustomerLogin(loginAction.dataset.loginAction, loginAction.dataset.bikeId || null, loginAction.dataset.unitId || null); return; }
 
   /* Details */
   const detailsBtn = e.target.closest('[data-details]');
@@ -3122,8 +3135,11 @@ document.addEventListener('submit', async (e) => {
     if (name.length < 2 || (!phone && !email)) { toast('اكتب اسمك ورقم هاتف أو بريدًا إلكترونيًا واحدًا على الأقل', 'error'); return; }
     if ((preferred === 'email' && !email) || (preferred !== 'email' && !phone)) { toast('أدخل بيانات وسيلة التواصل التي اخترتها', 'error'); return; }
     const bike = form.id === 'quickBuyRequestForm' ? state.bikes.find((b) => b.id === form.dataset.bikeId) : null;
-    if (form.id === 'quickBuyRequestForm' && (!bike || bike.stock <= 0 || bike.status !== 'available')) {
-      toast('الدراجة لم تعد متاحة؛ حدّث الصفحة وحاول مرة أخرى', 'error'); return;
+    const requestedUnit = form.id === 'quickBuyRequestForm'
+      ? (state.storeUnits || []).find((unit) => unit.unit_id === form.dataset.unitId && unit.motorcycle_id === bike?.id)
+      : null;
+    if (form.id === 'quickBuyRequestForm' && (!bike || !requestedUnit || bike.status !== 'available')) {
+      toast('الوحدة التي اخترتها لم تعد متاحة؛ حدّث المتجر وحاول مرة أخرى', 'error'); return;
     }
     const { error } = await supabase.from('customer_requests').insert({
       client_user_id: u?.id || null,
@@ -3132,6 +3148,7 @@ document.addEventListener('submit', async (e) => {
       requester_email: email || null,
       preferred_contact: preferred,
       motorcycle_id: bike?.id || null,
+      motorcycle_unit_id: requestedUnit?.unit_id || null,
       requested_name: bike?.name || safeName(fd.get('bikeName')),
       requested_model_year: bike ? (Number(bike.model) || null) : (Number(fd.get('model')) || null),
       budget: bike ? bike.price : (Number(fd.get('budget')) || null),
@@ -3430,7 +3447,7 @@ async function loadCustomerData() {
   const user = state.user;
   if (!user || !supabase) return;
   const [requestsResult, favoritesResult, salesResult] = await Promise.all([
-    supabase.from('customer_requests').select('id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at').eq('client_user_id', user.id).order('created_at', { ascending: false }),
+    supabase.from('customer_requests').select('id,motorcycle_id,motorcycle_unit_id,requested_unit_condition,requested_name,requested_model_year,budget,notes,status,created_at').eq('client_user_id', user.id).order('created_at', { ascending: false }),
     supabase.from('favorites').select('motorcycle_id').eq('user_id', user.id),
     supabase.from('sales').select('id,invoice_number,total,amount_paid,credit_applied,payment_status,created_at').eq('channel','showroom').eq('status','posted').order('created_at',{ascending:false}).limit(100)
   ]);
@@ -3461,7 +3478,7 @@ async function loadCustomerData() {
     balance_due: Math.max(0, Number(sale.total || 0) - Number(sale.amount_paid || 0) - Number(sale.credit_applied || 0) - (returnedBySale.get(sale.id)||0)),
     items: invoiceItems.filter((item) => item.sale_id === sale.id)
   }));
-  set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
+  set(DB.CUSTOM_REQS, (requestsResult.data || []).map((r) => ({id:r.id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',unitCondition:r.requested_unit_condition || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerEmail:user.email,notes:r.notes || ''})));
   set(DB.ORDERS, []);
   set(DB.FAVS, { [user.id]: (favoritesResult.data || []).map((f) => f.motorcycle_id) });
 }
@@ -3636,7 +3653,7 @@ async function loadBusinessData() {
   if (!state.user || !['staff', 'admin'].includes(state.user.role) || !supabase) return;
   if (state.user.role === 'staff' && !hasRequestAccess()) { set(DB.CUSTOM_REQS, []); state.contactMessages = []; return; }
   const canSeeContacts = hasPermission('customer_data_view') || hasRequestAccess();
-  const requestFields = 'id,client_user_id,motorcycle_id,requested_name,requested_model_year,budget,notes,status,created_at' +
+  const requestFields = 'id,client_user_id,motorcycle_id,motorcycle_unit_id,requested_unit_vin,requested_unit_condition,requested_name,requested_model_year,budget,notes,status,created_at' +
     (canSeeContacts ? ',requester_name,requester_phone,requester_email,preferred_contact' : '');
   const [requestResult, messageResult] = await Promise.all([
     supabase.from('customer_requests').select(requestFields).order('created_at', { ascending: false }).limit(200),
@@ -3652,7 +3669,7 @@ async function loadBusinessData() {
   const profiles = new Map((profileResult.data || []).map((p) => [p.id, p]));
   set(DB.CUSTOM_REQS, requests.map((r) => {
     const p = profiles.get(r.client_user_id) || {};
-    return {id:r.id,clientUserId:r.client_user_id,motorcycleId:r.motorcycle_id,bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerName:r.requester_name || p.full_name || '',customerPhone:r.requester_phone || p.phone || '',customerEmail:r.requester_email || '',preferredContact:r.preferred_contact || 'phone',notes:r.notes || ''};
+    return {id:r.id,clientUserId:r.client_user_id,motorcycleId:r.motorcycle_id,requestedUnitId:r.motorcycle_unit_id || '',requestedUnitVin:r.requested_unit_vin || '',requestedUnitCondition:r.requested_unit_condition || '',bikeName:r.requested_name,model:r.requested_model_year || '',budget:Number(r.budget || 0),status:r.status,createdAt:r.created_at,customerName:r.requester_name || p.full_name || '',customerPhone:r.requester_phone || p.phone || '',customerEmail:r.requester_email || '',preferredContact:r.preferred_contact || 'phone',notes:r.notes || ''};
   }));
   state.contactMessages = messageResult.data || [];
   const requestIds = requests.map((r) => r.id);
