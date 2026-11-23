@@ -2927,20 +2927,19 @@ document.addEventListener('submit', async (e) => {
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد أي وحدة', 'error'); return; }
     await Promise.all([loadMotorcycles(), loadMotorcycleUnits(), loadSalesData()]);
-    const invoiceRows = items.flatMap(({bike,unit_ids}) => unit_ids.map(unitId => {
-      const unit = state.motorcycleUnits.find(item => item.id === unitId);
-      return `<tr><td>${esc(bike.name)} — ${esc(bike.model)}</td><td>${esc(unit?.vin || '—')}</td><td>${esc(unit?.engine_number || '—')}</td><td>${money(bike.price)}</td></tr>`;
-    })).join('');
+    const invoiceRows = (data.units || []).map(unit =>
+      `<tr><td>${esc(unit.motorcycle_name)} — ${esc(unit.model_year || '—')}</td><td>${esc(unit.vin || '—')}</td><td>${esc(unit.engine_number || '—')}</td><td>${money(unit.unit_price)}</td></tr>`
+    ).join('');
     const invoice = `
       <div class="invoice">
         <div class="invoice-header"><div><h2>El Khayal Motors</h2><p>فاتورة بيع معرض</p></div><div class="invoice-meta"><b>${esc(data.invoice_number)}</b><br><span>${new Date().toLocaleString('ar-EG')}</span></div></div>
-        <hr><p><b>العميل:</b> ${esc(customerName)}</p><p><b>الهاتف:</b> ${esc(fd.get('customer_phone') || '—')}</p>
+        <hr><p><b>العميل:</b> ${esc(customerName)}</p><p><b>الهاتف:</b> ${esc(customerPhone || '—')}</p>
         <div class="table-wrap"><table><thead><tr><th>الصنف</th><th>رقم الشاسيه</th><th>رقم الموتور</th><th>السعر</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
         <p><b>الإجمالي:</b> ${money(data.total)}</p><p><b>المدفوع:</b> ${money(data.amount_paid)}</p>
         <p><b>المتبقي:</b> ${money(data.balance_due)}</p><p><b>حالة الدفع:</b> ${data.payment_status === 'paid' ? 'مدفوعة' : data.payment_status === 'partial' ? 'مدفوعة جزئيًا' : 'غير مدفوعة'}</p>
         <p class="text-center">شكرًا لثقتكم في El Khayal Motors</p>
       </div>
-      <div class="contact-actions no-print invoice-actions"><button class="btn btn-primary" id="printInvoiceBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" id="sendInvoiceWhatsAppBtn" type="button" data-phone="${esc(fd.get('customer_phone') || '')}" data-invoice="${esc(data.invoice_number)}" data-customer="${esc(customerName)}" data-total="${esc(data.total)}" data-paid="${esc(data.amount_paid)}" data-due="${esc(data.balance_due)}" data-items="${esc(items.map(({bike,quantity}) => bike.name + ' ' + bike.model + ' × ' + quantity + ' = ' + money(bike.price * quantity)).join(' | '))}"><i class="fa-brands fa-whatsapp"></i> إرسال الفاتورة عبر واتساب</button><button class="btn btn-outline" id="shareInvoiceBtn" type="button"><i class="fa-solid fa-share-nodes"></i> مشاركة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
+      <div class="contact-actions no-print invoice-actions"><button class="btn btn-primary" id="printInvoiceBtn" type="button"><i class="fa-solid fa-print"></i> طباعة الفاتورة</button><button class="btn btn-outline" id="sendInvoiceWhatsAppBtn" type="button" data-phone="${esc(customerPhone || '')}" data-invoice="${esc(data.invoice_number)}" data-customer="${esc(customerName)}" data-total="${esc(data.total)}" data-paid="${esc(data.amount_paid)}" data-due="${esc(data.balance_due)}" data-items="${esc((data.units || []).map(unit => unit.motorcycle_name + ' — VIN ' + unit.vin + ' — موتور ' + (unit.engine_number || '—')).join(' | '))}"><i class="fa-brands fa-whatsapp"></i> إرسال الفاتورة عبر واتساب</button><button class="btn btn-outline" id="shareInvoiceBtn" type="button"><i class="fa-solid fa-share-nodes"></i> مشاركة الفاتورة</button><button class="btn btn-outline" data-close-modal>إغلاق</button></div>`;
     openModal(invoice);
     render();
     toast('تم تسجيل البيع وتحديث المخزون وإصدار الفاتورة', 'success');
