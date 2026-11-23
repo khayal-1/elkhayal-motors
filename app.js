@@ -3734,6 +3734,18 @@ async function loadPurchasingData() {
     :{data:[],error:null};
   if(receiptItemsResult.error){toast('تعذر تحميل بنود الاستلام','error');console.error(receiptItemsResult.error);return;}
   const receiptItems=receiptItemsResult.data||[];
+  const billItemIds=state.supplierBillItems.map(line=>line.id);
+  const returnItemIds=state.supplierReturnItems.map(line=>line.id);
+  const [receiptUnitsResult,billedUnitsResult,returnedUnitsResult]=await Promise.all([
+    receiptIds.length?supabase.from('purchase_receipt_units').select('receipt_item_id,motorcycle_unit_id').in('receipt_id',receiptIds):Promise.resolve({data:[],error:null}),
+    billItemIds.length?supabase.from('supplier_bill_item_units').select('motorcycle_unit_id').in('supplier_bill_item_id',billItemIds):Promise.resolve({data:[],error:null}),
+    returnItemIds.length?supabase.from('supplier_return_units').select('motorcycle_unit_id').in('supplier_return_item_id',returnItemIds):Promise.resolve({data:[],error:null})
+  ]);
+  for(const [result,label] of [[receiptUnitsResult,'وحدات الاستلام'],[billedUnitsResult,'الوحدات المفوترة'],[returnedUnitsResult,'الوحدات المرتجعة']]){
+    if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
+  }
+  const billedUnitIds=new Set((billedUnitsResult.data||[]).map(row=>row.motorcycle_unit_id));
+  const returnedUnitIds=new Set((returnedUnitsResult.data||[]).map(row=>row.motorcycle_unit_id));
   state.purchaseOrders=(orderResult.data||[]).map(o=>({...o,
     supplierName:state.suppliers.find(s=>s.id===o.supplier_id)?.name||'—',
     items:(itemsResult.data||[]).filter(i=>i.purchase_order_id===o.id),
@@ -3741,8 +3753,8 @@ async function loadPurchasingData() {
     receiptItems:receiptItems.filter(ri=>(receiptResult.data||[]).some(r=>r.id===ri.receipt_id&&r.purchase_order_id===o.id)).map(ri=>{
       const receipt=(receiptResult.data||[]).find(r=>r.id===ri.receipt_id);
       const billed=state.supplierBillItems.filter(line=>line.purchase_receipt_item_id===ri.id).reduce((n,line)=>n+Number(line.quantity||0),0);
-      const returned=state.supplierReturnItems.filter(line=>line.purchase_receipt_item_id===ri.id).reduce((n,line)=>n+Number(line.quantity||0),0);
-      return {...ri,receipt_number:receipt?.receipt_number||'—',billed_quantity:billed,returned_quantity:returned,available_to_bill:Math.max(0,Number(ri.quantity||0)-billed-returned)};
+      const available=receiptUnitsResult.data.filter(unit=>unit.receipt_item_id===ri.id&&!billedUnitIds.has(unit.motorcycle_unit_id)&&!returnedUnitIds.has(unit.motorcycle_unit_id)).length;
+      return {...ri,receipt_number:receipt?.receipt_number||'—',billed_quantity:billed,available_to_bill:available};
     })
   }));
 }
