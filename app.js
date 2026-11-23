@@ -2905,9 +2905,11 @@ document.addEventListener('submit', async (e) => {
     const customerPhone = safeName(fd.get('customer_phone')) || selectedAccount?.dataset.phone || '';
     const amount = Number(fd.get('payment_amount'));
     const bike = lastScannedUnit?.motorcycles;
+    const cashAccountId=String(fd.get('cash_account_id')||'');
     if (!lastScannedUnit || lastScannedUnit.id !== form.dataset.unitId || !bike || !Number.isFinite(amount) || amount < 0 || amount > Number(bike.price)) {
       toast('بيانات الوحدة أو الدفعة غير صحيحة؛ أعد البحث عن الوحدة', 'error'); return;
     }
+    if(amount>0&&!cashAccountId){toast('حدد الخزينة أو البنك الذي استلم الدفعة','error');return;}
     const submit = form.querySelector('[type="submit"]');
     if (submit) submit.disabled = true;
     const { data, error } = await supabase.rpc('create_showroom_sale_for_unit', {
@@ -2919,7 +2921,7 @@ document.addEventListener('submit', async (e) => {
       p_payment_method: amount > 0 ? String(fd.get('payment_method')) : null,
       p_payment_reference: safeName(fd.get('payment_reference')) || null,
       p_notes: safeName(fd.get('notes')) || null,
-      p_cash_account_id: String(fd.get('cash_account_id')||'') || null
+      p_cash_account_id: cashAccountId || null
     });
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد العملية', 'error'); return; }
@@ -2966,9 +2968,11 @@ document.addEventListener('submit', async (e) => {
     if (!items.length) { toast('أضف صنفًا واحدًا على الأقل وحدد أرقام شاسيهه', 'error'); return; }
     const subtotal = items.reduce((sum, item) => sum + item.bike.price * item.unit_ids.length, 0);
     const paymentAmount = Number(fd.get('payment_amount'));
+    const cashAccountId=String(fd.get('cash_account_id')||'');
     if (!Number.isFinite(paymentAmount) || paymentAmount < 0 || paymentAmount > subtotal) {
       toast('قيمة الدفعة غير صحيحة أو أكبر من إجمالي الفاتورة', 'error'); return;
     }
+    if(paymentAmount>0&&!cashAccountId){toast('حدد الخزينة أو البنك الذي استلم الدفعة','error');return;}
     const selectedAccount = form.querySelector('select[name="customer_user_id"] option:checked');
     const customerName = safeName(fd.get('customer_name')) || selectedAccount?.dataset.name || 'عميل نقدي';
     const customerPhone = safeName(fd.get('customer_phone')) || selectedAccount?.dataset.phone || '';
@@ -2983,7 +2987,7 @@ document.addEventListener('submit', async (e) => {
       p_payment_method: paymentAmount > 0 ? String(fd.get('payment_method')) : null,
       p_payment_reference: safeName(fd.get('payment_reference')) || null,
       p_notes: safeName(fd.get('notes')) || null,
-      p_cash_account_id: paymentAmount > 0 ? (String(fd.get('cash_account_id')||'') || null) : null
+      p_cash_account_id: paymentAmount > 0 ? cashAccountId : null
     });
     if (submit) submit.disabled = false;
     if (error) { toast(error.message || 'تعذر تسجيل البيع؛ لم يتم اعتماد أي وحدة', 'error'); return; }
