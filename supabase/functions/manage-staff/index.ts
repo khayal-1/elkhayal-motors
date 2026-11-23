@@ -64,9 +64,11 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: 'Invalid request body.' }, 400, origin); }
   if (body.action === 'list') {
-    const { data: roles, error: listError } = await admin.from('user_roles').select('user_id').eq('role', 'employee');
+    const { data: roles, error: listError } = await admin.from('user_roles').select('user_id,role').in('role', ['employee', 'manager']);
     if (listError) return json({ error: 'Could not load staff accounts.' }, 503, origin);
-    const ids = [...new Set((roles || []).map(({ user_id }) => user_id).filter(Boolean))];
+    const roleById = new Map<string, string>();
+    for (const row of roles || []) roleById.set(row.user_id, row.role);
+    const ids = [...roleById.keys()];
     if (!ids.length) return json({ staff: [] }, 200, origin);
     const [{ data: profiles, error: profileError }, { data: permissions, error: permissionsError }] = await Promise.all([
       admin.from('profiles').select('id,full_name,phone').in('id', ids),
@@ -84,14 +86,36 @@ Deno.serve(async (req) => {
       if (error || !data.user) return null;
       const profile = profileById.get(id);
       return {
-        id,
-        email: data.user.email || '',
-        name: profile?.full_name || '',
-        phone: profile?.phone || '',
-        permissions: permissionsById.get(id) || []
+        id, email: data.user.email || '', name: profile?.full_name || '',
+        phone: profile?.phone || '', permissions: permissionsById.get(id) || [],
+        account_role: roleById.get(id) || 'employee'
       };
     }));
     return json({ staff: users.filter(Boolean) }, 200, origin);
+  }
+  if (body.action === 'update') {
+    const userId = String(body.user_id || '');
+    const fullName = String(body.full_name || '').trim();
+    const phone = String(body.phone || '').trim();
+    const rawPermissions = body.permissions;
+    const accountRole = String(body.account_role || 'employee');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) return json({ error: 'Invalid employee account.' }, 400, origin);
+    if (!fullName || fullName.length > 120) return json({ error: 'Name must be 1–120 characters.' }, 400, origin);
+    if (phone.length > 32) return json({ error: 'Phone number must be 32 characters or fewer.' }, 400, origin);
+    if (!['employee', 'manager'].includes(accountRole)) return json({ error: 'Unsupported account role.' }, 400, origin);
+    if (!Array.isArray(rawPermissions) || rawPermissions.length > allowedPermissions.size ||
+        rawPermissions.some((permission) => typeof permission !== 'string' || !allowedPermissions.has(permission)) ||
+        new Set(rawPermissions).size !== rawPermissions.length) return json({ error: 'Choose only available employee permissions.' }, 400, origin);
+    const permissions = rawPermissions as string[];
+    if (permissions.includes('customer_data_view') && !permissions.some((permission) => ['requests_view', 'requests_manage'].includes(permission))) {
+      return json({ error: 'Customer names and phones can only be granted with request access.' }, 400, origin);
+    }
+    const { data, error } = await admin.rpc('manage_employee_account', {
+      p_user_id: userId, p_actor_id: actor.id, p_full_name: fullName,
+      p_phone: phone || null, p_permissions: permissions, p_role: accountRole
+    });
+    if (error || !data?.success) return json({ error: error?.message || 'Could not update the employee account.' }, 400, origin);
+    return json({ success: true, account_role: data.role }, 200, origin);
   }
   if (body.action !== 'create') return json({ error: 'Unsupported action.' }, 400, origin);
 
