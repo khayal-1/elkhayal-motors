@@ -35,15 +35,13 @@ begin
     raise exception 'لا تعدّل مخزون الطراز مباشرة؛ استخدم استلامًا مسجلًا أو جردًا للوحدات ذات أرقام الشاسيه'
       using errcode='23514';
   end if;
-  if v_source='stocktake' then
-    select count(*)::integer into v_units
-      from public.motorcycle_units
-     where motorcycle_id=new.id
-       and unit_status in ('available','reserved','service');
-    if new.stock<>v_units then
-      raise exception 'كمية الجرد لا تطابق عدد الوحدات الفعلية المسجلة بأرقام الشاسيه لهذا الطراز'
-        using errcode='23514';
-    end if;
+  select count(*)::integer into v_units
+    from public.motorcycle_units
+   where motorcycle_id=new.id
+     and unit_status in ('available','reserved','service');
+  if new.stock<>v_units then
+    raise exception 'تغيير الرصيد لا يطابق عدد الوحدات الفعلية المسجلة بأرقام الشاسيه لهذا الطراز'
+      using errcode='23514';
   end if;
   return new;
 end;
