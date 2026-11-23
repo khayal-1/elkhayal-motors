@@ -48,6 +48,7 @@ const state = {
   suppliers: [],
   purchaseOrders: [],
   supplierBills: [],
+  supplierBillItems: [],
   supplierPayments: [],
   supplierReturns: [],
   supplierReturnItems: [],
@@ -1253,11 +1254,20 @@ function pageSuppliers() {
           <div class="field"><label>تاريخ الاستحقاق (اختياري)</label><input name="due_date" type="date"></div>
         </div>
         <div class="form-row">
-          <div class="field"><label>القيمة الإجمالية (ج.م)</label><input name="total_amount" type="number" min="0.01" step="0.01" required></div>
-          <div class="field"><label>ربط بأمر توريد (اختياري)</label><select name="purchase_order_id"><option value="">بدون ربط</option>${state.purchaseOrders.filter(o=>o.status!=='cancelled').map(o=>'<option value="'+esc(o.id)+'">'+esc(o.order_number)+' — '+esc(o.supplierName)+'</option>').join('')}</select></div>
+          <div class="field"><label>أمر التوريد المرتبط</label><select id="supplierBillPurchaseOrder" name="purchase_order_id"><option value="">بدون أمر توريد — بند مباشر فقط</option>${state.purchaseOrders.filter(o=>o.status!=='cancelled').map(o=>'<option value="'+esc(o.id)+'">'+esc(o.order_number)+' — '+esc(o.supplierName)+'</option>').join('')}</select></div>
+          <div class="field"><label>إجمالي الفاتورة (ج.م)</label><input name="total_amount" type="number" min="0.01" step="0.01" readonly required></div>
+        </div>
+        <div class="panel-subtitle">بنود الاستلام المرتبطة بأمر التوريد</div>
+        <div id="supplierBillLines" class="form-grid"><small class="hint">اختر أمر التوريد لعرض بنود الاستلام والوحدات التي لم تُفوتر بعد.</small></div>
+        <div class="supplier-bill-direct-line">
+          <label><input type="checkbox" name="direct_line_enabled"> إضافة بند مباشر (رسوم أو فرق غير مرتبط بوحدة مستلمة)</label>
+          <div class="form-row">
+            <div class="field"><label>وصف البند المباشر</label><input name="direct_description" maxlength="500" disabled></div>
+            <div class="field"><label>قيمة البند (ج.م)</label><input name="direct_amount" type="number" min="0.01" step="0.01" disabled></div>
+          </div>
         </div>
         <div class="field"><label>ملاحظات</label><textarea name="notes" rows="2" maxlength="1000"></textarea></div>
-        <small class="hint">تسجيل الفاتورة لا يغيّر المخزون. تُحسب المديونية من قيمة الفاتورة والمدفوعات الفعلية فقط.</small>
+        <small class="hint">يجب أن يساوي إجمالي الفاتورة مجموع البنود. كل كمية مخزون تُربط بوحدات فعلية من الاستلام، ولا يمكن فوترة الوحدة مرتين.</small>
         <button class="btn btn-primary" type="submit">حفظ فاتورة المورد</button>
       </form>` : '<div class="empty">أضف موردًا أولًا.</div>'}
     </div>
@@ -2725,13 +2735,34 @@ document.addEventListener('submit', async (e) => {
   }
   if(form.id==='supplierBillForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية إدارة فواتير الموردين','error');return;}
-    const fd=new FormData(form),amount=Number(fd.get('total_amount'));
-    if(!Number.isFinite(amount)||amount<=0){toast('أدخل قيمة فاتورة صحيحة','error');return;}
+    const fd=new FormData(form),items=[];
+    for(const row of form.querySelectorAll('.supplier-bill-line')){
+      if(!row.querySelector('[name="selected"]')?.checked)continue;
+      const quantity=Number(row.querySelector('[name="quantity"]')?.value);
+      const unitCost=Number(row.querySelector('[name="unit_cost"]')?.value);
+      const max=Number(row.querySelector('[name="quantity"]')?.max||0);
+      if(!Number.isInteger(quantity)||quantity<1||quantity>max||!Number.isFinite(unitCost)||unitCost<0){
+        toast('تحقق من الكمية وسعر الوحدة في بنود الفاتورة المحددة','error');return;
+      }
+      items.push({line_type:'inventory',purchase_receipt_item_id:row.dataset.receiptItemId,quantity,unit_cost:unitCost});
+    }
+    if(fd.get('direct_line_enabled')==='on'){
+      const directAmount=Number(fd.get('direct_amount'));
+      const description=safeName(fd.get('direct_description'));
+      if(!description||!Number.isFinite(directAmount)||directAmount<=0){toast('أدخل وصفًا وقيمة صحيحة للبند المباشر','error');return;}
+      items.push({line_type:'direct',description,quantity:1,unit_cost:directAmount});
+    }
+    if(!items.length){toast('اختر بند استلام واحدًا على الأقل أو أضف بندًا مباشرًا','error');return;}
+    const amount=Math.round(items.reduce((n,item)=>n+Number(item.quantity)*Number(item.unit_cost),0)*100)/100;
     const submit=form.querySelector('button[type="submit"]');if(submit)submit.disabled=true;
-    const {error}=await supabase.rpc('create_supplier_bill',{p_supplier_id:String(fd.get('supplier_id')),p_bill_number:safeName(fd.get('bill_number')),p_total_amount:amount,p_bill_date:String(fd.get('bill_date')),p_due_date:fd.get('due_date')||null,p_purchase_order_id:fd.get('purchase_order_id')||null,p_notes:safeName(fd.get('notes'))||null});
+    const {error}=await supabase.rpc('create_supplier_bill',{
+      p_supplier_id:String(fd.get('supplier_id')),p_bill_number:safeName(fd.get('bill_number')),
+      p_total_amount:amount,p_bill_date:String(fd.get('bill_date')),p_due_date:fd.get('due_date')||null,
+      p_purchase_order_id:fd.get('purchase_order_id')||null,p_notes:safeName(fd.get('notes'))||null,p_items:items
+    });
     if(submit)submit.disabled=false;
-    if(error){toast(error.message||'تعذر حفظ فاتورة المورد','error');return;}
-    await loadPurchasingData();render();toast('تم حفظ فاتورة المورد وتحديث رصيده','success');return;
+    if(error){toast(error.message||'تعذر حفظ فاتورة المورد؛ لم يتم تسجيل أي بند أو قيد جزئي','error');return;}
+    await loadPurchasingData();render();toast('تم حفظ الفاتورة وبنودها وربط الوحدات المستلمة دون تكرار','success');return;
   }
   if(form.id==='supplierPaymentForm'){
     if(!hasRole('admin')||!supabase){toast('ليس لديك صلاحية تسجيل مدفوعات الموردين','error');return;}
@@ -3225,6 +3256,7 @@ document.addEventListener('submit', async (e) => {
 
 /* ---------- Event: Input / Change ---------- */
 document.addEventListener('input', (e) => {
+  if(e.target.closest('#supplierBillForm')) updateSupplierBillTotal(e.target.closest('#supplierBillForm'));
   if (e.target.id === 'searchInput') {
     state.search = e.target.value;
     const grid = $('#productsGrid');
@@ -3238,6 +3270,8 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if(e.target.id==='supplierBillPurchaseOrder') renderSupplierBillLines(e.target.value);
+  if(e.target.closest('#supplierBillForm')) updateSupplierBillTotal(e.target.closest('#supplierBillForm'));
   if (e.target.id === 'filterCat') { state.filterCat = e.target.value; render(); }
   if (e.target.id === 'filterPrice') { state.filterPrice = e.target.value; render(); }
   if (e.target.matches('.pos-cart-row select[name="motorcycle_id"]')) {
@@ -3602,6 +3636,52 @@ async function loadBusinessData() {
   state.contactReplies = contactReplies.data || [];
 }
 
+
+function renderSupplierBillLines(orderId) {
+  const container=$('#supplierBillLines');
+  if(!container)return;
+  const order=state.purchaseOrders.find(o=>o.id===orderId);
+  const lines=(order?.receiptItems||[]).filter(item=>Number(item.available_to_bill||0)>0);
+  if(!orderId){container.innerHTML='<small class="hint">اختر أمر التوريد لعرض بنود الاستلام.</small>';updateSupplierBillTotal($('#supplierBillForm'));return;}
+  if(!lines.length){container.innerHTML='<div class="empty">لا توجد وحدات مستلمة غير مفوترة في أمر التوريد المحدد.</div>';updateSupplierBillTotal($('#supplierBillForm'));return;}
+  container.innerHTML=lines.map(item=>{
+    const bike=state.bikes.find(b=>b.id===item.motorcycle_id);
+    const description=bike?.name||item.motorcycle_name||'صنف مستلم';
+    const max=Number(item.available_to_bill);
+    return `<div class="supplier-bill-line panel" data-receipt-item-id="${esc(item.id)}">
+      <label><input type="checkbox" name="selected" value="${esc(item.id)}"> <b>${esc(description)}</b> — استلام ${esc(item.receipt_number)} — المتاح للفوترة ${max}</label>
+      <div class="form-row">
+        <div class="field"><label>الكمية المفوترة</label><input name="quantity" type="number" min="1" max="${max}" value="${max}" disabled></div>
+        <div class="field"><label>سعر الوحدة في الفاتورة (ج.م)</label><input name="unit_cost" type="number" min="0" step="0.01" value="${Number(item.unit_cost||0).toFixed(2)}" disabled></div>
+      </div>
+      <small class="hint">تكلفة الاستلام المسجلة: ${money(item.unit_cost)} لكل وحدة. أي فرق سعر سيظهر كفرق تكلفة في القيد المحاسبي.</small>
+    </div>`;
+  }).join('');
+  updateSupplierBillTotal($('#supplierBillForm'));
+}
+
+function updateSupplierBillTotal(form) {
+  if(!form)return;
+  let total=0;
+  for(const row of form.querySelectorAll('.supplier-bill-line')){
+    const checkbox=row.querySelector('[name="selected"]');
+    const quantity=row.querySelector('[name="quantity"]');
+    const cost=row.querySelector('[name="unit_cost"]');
+    const enabled=!!checkbox?.checked;
+    if(quantity)quantity.disabled=!enabled;
+    if(cost)cost.disabled=!enabled;
+    if(enabled)total+=Math.round(Number(quantity.value||0)*Number(cost.value||0)*100)/100;
+  }
+  const direct=form.querySelector('[name="direct_line_enabled"]')?.checked;
+  const directAmount=form.querySelector('[name="direct_amount"]');
+  const directDescription=form.querySelector('[name="direct_description"]');
+  if(directAmount)directAmount.disabled=!direct;
+  if(directDescription)directDescription.disabled=!direct;
+  if(direct)total+=Number(directAmount?.value||0);
+  const totalInput=form.querySelector('[name="total_amount"]');
+  if(totalInput)totalInput.value=total>0?total.toFixed(2):'';
+}
+
 async function loadPurchasingData() {
   if (!state.user || state.user.role !== 'admin' || !supabase) {
     state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[]; return;
@@ -3618,6 +3698,12 @@ async function loadPurchasingData() {
     if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
   }
   state.suppliers=supplierResult.data||[];
+  const billIds=(billResult.data||[]).map(b=>b.id);
+  const billItemsResult=billIds.length
+    ?await supabase.from('supplier_bill_items').select('id,supplier_bill_id,line_number,line_type,purchase_receipt_item_id,description,quantity,unit_cost,line_total').in('supplier_bill_id',billIds)
+    :{data:[],error:null};
+  if(billItemsResult.error){toast('تعذر تحميل تفاصيل فواتير الموردين','error');console.error(billItemsResult.error);return;}
+  state.supplierBillItems=billItemsResult.data||[];
   state.supplierPayments=paymentResult.data||[];
   state.supplierReturns=returnResult.data||[];
   state.supplierAdvanceAllocations=advanceAllocationResult.data||[];
@@ -3652,7 +3738,12 @@ async function loadPurchasingData() {
     supplierName:state.suppliers.find(s=>s.id===o.supplier_id)?.name||'—',
     items:(itemsResult.data||[]).filter(i=>i.purchase_order_id===o.id),
     receipts:(receiptResult.data||[]).filter(r=>r.purchase_order_id===o.id),
-    receiptItems:receiptItems.filter(ri=>(receiptResult.data||[]).some(r=>r.id===ri.receipt_id&&r.purchase_order_id===o.id))
+    receiptItems:receiptItems.filter(ri=>(receiptResult.data||[]).some(r=>r.id===ri.receipt_id&&r.purchase_order_id===o.id)).map(ri=>{
+      const receipt=(receiptResult.data||[]).find(r=>r.id===ri.receipt_id);
+      const billed=state.supplierBillItems.filter(line=>line.purchase_receipt_item_id===ri.id).reduce((n,line)=>n+Number(line.quantity||0),0);
+      const returned=state.supplierReturnItems.filter(line=>line.purchase_receipt_item_id===ri.id).reduce((n,line)=>n+Number(line.quantity||0),0);
+      return {...ri,receipt_number:receipt?.receipt_number||'—',billed_quantity:billed,returned_quantity:returned,available_to_bill:Math.max(0,Number(ri.quantity||0)-billed-returned)};
+    })
   }));
 }
 async function loadStaffDirectory() {
