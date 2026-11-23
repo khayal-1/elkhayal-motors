@@ -313,7 +313,7 @@ function sidebarItems() {
   }
 
   /* Admin */
-  return [
+  const items = [
     { section: 'الإدارة' },
     { route: 'dashboard', label: 'لوحة الإحصائيات', icon: 'fa-chart-line' },
     { section: 'البيع' },
@@ -334,6 +334,8 @@ function sidebarItems() {
     { section: 'المتجر' },
     { route: 'home', label: 'عرض المتجر', icon: 'fa-store' }
   ];
+  if (u.systemRole === 'owner') items.push({ section: 'صلاحيات المالك' }, { route: 'owner-data', label: 'النسخ الاحتياطي وإعادة الضبط', icon: 'fa-shield-halved' });
+  return items;
 }
 
 function renderSidebar() {
@@ -1634,6 +1636,22 @@ function toggleSidebar() {
 }
 
 /* ---------- Router ---------- */
+function pageOwnerData() {
+  if (!currentUser() || state.user?.systemRole !== 'owner') return pageNoPermission();
+  return `
+    <section class="panel">
+      <h2 class="page-title"><i class="fa-solid fa-shield-halved"></i> أدوات المالك والنسخ الاحتياطي</h2>
+      <p class="page-sub">النسخ والاستعادة وإعادة ضبط بيانات التشغيل. جميع العمليات تتطلب كلمة مرور حساب المالك.</p>
+      <div class="alert alert-warning" role="alert"><strong>تنبيه مهم:</strong> النسخة تشمل بيانات جداول قاعدة البيانات الـ86، ولا تشمل الملفات الثنائية في Supabase Storage. الاستعادة تستبدل بيانات التشغيل الحالية مع الاحتفاظ بحساب المالك والإعدادات المحاسبية الأساسية وسجل التدقيق.</div>
+      <div class="form-grid"><div class="field"><label for="ownerDataPassword">كلمة مرور حساب المالك (تُطلب لكل عملية)</label><input id="ownerDataPassword" type="password" autocomplete="current-password" required placeholder="أدخل كلمة المرور"></div></div>
+      <div class="grid grid-2">
+        <article class="card"><h3><i class="fa-solid fa-cloud-arrow-down"></i> نسخة احتياطية</h3><p>تصدير بيانات قاعدة البيانات في ملف JSON مع بصمة تحقق SHA-256.</p><button class="btn btn-primary" type="button" data-owner-backup><i class="fa-solid fa-download"></i> إنشاء وتنزيل نسخة</button></article>
+        <article class="card"><h3><i class="fa-solid fa-cloud-arrow-up"></i> استعادة / استيراد</h3><p>ترفع البيانات إلى Supabase وتصبح مشتركة مع الموقع ولوحة الإدارة. الاستعادة ذرّية؛ إذا فشل التحقق تُلغى بالكامل.</p><div class="field"><label for="ownerBackupFile">ملف النسخة الاحتياطية JSON</label><input id="ownerBackupFile" type="file" accept=".json,application/json"></div><div class="field"><label for="ownerRestoreConfirmation">اكتب RESTORE BACKUP للتأكيد</label><input id="ownerRestoreConfirmation" autocomplete="off"></div><button class="btn btn-outline" type="button" data-owner-restore><i class="fa-solid fa-rotate"></i> استيراد النسخة</button></article>
+        <article class="card"><h3><i class="fa-solid fa-triangle-exclamation"></i> حذف بيانات التشغيل</h3><p>يحذف المبيعات والمشتريات والمخزون والعملاء والموظفين والقيود والحركات التشغيلية. يحتفظ بحساب المالك ودوره وإعدادات الحسابات والخزائن والضرائب وسجل التدقيق.</p><div class="field"><label for="ownerResetConfirmation">اكتب DELETE ALL DATA للتأكيد</label><input id="ownerResetConfirmation" autocomplete="off"></div><button class="btn btn-danger" type="button" data-owner-reset><i class="fa-solid fa-trash"></i> حذف كل بيانات التشغيل</button></article>
+      </div>
+    </section>`;
+}
+
 const ROUTES = {
   home: pageHome,
   login: pageLogin,
@@ -1658,7 +1676,8 @@ const ROUTES = {
   hr: pageHR,
   'inventory-tools': pageInventoryTools,
   'customer-relations': pageCustomerRelations,
-  'sales-tools': pageSalesTools
+  'sales-tools': pageSalesTools,
+  'owner-data': pageOwnerData
 };
 
 function render() {
@@ -1796,6 +1815,52 @@ async function confirmBuy(bikeId, unitId = null) {
 
 /* ---------- Event: Click Delegation ---------- */
 document.addEventListener('click', async (e) => {
+  const ownerAction = e.target.closest('[data-owner-backup], [data-owner-restore], [data-owner-reset]');
+  if (ownerAction) {
+    if (state.user?.systemRole !== 'owner') { toast('هذه الأدوات متاحة للمالك فقط', 'error'); return; }
+    if (!supabase) { toast('الاتصال بقاعدة البيانات غير متاح', 'error'); return; }
+    const password = $('#ownerDataPassword')?.value || '';
+    if (!password) { toast('أدخل كلمة مرور المالك أولاً', 'error'); return; }
+    ownerAction.disabled = true;
+    try {
+      if (ownerAction.matches('[data-owner-backup]')) {
+        const { data, error } = await supabase.functions.invoke('owner-data-management', { body: { action: 'backup', password } });
+        if (error) throw error;
+        if (!data?.tables || data.format !== 'khayal-backup') throw new Error(data?.error || 'تعذر إنشاء النسخة الاحتياطية');
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob), link = document.createElement('a');
+        link.href = url; link.download = 'khayal-backup-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+        document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+        toast('تم إنشاء النسخة الاحتياطية وتنزيلها (' + Number(data.rowCount || 0) + ' سجل)', 'success');
+      } else if (ownerAction.matches('[data-owner-restore]')) {
+        const file = $('#ownerBackupFile')?.files?.[0], confirmation = $('#ownerRestoreConfirmation')?.value || '';
+        if (!file) throw new Error('اختر ملف النسخة الاحتياطية أولاً');
+        if (confirmation !== 'RESTORE BACKUP') throw new Error('اكتب RESTORE BACKUP كما هو للتأكيد');
+        if (file.size > 25 * 1024 * 1024) throw new Error('حجم النسخة يتجاوز الحد المسموح 25 ميجابايت');
+        const backup = JSON.parse(await file.text());
+        if (!window.confirm('ستُستبدل بيانات التشغيل الحالية بمحتويات النسخة. هل أنشأت نسخة حديثة من البيانات الحالية؟')) return;
+        const { data, error } = await supabase.functions.invoke('owner-data-management', { body: { action: 'restore', password, confirmation, backup } });
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'فشلت الاستعادة');
+        toast('تم استيراد البيانات إلى قاعدة البيانات بنجاح. سيتم تحديث الموقع الآن.', 'success');
+        window.location.reload();
+      } else {
+        const confirmation = $('#ownerResetConfirmation')?.value || '';
+        if (confirmation !== 'DELETE ALL DATA') throw new Error('اكتب DELETE ALL DATA كما هو للتأكيد');
+        if (!window.confirm('تحذير نهائي: سيتم حذف بيانات التشغيل من قاعدة البيانات. هل أنشأت نسخة احتياطية وتريد المتابعة؟')) return;
+        const { data, error } = await supabase.functions.invoke('owner-data-management', { body: { action: 'reset', password, confirmation } });
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'فشل حذف البيانات');
+        toast('تم حذف بيانات التشغيل مع الاحتفاظ بحساب المالك والإعدادات الأساسية.', 'success');
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Owner data operation failed', error);
+      toast(error?.message || 'حدث خطأ أثناء تنفيذ العملية', 'error');
+    } finally { ownerAction.disabled = false; }
+    return;
+  }
+
   const payExpenseButton = e.target.closest('[data-pay-expense]');
   if (payExpenseButton) {
     if (!(hasRole('admin') || hasPermission('expenses_manage'))) { toast('ليس لديك صلاحية سداد المصروفات','error'); return; }
@@ -3919,6 +3984,16 @@ const EN = {
   'يرتبط الطلب بحسابك لحماية بياناتك ومتابعته.':'Requests are linked to your account so you can track them securely.',
   'تفاصيل':'Details','شراء':'Request purchase','متوفر':'Available','غير متوفر':'Unavailable','المفضلة':'Favorites','طلباتي':'My requests',
   'سجل الدخول أولاً':'Please sign in first','عميل':'Customer','موظف':'Employee','مدير':'Manager'
+  ,'أدوات المالك والنسخ الاحتياطي':'Owner data tools & backups'
+  ,'النسخ والاستعادة وإعادة ضبط بيانات التشغيل. جميع العمليات تتطلب كلمة مرور حساب المالك.':'Back up, restore, and reset operational data. Every action requires the owner password.'
+  ,'كلمة مرور حساب المالك (تُطلب لكل عملية)':'Owner account password (required for each action)'
+  ,'نسخة احتياطية':'Backup','إنشاء وتنزيل نسخة':'Create and download backup'
+  ,'استعادة / استيراد':'Restore / Import','ملف النسخة الاحتياطية JSON':'Backup JSON file'
+  ,'اكتب RESTORE BACKUP للتأكيد':'Type RESTORE BACKUP to confirm','استيراد النسخة':'Import backup'
+  ,'حذف بيانات التشغيل':'Delete operational data','اكتب DELETE ALL DATA للتأكيد':'Type DELETE ALL DATA to confirm'
+  ,'حذف كل بيانات التشغيل':'Delete all operational data','صلاحيات المالك':'Owner tools'
+  ,'النسخ الاحتياطي وإعادة الضبط':'Backup & reset','تنبيه مهم:':'Important:'
+
 };
 function applyLanguage(root) {
   const en = state.language === 'en';
