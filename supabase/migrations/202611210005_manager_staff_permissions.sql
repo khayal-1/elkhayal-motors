@@ -28,7 +28,7 @@ using (
   or public.has_any_role(array['manager','owner','admin']::public.app_role[])
 );
 
-create or replace function public.has_employee_permission(p_permission_key text)
+create or replace function public.has_employee_permission(p_permission text)
 returns boolean
 language sql
 stable
@@ -40,7 +40,7 @@ as $$
        select 1
        from public.employee_permissions ep
        where ep.user_id=(select auth.uid())
-         and ep.permission_key=p_permission_key
+         and ep.permission_key=p_permission
      );
 $$;
 revoke all on function public.has_employee_permission(text) from public,anon;
