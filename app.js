@@ -3215,11 +3215,16 @@ async function loadStoreUnits() {
 
 async function loadMotorcycleUnits() {
   if (!supabase || !state.user || !(hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage'))) return;
-  const { data, error } = await supabase.from('motorcycle_units')
-    .select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)')
-    .order('registered_at',{ascending:false}).limit(500);
-  if (error) { console.error('Motorcycle units load failed',error); toast('تعذر تحميل وحدات الدراجات','error'); return; }
-  state.motorcycleUnits = data || [];
+  const allUnits=[];
+  for(let from=0; ; from+=500){
+    const {data,error}=await supabase.from('motorcycle_units')
+      .select('*,motorcycles(id,name,category,model_year,price,stock,image_urls,description)')
+      .order('registered_at',{ascending:false}).range(from,from+499);
+    if(error){console.error('Motorcycle units load failed',error);toast('تعذر تحميل وحدات الدراجات','error');return;}
+    allUnits.push(...(data||[]));
+    if(!data||data.length<500)break;
+  }
+  state.motorcycleUnits=allUnits;
 }
 
 async function loadMotorcycles() {
