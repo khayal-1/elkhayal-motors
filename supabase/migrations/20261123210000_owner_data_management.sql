@@ -32,7 +32,7 @@ begin
   delete from public.employee_permissions where user_id <> p_owner_id;
 
   return jsonb_build_object('ok', true, 'preserved', jsonb_build_array(
-    'owner account', 'owner role', 'accounting_accounts', 'cash_accounts',
+    'owner account', 'owner role', 'owner permissions', 'accounting_accounts', 'cash_accounts',
     'finance_settings', 'tax_rates', 'audit_logs'
   ));
 end;
