@@ -1729,7 +1729,17 @@ function navigate(route) {
   closeSidebar();
   render();
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
-  if (route === 'manage-bikes' && state.user) Promise.all([loadMotorcycles(),loadMotorcycleUnits()]).then(render);
+  if (route === 'manage-bikes') {
+    if (state.user?.role === 'admin') {
+      console.info('[temporary motorcycle-units diagnostic]', {
+        stage: 'route', routeReached: true, clientPresent: !!supabase, userPresent: !!state.user,
+        rolePass: hasRole('admin','manager','owner'),
+        permissionPass: hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage'),
+        reason: state.user ? 'route_handler_entered' : 'user_missing'
+      });
+    }
+    if (state.user) Promise.all([loadMotorcycles(),loadMotorcycleUnits()]).then(render);
+  }
   if (route === 'staff' && state.user?.role === 'admin') loadStaffDirectory().then(render);
   if (route === 'pos') Promise.all([loadSalesData(),loadMotorcycles(),loadMotorcycleUnits(),loadSalesCashAccounts()]).then(render);
   if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData(),loadSalesCashAccounts()]).then(render);
@@ -3496,7 +3506,20 @@ async function loadStoreUnits() {
 }
 
 async function loadMotorcycleUnits() {
-  if (!supabase || !state.user || !(hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage'))) return;
+  // Temporary diagnostic requested for the signed-in admin only. Keep it to booleans and fixed labels.
+  const clientPresent = !!supabase;
+  const userPresent = !!state.user;
+  const rolePass = hasRole('admin','manager','owner');
+  const permissionPass = hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage');
+  const guardPass = clientPresent && userPresent && (rolePass || permissionPass);
+  if (state.user?.role === 'admin') {
+    console.info('[temporary motorcycle-units diagnostic]', {
+      stage: 'loader', routeReached: state.route === 'manage-bikes', clientPresent, userPresent,
+      rolePass, permissionPass, reason: !clientPresent ? 'client_missing' : !userPresent ? 'user_missing'
+        : !(rolePass || permissionPass) ? 'role_or_permission_denied' : 'guard_passed'
+    });
+  }
+  if (!guardPass) return;
   const allUnits=[];
   for(let from=0; ; from+=500){
     const {data,error}=await supabase.from('motorcycle_units')
