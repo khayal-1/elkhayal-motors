@@ -1,5 +1,6 @@
 import { supabase, supabaseConfigured, getCurrentProfile } from './src/supabase.js';
 import { esc, safeImageUrl } from './src/security.js';
+import { applyQueryResults } from './src/purchasing-results.js';
 
 /* =========================================================
    El Khayal Motors — app.js (Full SPA)
@@ -3857,44 +3858,62 @@ async function loadPurchasingData() {
     supabase.from('supplier_returns').select('id,return_number,supplier_id,purchase_order_id,supplier_bill_id,notes,created_by,created_at').order('created_at',{ascending:false}).limit(500),
     supabase.from('supplier_advance_allocations').select('id,advance_id,supplier_bill_id,amount,created_at').order('created_at',{ascending:false}).limit(500)
   ]);
-  for (const [result,label] of [[supplierResult,'الموردين'],[orderResult,'أوامر التوريد'],[billResult,'فواتير الموردين'],[paymentResult,'مدفوعات الموردين'],[returnResult,'مرتجعات الموردين'],[advanceAllocationResult,'تسويات سلف الموردين']]) {
-    if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
+  const reportError=(label,error)=>{toast('تعذر تحميل '+label,'error');console.error('Purchasing query failed: '+label,error);};
+  const initialLoaded=applyQueryResults(state,[
+    {result:supplierResult,key:'suppliers',label:'الموردين'},
+    {result:paymentResult,key:'supplierPayments',label:'مدفوعات الموردين'},
+    {result:returnResult,key:'supplierReturns',label:'مرتجعات الموردين'},
+    {result:advanceAllocationResult,key:'supplierAdvanceAllocations',label:'تسويات سلف الموردين'}
+  ],reportError);
+  const billLoaded=applyQueryResults({},[{result:billResult,key:'data',label:'فواتير الموردين'}],reportError).has('data');
+  const orderLoaded=applyQueryResults({},[{result:orderResult,key:'data',label:'أوامر التوريد'}],reportError).has('data');
+
+  let billItemsLoaded=false;
+  if(billLoaded){
+    const billIds=(billResult.data||[]).map(b=>b.id);
+    const billItemsResult=await loadPurchasingRows('supplier_bill_items','id,supplier_bill_id,line_number,line_type,purchase_receipt_item_id,description,quantity,unit_cost,line_total','supplier_bill_id',billIds);
+    billItemsLoaded=applyQueryResults(state,[{result:billItemsResult,key:'supplierBillItems',label:'تفاصيل فواتير الموردين'}],reportError).has('supplierBillItems');
   }
-  state.suppliers=supplierResult.data||[];
-  const billIds=(billResult.data||[]).map(b=>b.id);
-  const billItemsResult=await loadPurchasingRows('supplier_bill_items','id,supplier_bill_id,line_number,line_type,purchase_receipt_item_id,description,quantity,unit_cost,line_total','supplier_bill_id',billIds);
-  if(billItemsResult.error){toast('تعذر تحميل تفاصيل فواتير الموردين','error');console.error(billItemsResult.error);return;}
-  state.supplierBillItems=billItemsResult.data||[];
-  state.supplierPayments=paymentResult.data||[];
-  state.supplierReturns=returnResult.data||[];
-  state.supplierAdvanceAllocations=advanceAllocationResult.data||[];
-  const returnIds=state.supplierReturns.map(r=>r.id);
-  const returnItemsResult=returnIds.length
-    ?await supabase.from('supplier_return_items').select('id,supplier_return_id,purchase_receipt_item_id,motorcycle_id,quantity,unit_cost,line_total').in('supplier_return_id',returnIds)
-    :{data:[],error:null};
-  if(returnItemsResult.error){toast('تعذر تحميل تفاصيل مرتجعات الموردين','error');console.error(returnItemsResult.error);return;}
-  state.supplierReturnItems=returnItemsResult.data||[];
-  state.supplierBills=(billResult.data||[]).map(b=>{
-    const payments=state.supplierPayments.filter(p=>p.supplier_bill_id===b.id);
-    const paid=payments.reduce((n,p)=>n+Number(p.amount||0),0);
-    const credits=state.supplierReturns.filter(r=>r.supplier_bill_id===b.id).reduce((n,r)=>
-      n+state.supplierReturnItems.filter(i=>i.supplier_return_id===r.id).reduce((sum,i)=>sum+Number(i.line_total||Number(i.quantity)*Number(i.unit_cost)),0),0);
-    const advanceAllocated=state.supplierAdvanceAllocations.filter(a=>a.supplier_bill_id===b.id).reduce((n,a)=>n+Number(a.amount||0),0);
-    return {...b,supplierName:state.suppliers.find(s=>s.id===b.supplier_id)?.name||'—',payments,amountPaid:paid,creditAmount:credits,advanceAllocated,balanceDue:Math.max(0,Number(b.total_amount)-paid-credits-advanceAllocated)};
-  });
+
+  let returnItemsLoaded=false;
+  if(initialLoaded.has('supplierReturns')){
+    const returnIds=state.supplierReturns.map(r=>r.id);
+    const returnItemsResult=returnIds.length
+      ?await supabase.from('supplier_return_items').select('id,supplier_return_id,purchase_receipt_item_id,motorcycle_id,quantity,unit_cost,line_total').in('supplier_return_id',returnIds)
+      :{data:[],error:null};
+    returnItemsLoaded=applyQueryResults(state,[{result:returnItemsResult,key:'supplierReturnItems',label:'تفاصيل مرتجعات الموردين'}],reportError).has('supplierReturnItems');
+  }
+
+  const suppliersLoaded=initialLoaded.has('suppliers');
+  const billsReady=suppliersLoaded&&billLoaded&&billItemsLoaded&&initialLoaded.has('supplierPayments')&&initialLoaded.has('supplierReturns')&&returnItemsLoaded&&initialLoaded.has('supplierAdvanceAllocations');
+  if(billsReady){
+    state.supplierBills=(billResult.data||[]).map(b=>{
+      const payments=state.supplierPayments.filter(p=>p.supplier_bill_id===b.id);
+      const paid=payments.reduce((n,p)=>n+Number(p.amount||0),0);
+      const credits=state.supplierReturns.filter(r=>r.supplier_bill_id===b.id).reduce((n,r)=>
+        n+state.supplierReturnItems.filter(i=>i.supplier_return_id===r.id).reduce((sum,i)=>sum+Number(i.line_total||Number(i.quantity)*Number(i.unit_cost)),0),0);
+      const advanceAllocated=state.supplierAdvanceAllocations.filter(a=>a.supplier_bill_id===b.id).reduce((n,a)=>n+Number(a.amount||0),0);
+      return {...b,supplierName:state.suppliers.find(s=>s.id===b.supplier_id)?.name||'—',payments,amountPaid:paid,creditAmount:credits,advanceAllocated,balanceDue:Math.max(0,Number(b.total_amount)-paid-credits-advanceAllocated)};
+    });
+  }
+
+  if(!orderLoaded||!suppliersLoaded)return;
   const orderIds=(orderResult.data||[]).map(o=>o.id);
   const [itemsResult,receiptResult]=await Promise.all([
     orderIds.length?supabase.from('purchase_order_items').select('id,purchase_order_id,motorcycle_id,motorcycle_name,model_year,quantity_ordered,quantity_received,unit_cost').in('purchase_order_id',orderIds):Promise.resolve({data:[],error:null}),
     orderIds.length?supabase.from('purchase_receipts').select('id,receipt_number,purchase_order_id,received_at').in('purchase_order_id',orderIds):Promise.resolve({data:[],error:null})
   ]);
-  if(itemsResult.error)console.error('Purchase order items load failed',itemsResult.error);
-  if(receiptResult.error)console.error('Purchase receipts load failed',receiptResult.error);
+  const orderDetailLoaded=applyQueryResults({},[
+    {result:itemsResult,key:'items',label:'أصناف أوامر التوريد'},
+    {result:receiptResult,key:'receipts',label:'إيصالات الاستلام'}
+  ],reportError);
+  if(!orderDetailLoaded.has('items')||!orderDetailLoaded.has('receipts')||!billItemsLoaded||!returnItemsLoaded)return;
   const receiptIds=(receiptResult.data||[]).map(r=>r.id);
   const receiptItemsResult=receiptIds.length
     ?await supabase.from('purchase_receipt_items').select('id,receipt_id,purchase_order_item_id,motorcycle_id,quantity,unit_cost').in('receipt_id',receiptIds)
     :{data:[],error:null};
-  if(receiptItemsResult.error){toast('تعذر تحميل بنود الاستلام','error');console.error(receiptItemsResult.error);return;}
-  const receiptItems=receiptItemsResult.data||[];
+  const receiptItemsLoaded=applyQueryResults({},[{result:receiptItemsResult,key:'items',label:'بنود الاستلام'}],reportError).has('items');
+  if(!receiptItemsLoaded)return;
   const billItemIds=state.supplierBillItems.map(line=>line.id);
   const returnItemIds=state.supplierReturnItems.map(line=>line.id);
   const [receiptUnitsResult,billedUnitsResult,returnedUnitsResult]=await Promise.all([
@@ -3902,9 +3921,13 @@ async function loadPurchasingData() {
     loadPurchasingRows('supplier_bill_item_units','motorcycle_unit_id','supplier_bill_item_id',billItemIds),
     loadPurchasingRows('supplier_return_units','motorcycle_unit_id','supplier_return_item_id',returnItemIds)
   ]);
-  for(const [result,label] of [[receiptUnitsResult,'وحدات الاستلام'],[billedUnitsResult,'الوحدات المفوترة'],[returnedUnitsResult,'الوحدات المرتجعة']]){
-    if(result.error){toast('تعذر تحميل '+label,'error');console.error(result.error);return;}
-  }
+  const unitLinksLoaded=applyQueryResults({},[
+    {result:receiptUnitsResult,key:'receiptUnits',label:'وحدات الاستلام'},
+    {result:billedUnitsResult,key:'billedUnits',label:'الوحدات المفوترة'},
+    {result:returnedUnitsResult,key:'returnedUnits',label:'الوحدات المرتجعة'}
+  ],reportError);
+  if(unitLinksLoaded.size!==3)return;
+  const receiptItems=receiptItemsResult.data||[];
   const billedUnitIds=new Set((billedUnitsResult.data||[]).map(row=>row.motorcycle_unit_id));
   const returnedUnitIds=new Set((returnedUnitsResult.data||[]).map(row=>row.motorcycle_unit_id));
   state.purchaseOrders=(orderResult.data||[]).map(o=>({...o,
