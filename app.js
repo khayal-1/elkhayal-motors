@@ -54,6 +54,8 @@ const state = {
   supplierPayments: [],
   supplierReturns: [],
   supplierReturnItems: [],
+  purchasingLoadStatus: 'idle',
+  purchasingLoadErrors: [],
   financeAccounts: [],
   financeAllAccounts: [],
   cashAccounts: [],
@@ -1206,9 +1208,19 @@ function pageSuppliers() {
   const bikes = state.bikes.filter(b=>b.status!=='archived');
   const activeSuppliers = state.suppliers.filter(s=>s.is_active);
   const statusLabel = {ordered:'قيد التوريد',partially_received:'استلام جزئي',received:'مستلم بالكامل',cancelled:'ملغى'};
+  const loadStatus = state.purchasingLoadStatus || 'idle';
+  const loadMessage = loadStatus === 'loading' ? 'جارٍ تحميل بيانات الموردين والفواتير…'
+    : loadStatus === 'loaded' ? ''
+    : loadStatus === 'forbidden' ? 'تعذر تحميل البيانات: الحساب الحالي لا يملك صلاحية المدير.'
+    : loadStatus === 'unavailable' ? 'تعذر الاتصال بقاعدة البيانات؛ لم تُحمّل بيانات الموردين.'
+    : loadStatus === 'partial' ? 'لم تكتمل قراءة بعض بيانات الشراء: '+(state.purchasingLoadErrors||[]).join('، ')
+    : loadStatus === 'error' ? 'تعذر تحميل بيانات الشراء: '+(state.purchasingLoadErrors||[]).join('، ')
+    : 'بيانات الموردين لم تُحمّل بعد.';
+  const loadNotice = loadStatus === 'loaded' ? '' : `<div class="panel alert alert-warning" role="status" data-purchasing-load-status="${esc(loadStatus)}"><b>${esc(loadMessage)}</b> ${loadStatus === 'loading' ? '' : '<button class="btn btn-outline btn-sm" type="button" data-retry-purchasing>إعادة تحميل البيانات</button>'}</div>`;
   return `
     <h2 class="page-title"><i class="fa-solid fa-truck-ramp-box"></i> الموردون والتوريد</h2>
     <p class="page-sub">تسجيل الموردين وأوامر التوريد واستلام الكميات مع تحديث المخزون وسجل الحركة داخل معاملة واحدة.</p>
+    ${loadNotice}
     <div class="panel">
       <div class="panel-title"><i class="fa-solid fa-user-plus"></i> إضافة مورد</div>
       <form id="supplierForm" class="form-grid">
@@ -1885,6 +1897,17 @@ document.addEventListener('click', async (e) => {
     const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: authRedirectUrl } });
     if (error) toast(error.message || 'تعذر طلب رسالة التأكيد', 'error');
     else toast('إذا كان الحساب بانتظار التأكيد، ستصل رسالة إلى البريد', 'info');
+    return;
+  }
+
+  const retryPurchasing = e.target.closest('[data-retry-purchasing]');
+  if (retryPurchasing) {
+    if (state.route !== 'suppliers') return;
+    retryPurchasing.disabled = true;
+    const reload = Promise.all([loadPurchasingData(), loadMotorcycles(), loadFinanceData()]);
+    render();
+    await reload;
+    render();
     return;
   }
 
@@ -3847,9 +3870,21 @@ function updateSupplierBillTotal(form) {
 }
 
 async function loadPurchasingData() {
-  if (!state.user || state.user.role !== 'admin' || !supabase) {
-    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierBillItems=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[]; return;
+  if (!state.user || state.user.role !== 'admin') {
+    state.purchasingLoadStatus = 'forbidden';
+    state.purchasingLoadErrors = [];
+    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierBillItems=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[];
+    return;
   }
+  if (!supabase) {
+    state.purchasingLoadStatus = 'unavailable';
+    state.purchasingLoadErrors = [];
+    state.suppliers=[]; state.purchaseOrders=[]; state.supplierBills=[]; state.supplierBillItems=[]; state.supplierPayments=[]; state.supplierReturns=[]; state.supplierReturnItems=[];
+    return;
+  }
+  state.purchasingLoadStatus = 'loading';
+  state.purchasingLoadErrors = [];
+  try {
   const [supplierResult,orderResult,billResult,paymentResult,returnResult,advanceAllocationResult]=await Promise.all([
     supabase.from('suppliers').select('id,name,phone,email,address,tax_id,is_active').order('name'),
     supabase.from('purchase_orders').select('id,order_number,supplier_id,status,notes,created_at').order('created_at',{ascending:false}).limit(100),
@@ -3858,7 +3893,7 @@ async function loadPurchasingData() {
     supabase.from('supplier_returns').select('id,return_number,supplier_id,purchase_order_id,supplier_bill_id,notes,created_by,created_at').order('created_at',{ascending:false}).limit(500),
     supabase.from('supplier_advance_allocations').select('id,advance_id,supplier_bill_id,amount,created_at').order('created_at',{ascending:false}).limit(500)
   ]);
-  const reportError=(label,error)=>{toast('تعذر تحميل '+label,'error');console.error('Purchasing query failed: '+label,error);};
+  const reportError=(label,error)=>{state.purchasingLoadErrors.push(label);toast('تعذر تحميل '+label,'error');console.error('Purchasing query failed: '+label,error);};
   const initialLoaded=applyQueryResults(state,[
     {result:supplierResult,key:'suppliers',label:'الموردين'},
     {result:paymentResult,key:'supplierPayments',label:'مدفوعات الموردين'},
@@ -3941,6 +3976,12 @@ async function loadPurchasingData() {
       return {...ri,receipt_number:receipt?.receipt_number||'—',billed_quantity:billed,available_to_bill:available};
     })
   }));
+  } catch (error) {
+    state.purchasingLoadErrors.push('قراءة بيانات الشراء');
+    console.error('Purchasing data load failed', error);
+  } finally {
+    state.purchasingLoadStatus = state.purchasingLoadErrors.length ? 'partial' : 'loaded';
+  }
 }
 async function loadStaffDirectory() {
   if (!state.user || state.user.role !== 'admin' || !supabase) return;
