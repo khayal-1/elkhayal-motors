@@ -1704,7 +1704,7 @@ function render() {
   const fn = ROUTES[state.route] || pageHome;
   main.innerHTML = fn();
   // Add an independent print action to every content panel/section.
-  $('.panel', main).forEach((panel, index) => {
+  $$('.panel', main).forEach((panel, index) => {
     if (panel.querySelector(':scope > .section-print-action')) return;
     const action = document.createElement('div');
     action.className = 'section-print-action no-print';
