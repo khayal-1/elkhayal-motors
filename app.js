@@ -1731,7 +1731,7 @@ function navigate(route) {
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
   if (route === 'manage-bikes') {
     if (state.user) {
-      console.info('[temporary motorcycle-units diagnostic]', {
+      console.warn('[temporary motorcycle-units diagnostic]', {
         stage: 'route', routeReached: true, clientPresent: !!supabase, userPresent: !!state.user,
         rolePass: hasRole('admin','manager','owner'),
         permissionPass: hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage'),
@@ -3513,7 +3513,7 @@ async function loadMotorcycleUnits() {
   const permissionPass = hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage');
   const guardPass = clientPresent && userPresent && (rolePass || permissionPass);
   if (state.user) {
-    console.info('[temporary motorcycle-units diagnostic]', {
+    console.warn('[temporary motorcycle-units diagnostic]', {
       stage: 'loader', routeReached: state.route === 'manage-bikes', clientPresent, userPresent,
       rolePass, permissionPass, reason: !clientPresent ? 'client_missing' : !userPresent ? 'user_missing'
         : !(rolePass || permissionPass) ? 'role_or_permission_denied' : 'guard_passed'
