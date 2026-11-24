@@ -1734,7 +1734,6 @@ function navigate(route) {
   if (route === 'pos') Promise.all([loadSalesData(),loadMotorcycles(),loadMotorcycleUnits(),loadSalesCashAccounts()]).then(render);
   if (route === 'vin-scanner') Promise.all([loadMotorcycles(),loadSalesData(),loadSalesCashAccounts()]).then(render);
   if (route === 'home') Promise.all([loadMotorcycles(),loadStoreUnits()]).then(render);
-  if (route === 'suppliers' && state.user?.role === 'admin') Promise.all([loadPurchasingData(),loadMotorcycles(),loadFinanceData()]).then(render);
   if (route === 'staff-orders' && state.user && ['staff','admin'].includes(state.user.role)) loadBusinessData().then(render);
   if (route === 'hr' && state.user && (hasRole('admin','manager','owner') || hasPermission('finance_manage'))) Promise.all([loadHRData(),loadFinanceData(),loadSalesData()]).then(render);
   if (route === 'inventory-tools' && state.user && (hasRole('admin','manager','owner') || hasPermission('catalog_manage') || hasPermission('finance_manage'))) Promise.all([loadMotorcycles(),loadInventoryData(),loadHRData(),loadSalesData()]).then(render);
@@ -1904,7 +1903,7 @@ document.addEventListener('click', async (e) => {
   if (retryPurchasing) {
     if (state.route !== 'suppliers') return;
     retryPurchasing.disabled = true;
-    const reload = Promise.all([loadPurchasingData(), loadMotorcycles(), loadFinanceData()]);
+    const reload = Promise.all([loadPurchasingData(), loadMotorcycles()]);
     render();
     await reload;
     render();
@@ -1915,7 +1914,18 @@ document.addEventListener('click', async (e) => {
   const nav = e.target.closest('[data-nav]');
   if (nav) {
     e.preventDefault();
-    navigate(nav.dataset.nav);
+    const route = nav.dataset.nav;
+    navigate(route);
+    if (route === 'suppliers' && state.user?.role === 'admin') {
+      const load = Promise.all([loadPurchasingData(), loadMotorcycles()]);
+      render();
+      load.then(render).catch((error) => {
+        state.purchasingLoadStatus = 'error';
+        state.purchasingLoadErrors = ['تحميل بيانات الموردين'];
+        console.error('Supplier page load failed', error);
+        render();
+      });
+    }
     return;
   }
 
