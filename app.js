@@ -1731,12 +1731,22 @@ function navigate(route) {
   if (route === 'dashboard' && state.user?.role === 'admin') Promise.all([loadSalesData(),loadPurchasingData(),loadFinanceData()]).then(render);
   if (route === 'manage-bikes') {
     if (state.user) {
-      console.warn('[temporary motorcycle-units diagnostic]', {
+      const diagnostic = {
         stage: 'route', routeReached: true, clientPresent: !!supabase, userPresent: !!state.user,
         rolePass: hasRole('admin','manager','owner'),
         permissionPass: hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage'),
         reason: state.user ? 'route_handler_entered' : 'user_missing'
-      });
+      };
+      console.warn('[temporary motorcycle-units diagnostic]', diagnostic);
+      let diagnosticOutput = document.getElementById('temporary-motorcycle-unit-diagnostic');
+      if (!diagnosticOutput) {
+        diagnosticOutput = document.createElement('output');
+        diagnosticOutput.id = 'temporary-motorcycle-unit-diagnostic';
+        diagnosticOutput.setAttribute('aria-label', 'Temporary motorcycle unit diagnostic');
+        diagnosticOutput.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:99999;background:#fff;color:#111;padding:6px;border:1px solid #888;font:12px monospace';
+        document.body.appendChild(diagnosticOutput);
+      }
+      diagnosticOutput.textContent = JSON.stringify(diagnostic);
     }
     if (state.user) Promise.all([loadMotorcycles(),loadMotorcycleUnits()]).then(render);
   }
@@ -3513,11 +3523,21 @@ async function loadMotorcycleUnits() {
   const permissionPass = hasPermission('catalog_manage') || hasPermission('finance_manage') || hasPermission('sales_manage');
   const guardPass = clientPresent && userPresent && (rolePass || permissionPass);
   if (state.user) {
-    console.warn('[temporary motorcycle-units diagnostic]', {
+    const diagnostic = {
       stage: 'loader', routeReached: state.route === 'manage-bikes', clientPresent, userPresent,
       rolePass, permissionPass, reason: !clientPresent ? 'client_missing' : !userPresent ? 'user_missing'
         : !(rolePass || permissionPass) ? 'role_or_permission_denied' : 'guard_passed'
-    });
+    };
+    console.warn('[temporary motorcycle-units diagnostic]', diagnostic);
+    let diagnosticOutput = document.getElementById('temporary-motorcycle-unit-diagnostic');
+    if (!diagnosticOutput) {
+      diagnosticOutput = document.createElement('output');
+      diagnosticOutput.id = 'temporary-motorcycle-unit-diagnostic';
+      diagnosticOutput.setAttribute('aria-label', 'Temporary motorcycle unit diagnostic');
+      diagnosticOutput.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:99999;background:#fff;color:#111;padding:6px;border:1px solid #888;font:12px monospace';
+      document.body.appendChild(diagnosticOutput);
+    }
+    diagnosticOutput.textContent = JSON.stringify(diagnostic);
   }
   if (!guardPass) return;
   const allUnits=[];
