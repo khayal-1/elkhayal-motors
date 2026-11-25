@@ -525,11 +525,28 @@ function pageRequest() {
 
 function pageContact() {
   const u = currentUser();
-  if (!u) return pageLogin();
-  if (u.role !== 'customer') return pageNoPermission();
+  const canSend = u?.role === 'customer';
+  const contactContent = canSend ? `
+        <div class="panel-title"><i class="fa-solid fa-paper-plane"></i> أرسل رسالة</div>
+        <form id="contactForm" class="form-grid">
+          <div class="field"><label>الاسم</label><input name="name" required maxlength="120" value="${esc(u?.name || '')}"></div>
+          <div class="form-row">
+            <div class="field"><label>رقم الهاتف</label><input name="phone" type="tel" maxlength="32" value="${esc(u?.phone || '')}"></div>
+            <div class="field"><label>البريد الإلكتروني</label><input type="email" name="email" maxlength="254" value="${esc(u?.email || '')}"></div>
+          </div>
+          <div class="field"><label>طريقة الرد المفضلة</label><select name="preferred_contact"><option value="whatsapp">واتساب</option><option value="phone">مكالمة هاتفية</option><option value="sms">SMS</option><option value="email">البريد الإلكتروني</option></select></div>
+          <div class="field"><label>رسالتك</label><textarea name="message" required maxlength="10000"></textarea></div>
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-paper-plane"></i> إرسال الرسالة</button>
+        </form>` : `
+        <div class="panel-title"><i class="fa-solid fa-paper-plane"></i> أرسل رسالة</div>
+        <p>إرسال الرسائل متاح لحسابات العملاء المسجلة فقط.</p>
+        <div class="contact-actions">
+          <button class="btn btn-primary" type="button" data-contact-auth="signup"><i class="fa-solid fa-user-plus"></i> إنشاء حساب</button>
+          <button class="btn btn-outline" type="button" data-contact-auth="login"><i class="fa-solid fa-right-to-bracket"></i> تسجيل الدخول</button>
+        </div>`;
   return `
     <h2 class="page-title"><i class="fa-solid fa-headset"></i> تواصل معنا</h2>
-    <p class="page-sub">سجل الدخول بحساب عميل لإرسال استفسارك ومتابعة التواصل</p>
+    <p class="page-sub">معلومات التواصل متاحة للجميع؛ ولإرسال رسالة يلزم حساب عميل مسجل.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
       <div class="panel">
         <div class="panel-title"><i class="fa-solid fa-comments"></i> قنوات التواصل</div>
@@ -542,19 +559,7 @@ function pageContact() {
         </div>
         <button class="btn btn-outline" data-nav="request"><i class="fa-solid fa-motorcycle"></i> إرسال طلب شراء</button>
       </div>
-      <div class="panel">
-        <div class="panel-title"><i class="fa-solid fa-paper-plane"></i> أرسل رسالة</div>
-        <form id="contactForm" class="form-grid">
-          <div class="field"><label>الاسم</label><input name="name" required maxlength="120" value="${esc(u?.name || '')}"></div>
-          <div class="form-row">
-            <div class="field"><label>رقم الهاتف</label><input name="phone" type="tel" maxlength="32" value="${esc(u?.phone || '')}"></div>
-            <div class="field"><label>البريد الإلكتروني</label><input type="email" name="email" maxlength="254" value="${esc(u?.email || '')}"></div>
-          </div>
-          <div class="field"><label>طريقة الرد المفضلة</label><select name="preferred_contact"><option value="whatsapp">واتساب</option><option value="phone">مكالمة هاتفية</option><option value="sms">SMS</option><option value="email">البريد الإلكتروني</option></select></div>
-          <div class="field"><label>رسالتك</label><textarea name="message" required maxlength="10000"></textarea></div>
-          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-paper-plane"></i> إرسال الرسالة</button>
-        </form>
-      </div>
+      <div class="panel">${contactContent}</div>
     </div>`;
 }
 
@@ -1910,6 +1915,15 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  /* Keep the contact page as the return destination through customer authentication. */
+  const contactAuth = e.target.closest('[data-contact-auth]');
+  if (contactAuth) {
+    e.preventDefault();
+    try { sessionStorage.setItem('ekm_auth_return_route', 'contact'); } catch { /* Session storage may be unavailable. */ }
+    navigate(contactAuth.dataset.contactAuth);
+    return;
+  }
+
   /* Navigation */
   const nav = e.target.closest('[data-nav]');
   if (nav) {
@@ -3230,9 +3244,14 @@ document.addEventListener('submit', async (e) => {
       else { await loadBusinessData(); await loadStaffDirectory(); }
       await loadMotorcycles();
       toast(`أهلاً ${u.name}`, 'success');
+      let returnRoute = null;
+      try { returnRoute = sessionStorage.getItem('ekm_auth_return_route'); } catch { /* Session storage may be unavailable. */ }
       const route = u.role === 'admin' ? 'dashboard' : u.role === 'staff'
         ? (hasRequestAccess() ? 'staff-orders' : hasAnyPermission('catalog_view', 'catalog_manage') ? 'inventory' : 'home')
-        : 'home';
+        : (returnRoute === 'contact' ? 'contact' : 'home');
+      if (u.role === 'customer' && returnRoute === 'contact') {
+        try { sessionStorage.removeItem('ekm_auth_return_route'); } catch { /* Session storage may be unavailable. */ }
+      }
       navigate(route);
       await resumePendingAuthAction();
     } catch (error) { toast(error.message || 'تعذر تسجيل الدخول', 'error'); }
@@ -3251,7 +3270,12 @@ document.addEventListener('submit', async (e) => {
         await loadCustomerData();
         await loadMotorcycles();
         toast('تم إنشاء الحساب بنجاح', 'success');
-        navigate('home');
+        let returnRoute = null;
+        try { returnRoute = sessionStorage.getItem('ekm_auth_return_route'); } catch { /* Session storage may be unavailable. */ }
+        if (returnRoute === 'contact') {
+          try { sessionStorage.removeItem('ekm_auth_return_route'); } catch { /* Session storage may be unavailable. */ }
+        }
+        navigate(returnRoute === 'contact' ? 'contact' : 'home');
         await resumePendingAuthAction();
       }
     } catch (error) { toast(error.message || 'تعذر إنشاء الحساب', 'error'); }
@@ -3304,7 +3328,13 @@ document.addEventListener('submit', async (e) => {
 
   /* Contact messages are sent to the protected Supabase table. */
   if (form.id === 'contactForm') {
-    if (!hasRole('customer')) { toast('يجب تسجيل الدخول بحساب عميل لإرسال رسالة', 'error'); navigate('login'); return; }
+    const sender = currentUser();
+    if (!sender?.id || sender.role !== 'customer') {
+      try { sessionStorage.setItem('ekm_auth_return_route', 'contact'); } catch { /* Session storage may be unavailable. */ }
+      toast('يجب إنشاء حساب عميل أو تسجيل الدخول لإرسال رسالة', 'error');
+      navigate('login');
+      return;
+    }
     const fd = new FormData(form);
     if (!supabase) { toast('الخدمة غير مهيأة حالياً', 'error'); return; }
     const phone = safeName(fd.get('phone'));
@@ -3317,7 +3347,7 @@ document.addEventListener('submit', async (e) => {
       toast('أدخل بيانات وسيلة التواصل التي اخترتها', 'error'); return;
     }
     const { error } = await supabase.from('contact_messages').insert({
-      sender_user_id: currentUser()?.id || null,
+      sender_user_id: sender.id,
       name: safeName(fd.get('name')),
       phone: phone || null,
       email: email || '',
